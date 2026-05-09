@@ -2021,6 +2021,31 @@ function promptApiKey() {
   }
 }
 
+// ── Gemini Rate Limit Queue (1 запрос / 4с) ──────────────
+const geminiQueue = {
+  _queue: [], _running: false,
+  add(sig) {
+    return new Promise((resolve) => {
+      this._queue.push({sig, resolve});
+      if (!this._running) this._run();
+    });
+  },
+  async _run() {
+    this._running = true;
+    while (this._queue.length > 0) {
+      const {sig, resolve} = this._queue.shift();
+      try {
+        const result = await getWatchAIComment(sig);
+        resolve(result);
+      } catch(e) { resolve(''); }
+      if (this._queue.length > 0) {
+        await new Promise(r => setTimeout(r, 4000)); // 4с между запросами
+      }
+    }
+    this._running = false;
+  }
+};
+
 async function callGemini(prompt, maxTokens=400) {
   const key = getApiKey();
   if (!key) return null;
@@ -2039,7 +2064,7 @@ async function callGemini(prompt, maxTokens=400) {
     if (r.status === 400 && msg.includes('API_KEY')) throw new Error('Неверный API ключ. Проверьте на aistudio.google.com');
     if (r.status === 429) {
       // Auto-retry after 10 seconds
-      await new Promise(r=>setTimeout(r,10000));
+      await new Promise(r=>setTimeout(r,5000));
       const r2 = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
       if (!r2.ok) throw new Error('Превышен лимит запросов. Попробуйте через минуту.');
       const data2 = await r2.json();
