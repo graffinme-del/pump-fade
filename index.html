@@ -3,73 +3,87 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>◈ PUMP FADE v4</title>
+<title>◈ PUMP FADE v5</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap');
-:root {
-  --bg:#f1f5f9; --s1:#ffffff; --s2:#f8fafc; --s3:#f1f5f9;
-  --border:#e2e8f0; --border2:#cbd5e1;
-  --text:#0f172a; --text2:#334155; --muted:#64748b; --dim:#94a3b8;
-  --red:#dc2626; --red-bg:#fef2f2; --red-b:#fecaca;
-  --green:#16a34a; --green-bg:#f0fdf4; --green-b:#bbf7d0;
-  --amber:#d97706; --amber-bg:#fffbeb; --amber-b:#fde68a;
-  --blue:#2563eb; --blue-bg:#eff6ff; --blue-b:#bfdbfe;
-  --violet:#7c3aed; --sky:#0369a1; --orange:#ea580c;
-  --topbar:#1e293b; --mono:'JetBrains Mono','Courier New',monospace;
+:root{
+  --bg:#f1f5f9;--s1:#fff;--s2:#f8fafc;--s3:#f1f5f9;
+  --border:#e2e8f0;--border2:#cbd5e1;
+  --text:#0f172a;--text2:#334155;--muted:#64748b;--dim:#94a3b8;
+  --red:#dc2626;--red-bg:#fef2f2;--red-b:#fecaca;
+  --green:#16a34a;--green-bg:#f0fdf4;--green-b:#bbf7d0;
+  --amber:#d97706;--amber-bg:#fffbeb;--amber-b:#fde68a;
+  --blue:#2563eb;--blue-bg:#eff6ff;--blue-b:#bfdbfe;
+  --violet:#7c3aed;--sky:#0369a1;--orange:#ea580c;
+  --topbar:#1e293b;--mono:'JetBrains Mono','Courier New',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;}
 body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:12px;display:flex;flex-direction:column;}
-::-webkit-scrollbar{width:4px;height:4px;}
-::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+::-webkit-scrollbar{width:4px;height:4px;}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
 button{cursor:pointer;border:none;font-family:inherit;transition:all .12s;background:transparent;}
 button:hover{opacity:.85;}button:active{transform:scale(.97);}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
-@keyframes slideUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-@keyframes blink-red{0%,100%{background:var(--red-bg)}50%{background:#fee2e2}}
-@keyframes live-glow{0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.4)}50%{box-shadow:0 0 0 4px rgba(74,222,128,0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @keyframes pump-glow{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.3)}50%{box-shadow:0 0 0 5px rgba(245,158,11,0)}}
 @keyframes sig-pulse{0%,100%{border-color:var(--red-b)}50%{border-color:var(--red)}}
+@keyframes live-glow{0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.4)}50%{box-shadow:0 0 0 4px rgba(74,222,128,0)}}
+@keyframes blink-red{0%,100%{background:var(--red-bg)}50%{background:#fee2e2}}
+@keyframes dot-blink{0%,100%{opacity:1}50%{opacity:.15}}
 .fade{animation:slideUp .2s ease;}
-.blink{animation:blink-red 1s infinite;}
 .sig-pulse{animation:sig-pulse 2s infinite;}
+.blink{animation:blink-red 1s infinite;}
 
 /* TOPBAR */
-#topbar{background:var(--topbar);height:42px;display:flex;align-items:center;padding:0 14px;gap:12px;border-bottom:2px solid #334155;flex-shrink:0;}
+#topbar{background:var(--topbar);height:42px;display:flex;align-items:center;padding:0 14px;gap:10px;border-bottom:2px solid #334155;flex-shrink:0;z-index:1000;}
 .logo{font-family:var(--mono);font-size:13px;font-weight:700;color:#f59e0b;letter-spacing:2px;}
-.tdiv{width:1px;height:18px;background:#334155;}
-#status-dot{width:7px;height:7px;border-radius:50%;background:#64748b;transition:all .3s;}
+.tdiv{width:1px;height:18px;background:#334155;flex-shrink:0;}
+#status-dot{width:7px;height:7px;border-radius:50%;background:#64748b;transition:all .3s;flex-shrink:0;}
 #status-dot.live{background:#4ade80;animation:live-glow 2s infinite;}
 #status-dot.scanning{background:#f59e0b;animation:pulse .6s infinite;}
 #status-text{font-family:var(--mono);font-size:10px;font-weight:700;color:#94a3b8;}
 #status-text.live{color:#4ade80;}
 #status-text.scanning{color:#f59e0b;}
 .top-price{font-family:var(--mono);font-size:20px;font-weight:700;color:#f8fafc;}
-.pump-thresh{display:flex;align-items:center;gap:6px;font-size:10px;color:#94a3b8;}
-.pump-thresh input[type=range]{width:70px;accent-color:#f59e0b;cursor:pointer;}
-.thresh-val{font-family:var(--mono);color:#f59e0b;font-weight:700;min-width:32px;}
+.pump-thresh{display:flex;align-items:center;gap:5px;font-size:10px;color:#94a3b8;}
+.pump-thresh input[type=range]{width:65px;accent-color:#f59e0b;}
+.thresh-val{font-family:var(--mono);color:#f59e0b;font-weight:700;min-width:28px;}
+.top-btn{font-size:9px;color:#94a3b8;border:1px solid #334155;padding:2px 8px;border-radius:2px;background:transparent;}
+.top-btn:hover{color:#f8fafc;border-color:#475569;}
 
-/* ALERT */
+/* ALERTS */
+#pump-alert{display:none;padding:5px 14px;background:var(--amber-bg);border-bottom:2px solid var(--amber);font-size:11px;font-weight:700;color:#92400e;align-items:center;gap:8px;flex-shrink:0;animation:pump-glow 1.5s infinite;}
 #alert-bar{display:none;padding:7px 14px;font-weight:700;font-size:12px;align-items:center;gap:10px;border-bottom:2px solid transparent;flex-shrink:0;}
-#pump-alert{display:none;padding:6px 14px;background:var(--amber-bg);border-bottom:2px solid var(--amber);font-size:11px;font-weight:700;color:#92400e;align-items:center;gap:8px;flex-shrink:0;animation:pump-glow 1.5s infinite;}
 
-/* LAYOUT */
-#body{display:grid;grid-template-columns:225px 1fr 260px;flex:1;min-height:0;overflow:hidden;}
+/* GRID LAYOUT */
+#workspace{flex:1;min-height:0;position:relative;overflow:hidden;padding:6px;gap:6px;display:grid;}
 
-/* LEFT */
-#left{background:var(--s1);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
-.col-hd{padding:8px 10px;border-bottom:1px solid var(--border);background:var(--s2);flex-shrink:0;}
-.col-hd-row{display:flex;justify-content:space-between;align-items:center;}
+/* PANELS */
+.panel{background:var(--s1);border:1px solid var(--border);border-radius:6px;overflow:hidden;display:flex;flex-direction:column;position:relative;min-width:120px;min-height:80px;}
+.panel-header{padding:5px 8px;background:var(--s2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0;cursor:move;user-select:none;}
+.panel-title{font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.5px;flex:1;}
+.panel-body{flex:1;overflow-y:auto;overflow-x:hidden;}
+.panel-resize{position:absolute;bottom:0;right:0;width:14px;height:14px;cursor:se-resize;background:linear-gradient(135deg,transparent 50%,var(--border2) 50%);border-radius:0 0 5px 0;opacity:.5;}
+.panel-resize:hover{opacity:1;}
+.panel.dragging{opacity:.7;z-index:100;}
+.panel.drag-over{outline:2px dashed var(--red);}
+
+/* DROP ZONES */
+.drop-zone{position:absolute;border:2px dashed transparent;border-radius:6px;transition:all .15s;pointer-events:none;z-index:50;}
+.drop-zone.active{border-color:var(--blue);background:rgba(37,99,235,.06);}
+
+/* IDEAS */
+.ideas-hd{padding:6px 9px;border-bottom:1px solid var(--border);background:var(--s2);flex-shrink:0;}
+.ideas-hd-row{display:flex;justify-content:space-between;align-items:center;}
 .col-title{font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;}
 .scan-btn{font-size:9px;color:var(--sky);border:1px solid var(--blue-b);padding:2px 7px;border-radius:2px;background:var(--blue-bg);}
 .col-sub{font-size:8px;color:var(--dim);margin-top:1px;}
-#ideas-list{flex:1;overflow-y:auto;padding:5px;}
 .idea-card{border:1px solid var(--border);border-radius:5px;padding:7px 8px;margin-bottom:4px;cursor:pointer;transition:all .15s;background:var(--s1);position:relative;}
 .idea-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08);}
 .idea-card.long{border-left:3px solid var(--green);}
 .idea-card.short{border-left:3px solid var(--red);}
 .idea-card.pump-new{border-left:3px solid var(--amber);background:linear-gradient(135deg,#fffbeb,#fff);animation:pump-glow 1.8s infinite;}
-.idea-card.stale{opacity:.45;}
 .idea-card.active{box-shadow:0 2px 10px rgba(0,0,0,.12);}
 .idea-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;}
 .idea-sym{font-family:var(--mono);font-size:12px;font-weight:700;}
@@ -84,83 +98,64 @@ button:hover{opacity:.85;}button:active{transform:scale(.97);}
 .idea-age{font-size:8px;color:var(--dim);margin-top:1px;}
 .new-badge{position:absolute;top:4px;right:4px;background:var(--red);color:white;font-size:7px;font-weight:700;padding:1px 4px;border-radius:8px;}
 
+/* CHART */
+.chart-panel-hd{padding:4px 8px;border-bottom:1px solid var(--border);background:var(--s2);display:flex;align-items:center;gap:7px;flex-shrink:0;flex-wrap:wrap;}
+.chart-tf{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text2);}
+.chart-emas{display:flex;gap:5px;font-size:7px;}
+.chart-wrap{flex:1;min-height:0;position:relative;}
+
 /* VOLATILITY */
-#vol-section{border-top:1px solid var(--border);flex-shrink:0;padding:5px 7px;background:var(--s2);max-height:190px;overflow-y:auto;}
-.vol-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
-.vol-title{font-size:9px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;}
-.vol-item{display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:3px;margin-bottom:2px;background:var(--s1);border:1px solid #f1f5f9;cursor:pointer;transition:all .12s;}
+.vol-item{display:flex;align-items:center;gap:4px;padding:4px 6px;border-radius:3px;margin-bottom:3px;background:var(--s1);border:1px solid #f1f5f9;cursor:pointer;}
 .vol-item:hover{background:var(--s2);}
-.vol-rank{font-size:9px;min-width:12px;font-weight:700;color:var(--dim);}
+.vol-rank{font-size:9px;min-width:14px;font-weight:700;color:var(--dim);}
 .vol-sym{font-family:var(--mono);font-size:11px;font-weight:700;flex:1;}
 .vol-bar-wrap{width:36px;height:4px;background:var(--s3);border-radius:2px;}
 .vol-bar-fill{height:100%;border-radius:2px;}
-.vol-atr{font-family:var(--mono);font-size:9px;color:var(--muted);}
 .vol-chg{font-size:9px;font-weight:700;}
+.itab{transition:all .12s;}
+.itab:hover{opacity:.8;}
+.itab.active{border-bottom:2px solid var(--red)!important;color:var(--red)!important;}
+.itab-badge{display:inline-block;background:var(--s3);border-radius:8px;padding:0 4px;font-size:8px;font-weight:700;margin-left:2px;}
 
-/* CENTER */
-#center{display:flex;flex-direction:column;overflow:hidden;}
-/* Phase tabs */
-#phase-tabs{display:flex;background:var(--s1);border-bottom:2px solid var(--border);flex-shrink:0;padding:0 6px;overflow-x:auto;}
-.ptab{padding:7px 10px;font-size:10px;font-weight:700;color:var(--dim);border-bottom:3px solid transparent;cursor:pointer;display:flex;align-items:center;gap:4px;margin-bottom:-2px;transition:all .15s;white-space:nowrap;}
-.ptab:hover{color:var(--text2);}
-.ptab.done{color:var(--green);}
-.ptab.active{color:var(--red);border-bottom-color:var(--red);}
-.ptab.extra{font-size:9px;color:var(--muted);}
-.ptab-dot{width:6px;height:6px;border-radius:50%;}
-@keyframes dot-blink{0%,100%{opacity:1}50%{opacity:.15}}
-
-/* Charts */
-#charts-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:7px 9px 4px;flex-shrink:0;background:var(--s2);}
-.chart-box{background:var(--s1);border:1px solid var(--border);border-radius:4px;overflow:hidden;}
-.chart-hd{padding:4px 8px;border-bottom:1px solid #f1f5f9;background:var(--s2);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
-.chart-tf{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text2);}
-.chart-emas{display:flex;gap:5px;font-size:7px;}
-canvas{display:block;}
-
-/* Phase content */
-#phase-content{flex:1;overflow-y:auto;padding:8px 10px;}
-/* Detail card */
-.detail-card{background:var(--s1);border:1px solid var(--border);border-radius:5px;padding:11px;margin-bottom:8px;}
-.detail-hd{display:flex;align-items:center;gap:7px;margin-bottom:7px;}
-.detail-sym{font-family:var(--mono);font-size:15px;font-weight:800;}
-.detail-type{font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;}
-.why-box{border-radius:4px;padding:7px 9px;margin-bottom:7px;font-size:11px;line-height:1.7;}
-.why-box b{display:block;font-size:8px;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;}
-.levels-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:7px;}
-.level-box{background:var(--s2);border:1px solid var(--border);border-radius:3px;padding:5px 7px;}
-.level-lbl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);}
-.level-val{font-family:var(--mono);font-size:13px;font-weight:700;}
-.level-sub{font-size:8px;color:var(--dim);}
-.stats-row{display:flex;gap:10px;margin:7px 0;flex-wrap:wrap;}
-.stat-item .sl{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;}
-.stat-item .sv{font-family:var(--mono);font-weight:700;font-size:13px;}
-.trinity-box{background:var(--blue-bg);border:1px solid var(--blue-b);border-radius:4px;padding:7px 9px;font-size:10px;line-height:1.7;color:#1e40af;}
-.trinity-box b{font-size:8px;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:2px;}
-.sig-rows{display:flex;flex-direction:column;gap:0;}
+/* SIGNAL / ANALYSIS */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:8px;}
+.card-title{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border);}
+.kv{display:flex;justify-content:space-between;margin-bottom:5px;font-size:11px;}
+.kv .key{color:var(--muted);}
+.kv .val{font-family:var(--mono);font-size:12px;font-weight:700;}
 .sig-row{display:flex;gap:6px;align-items:center;font-size:11px;padding:4px 0;border-bottom:1px solid var(--border);}
-.phase-title{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;}
-
-/* RIGHT */
-#right{background:var(--s2);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
-.rtab-bar{display:flex;background:var(--s1);border-bottom:1px solid var(--border);flex-shrink:0;}
-.rtab{flex:1;padding:8px 3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;text-align:center;transition:all .12s;border:none;background:transparent;}
-.rtab:hover{color:var(--text2);}
-.rtab.active{color:var(--red);border-bottom-color:var(--red);}
-.rpanel{display:none;flex-direction:column;flex:1;overflow:hidden;}
-.rpanel.active{display:flex;}
-.rpanel-scroll{flex:1;overflow-y:auto;padding:9px;display:flex;flex-direction:column;gap:8px;}
-
-/* Signal card */
-.signal-card{background:var(--s1);border:1px solid var(--red-b);border-radius:5px;padding:11px;}
+.signal-card{background:var(--s1);border:1px solid var(--red-b);border-radius:5px;padding:11px;margin-bottom:8px;}
 .sig-title{font-family:var(--mono);font-size:13px;font-weight:800;margin-bottom:3px;}
 .sig-sub{font-size:9px;color:var(--dim);margin-bottom:7px;}
 .sig-kv{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px;}
 .sig-k{color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
 .sig-v{font-family:var(--mono);font-weight:700;font-size:12px;}
 .open-btn{display:block;width:100%;padding:9px;text-align:center;border-radius:3px;font-size:12px;font-weight:700;cursor:pointer;margin-top:8px;border:none;font-family:inherit;}
+.detail-card{background:var(--s1);border:1px solid var(--border);border-radius:5px;padding:11px;margin-bottom:8px;}
+.detail-hd{display:flex;align-items:center;gap:7px;margin-bottom:7px;}
+.detail-sym{font-family:var(--mono);font-size:15px;font-weight:800;}
+.why-box{border-radius:4px;padding:7px 9px;margin-bottom:7px;font-size:11px;line-height:1.7;}
+.why-box b{display:block;font-size:8px;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;}
+.levels-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:7px;}
+.level-box{background:var(--s2);border:1px solid var(--border);border-radius:3px;padding:5px 7px;}
+.level-lbl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);}
+.level-val{font-family:var(--mono);font-size:13px;font-weight:700;}
+.stats-row{display:flex;gap:10px;margin:7px 0;flex-wrap:wrap;}
+.stat-item .sl{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;}
+.stat-item .sv{font-family:var(--mono);font-weight:700;font-size:13px;}
+.trinity-box{background:var(--blue-bg);border:1px solid var(--blue-b);border-radius:4px;padding:7px 9px;font-size:10px;line-height:1.7;color:#1e40af;}
+.trinity-box b{font-size:8px;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:2px;}
 
-/* WR */
-.wr-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:7px;}
+/* PHASE TABS */
+.ptabs{display:flex;border-bottom:2px solid var(--border);flex-shrink:0;padding:0 4px;overflow-x:auto;background:var(--s1);}
+.ptab{padding:6px 8px;font-size:9px;font-weight:700;color:var(--dim);border-bottom:3px solid transparent;cursor:pointer;display:flex;align-items:center;gap:3px;margin-bottom:-2px;white-space:nowrap;}
+.ptab:hover{color:var(--text2);}
+.ptab.done{color:var(--green);}
+.ptab.active{color:var(--red);border-bottom-color:var(--red);}
+.ptab-dot{width:5px;height:5px;border-radius:50%;}
+
+/* WINRATE */
+.wr-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px;}
 .wr-box{background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:7px;text-align:center;}
 .wr-v{font-family:var(--mono);font-size:17px;font-weight:800;}
 .wr-l{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:1px;}
@@ -169,25 +164,18 @@ canvas{display:block;}
 .wr-item.loss{border-left-color:var(--red);}
 .wr-item.pend{border-left-color:var(--amber);}
 
-/* Chat */
-#chat-messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;}
+/* CHAT */
+.chat-msgs{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:0;}
 .msg-user{background:var(--red-bg);border:1px solid var(--red-b);border-radius:6px;padding:8px 10px;font-size:11px;align-self:flex-end;max-width:92%;line-height:1.6;}
 .msg-ai{background:var(--blue-bg);border:1px solid var(--blue-b);border-radius:6px;padding:9px 11px;font-size:11px;color:var(--text2);line-height:1.75;}
 .msg-ai-hd{font-size:9px;color:var(--blue);font-weight:700;margin-bottom:5px;letter-spacing:.5px;text-transform:uppercase;}
 .msg-thinking{background:var(--s3);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11px;color:var(--muted);animation:pulse 1s infinite;}
-.qbtns{padding:6px 8px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px;flex-shrink:0;background:var(--s2);}
-.qbtn{background:var(--s3);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;transition:all .12s;}
+.qbtns{padding:5px 8px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px;flex-shrink:0;background:var(--s2);}
+.qbtn{background:var(--s3);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;}
 .qbtn:hover{background:var(--blue-bg);border-color:var(--blue-b);color:var(--blue);}
-.chat-input-row{padding:8px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0;}
-#chat-input{flex:1;background:var(--s1);border:1px solid var(--border);border-radius:3px;padding:6px 9px;font-size:11px;font-family:inherit;color:var(--text);resize:none;height:50px;outline:none;}
+.chat-input-row{padding:8px;border-top:1px solid var(--border);display:flex;gap:5px;flex-shrink:0;}
+#chat-input{flex:1;background:var(--s1);border:1px solid var(--border);border-radius:3px;padding:6px 8px;font-size:11px;font-family:inherit;color:var(--text);resize:none;height:48px;outline:none;}
 .chat-send{background:var(--red);color:white;border-radius:3px;padding:0 12px;font-size:15px;font-weight:700;align-self:stretch;}
-
-/* Card */
-.card{background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:10px;}
-.card-title{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border);}
-.kv{display:flex;justify-content:space-between;margin-bottom:5px;font-size:11px;}
-.kv .key{color:var(--muted);}
-.kv .val{font-family:var(--mono);font-size:12px;font-weight:700;}
 </style>
 </head>
 <body>
@@ -207,151 +195,220 @@ canvas{display:block;}
     <span class="thresh-val" id="thresh-val">15%</span>
   </div>
   <div style="flex:1"></div>
+  <button class="top-btn" onclick="resetLayout()" title="Сбросить layout">⊞ Сброс</button>
+  <button class="top-btn" onclick="saveLayout()" title="Сохранить layout">💾 Сохранить</button>
+  <div class="tdiv"></div>
   <span id="sym-label" style="font-size:10px;color:#94a3b8;"></span>
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <span id="entry-badge" style="display:none;background:rgba(220,38,38,.2);border:1px solid var(--red);color:#fca5a5;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;font-family:var(--mono);">▼ ВХОД</span>
 </div>
-
-<!-- PUMP ALERT -->
 <div id="pump-alert">
   <span id="pump-alert-text">🔥</span>
   <button onclick="document.getElementById('pump-alert').style.display='none'" style="margin-left:auto;background:#92400e;color:white;border:none;border-radius:3px;padding:2px 7px;font-size:9px;cursor:pointer;">✕</button>
 </div>
-
-<!-- POS ALERT -->
 <div id="alert-bar"></div>
 
-<!-- BODY -->
-<div id="body">
+<!-- WORKSPACE -->
+<div id="workspace"></div>
 
-  <!-- LEFT -->
-  <div id="left">
-    <div class="col-hd">
-      <div class="col-hd-row">
-        <span class="col-title" id="scanner-label">💡 Идеи агента</span>
-        <button class="scan-btn" onclick="runIdeas(true)">↻</button>
-      </div>
-      <div class="col-sub">1h·15m·4h · дедуп 1ч · авто 3м · min <span id="min-conf-label">65</span>%
-        <input type="range" min="45" max="85" value="65" id="conf-slider" oninput="document.getElementById('min-conf-label').textContent=this.value" style="width:50px;accent-color:var(--red);vertical-align:middle;margin-left:4px;">
-      </div>
-    </div>
-    <div id="ideas-list"><div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Запуск агента...</div></div>
-    <div id="vol-section">
-      <div class="vol-title-row">
-        <span class="vol-title">⚡ Топ волатильных</span>
-        <span style="font-size:8px;color:var(--dim);" id="vol-updated">1м</span>
-      </div>
-      <div id="vol-list"><div style="font-size:10px;color:var(--dim);padding:4px;">Загрузка...</div></div>
-    </div>
-  </div>
+<script>
+// ═══════════════════════════════════════════════════════
+//  GRID LAYOUT ENGINE
+// ═══════════════════════════════════════════════════════
+const LAYOUT_KEY = 'pf_layout_v5';
 
-  <!-- CENTER -->
-  <div id="center">
-    <div id="phase-tabs">
-      <div class="ptab done" id="pt1" onclick="setPhase(1,this)">
-        <div class="ptab-dot" id="pd1" style="background:var(--green);"></div>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:800;">1</span> ПАМП
-      </div>
-      <div class="ptab done" id="pt2" onclick="setPhase(2,this)">
-        <div class="ptab-dot" id="pd2" style="background:var(--green);"></div>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:800;">2</span> ИСТОЩЕНИЕ
-      </div>
-      <div class="ptab active" id="pt3" onclick="setPhase(3,this)">
-        <div class="ptab-dot" id="pd3" style="background:var(--red);animation:dot-blink 1s infinite;"></div>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:800;">3</span> СЛОМ
-      </div>
-      <div class="ptab" id="pt4" onclick="setPhase(4,this)">
-        <div class="ptab-dot" id="pd4" style="background:var(--dim);"></div>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:800;">4</span> ВХОД
-      </div>
-      <div class="ptab extra" onclick="setPhase(5,this)">📊 WINRATES</div>
-      <div class="ptab extra" onclick="setPhase(6,this)">🤖 АГЕНТ</div>
-      <div class="ptab extra" onclick="setPhase(7,this)">💬 ЧАТ</div>
-    </div>
-    <div id="charts-row">
-      <div class="chart-box">
-        <div class="chart-hd">
-          <span class="chart-tf" id="ctf1h">1H</span>
-          <div class="chart-emas">
-            <span style="color:#d97706;">━ EMA20</span>
-            <span style="color:#7c3aed;">━ EMA50</span>
-            <span style="color:#0369a1;">━ EMA100</span>
-            <span style="color:#374151;">━ EMA200</span>
+// Default panel config: {id, title, col, row, w, h (in grid units)}
+const DEFAULT_PANELS = [
+  {id:'ideas',    title:'💡 Идеи агента', col:1, row:1, w:3, h:8},
+  {id:'vol',      title:'⚡ Волатильность', col:1, row:9, w:3, h:4},
+  {id:'chart1h',  title:'📈 1H Chart',   col:4, row:1, w:6, h:5},
+  {id:'chart15m', title:'📉 15M Chart',  col:4, row:6, w:6, h:5},
+  {id:'cvd',      title:'CVD · 15m',     col:4, row:11, w:3, h:3},
+  {id:'volume',   title:'Volume · 1h',   col:7, row:11, w:3, h:3},
+  {id:'analysis', title:'🔍 Анализ фаз', col:10, row:1, w:5, h:8},
+  {id:'signal',   title:'🎯 Сигнал',     col:10, row:9, w:5, h:4},
+  {id:'detail',   title:'📋 Детали идеи',col:4,  row:14, w:6, h:5},
+  {id:'chat',     title:'💬 AI Чат',     col:10, row:13, w:5, h:6},
+  {id:'data',     title:'📊 Данные',     col:1,  row:13, w:3, h:6},
+];
+
+const GRID_COLS = 14;
+const GRID_ROWS = 18;
+
+let panels = [];
+let dragState = null;
+let resizeState = null;
+
+function loadLayout() {
+  try {
+    const saved = localStorage.getItem(LAYOUT_KEY);
+    return saved ? JSON.parse(saved) : DEFAULT_PANELS;
+  } catch { return DEFAULT_PANELS; }
+}
+
+function saveLayout() {
+  const config = panels.map(p => ({
+    id: p.id, title: p.title,
+    col: parseInt(p.el.style.gridColumnStart),
+    row: parseInt(p.el.style.gridRowStart),
+    w: parseInt(p.el.style.gridColumnEnd) - parseInt(p.el.style.gridColumnStart),
+    h: parseInt(p.el.style.gridRowEnd) - parseInt(p.el.style.gridRowStart),
+  }));
+  localStorage.setItem(LAYOUT_KEY, JSON.stringify(config));
+  showToast('Layout сохранён ✓');
+}
+
+function resetLayout() {
+  localStorage.removeItem(LAYOUT_KEY);
+  buildWorkspace(DEFAULT_PANELS);
+  showToast('Layout сброшен ✓');
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#1e293b;color:#f8fafc;padding:8px 14px;border-radius:6px;font-size:11px;font-weight:600;z-index:9999;animation:slideUp .2s ease;';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2000);
+}
+
+function buildWorkspace(config) {
+  const ws = document.getElementById('workspace');
+  ws.innerHTML = '';
+  ws.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
+  ws.style.gridTemplateRows = `repeat(${GRID_ROWS}, 1fr)`;
+  panels = [];
+
+  config.forEach(cfg => {
+    const el = document.createElement('div');
+    el.className = 'panel';
+    el.dataset.panelId = cfg.id;
+    el.style.gridColumn = `${cfg.col} / ${cfg.col + cfg.w}`;
+    el.style.gridRow = `${cfg.row} / ${cfg.row + cfg.h}`;
+    el.innerHTML = buildPanelHTML(cfg);
+    ws.appendChild(el);
+    panels.push({id: cfg.id, el, title: cfg.title});
+
+    // Drag from header
+    const hdr = el.querySelector('.panel-header');
+    if (hdr) {
+      hdr.addEventListener('mousedown', e => startDrag(e, el));
+    }
+    // Resize from corner
+    const rsz = el.querySelector('.panel-resize');
+    if (rsz) {
+      rsz.addEventListener('mousedown', e => { e.stopPropagation(); startResize(e, el); });
+    }
+  });
+
+  // Init chart panels after DOM ready
+  setTimeout(() => {
+    redrawAllCharts();
+    initChatPanel();
+  }, 200);
+}
+
+function buildPanelHTML(cfg) {
+  const hideResize = '';
+  const base = `<div class="panel-header"><span class="panel-title">${cfg.title}</span><div style="display:flex;gap:4px;"><button onclick="togglePanel('${cfg.id}')" style="font-size:10px;color:var(--dim);padding:0 4px;" title="Свернуть">—</button></div></div>`;
+  const resize = `<div class="panel-resize" title="Изменить размер"></div>`;
+
+  switch(cfg.id) {
+    case 'ideas': return base + `
+      <div class="ideas-hd">
+        <div class="ideas-hd-row">
+          <span class="col-title" id="scanner-label">💡 Идеи агента</span>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <span id="ideas-count" style="font-size:9px;color:var(--muted);"></span>
+            <button class="scan-btn" onclick="runIdeas(true)" id="scan-main-btn">↻</button>
           </div>
-          <span id="pump-label" style="margin-left:auto;font-size:9px;font-family:var(--mono);color:var(--muted);"></span>
         </div>
-        <canvas id="chart1h" width="420" height="155"></canvas>
-      </div>
-      <div class="chart-box">
-        <div class="chart-hd">
-          <span class="chart-tf" id="ctf15m">15M</span>
-          <div class="chart-emas">
-            <span style="color:#d97706;">━ EMA20</span>
-            <span style="color:#7c3aed;">━ EMA50</span>
-            <span style="color:#0369a1;">━ EMA100</span>
-          </div>
-          <span id="entry-lines-label" style="display:none;gap:6px;font-size:9px;">
-            <span style="color:var(--green);">╌ TP</span>
-            <span style="color:var(--red);">╌ SL</span>
-          </span>
+        <div class="col-sub" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+          min <span id="min-conf-label">65</span>%
+          <input type="range" min="45" max="85" value="65" id="conf-slider" oninput="document.getElementById('min-conf-label').textContent=this.value;renderAllIdeas()" style="width:45px;accent-color:var(--red);vertical-align:middle;">
         </div>
-        <canvas id="chart15m" width="420" height="155"></canvas>
       </div>
-    </div>
-    <!-- CVD + Volume row -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:3px 9px 4px;flex-shrink:0;background:var(--s2);">
-      <div class="chart-box">
-        <div class="chart-hd"><span style="font-size:9px;font-weight:700;color:var(--text2);">CVD · 15m</span><span id="cvd-label" style="margin-left:auto;font-size:9px;font-weight:700;color:var(--muted);">—</span></div>
-        <canvas id="cvd-chart" width="420" height="45"></canvas>
+      <!-- Idea type tabs -->
+      <div style="display:flex;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--s2);">
+        <button class="itab active" id="itab-pump" onclick="setIdeaTab('pump',this)" style="flex:1;padding:5px 3px;font-size:9px;font-weight:700;color:var(--red);border-bottom:2px solid var(--red);border:none;background:transparent;cursor:pointer;border-bottom:2px solid var(--red);">🔥 Пампы</button>
+        <button class="itab" id="itab-reversal" onclick="setIdeaTab('reversal',this)" style="flex:1;padding:5px 3px;font-size:9px;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;border:none;background:transparent;cursor:pointer;">🔄 Развороты</button>
+        <button class="itab" id="itab-bounce" onclick="setIdeaTab('bounce',this)" style="flex:1;padding:5px 3px;font-size:9px;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;border:none;background:transparent;cursor:pointer;">📉 Отскоки</button>
       </div>
-      <div class="chart-box">
-        <div class="chart-hd"><span style="font-size:9px;font-weight:700;color:var(--text2);">Volume · 1h</span><span id="vol-label" style="margin-left:auto;font-size:9px;color:var(--muted);">—</span></div>
-        <canvas id="vol-chart" width="420" height="45"></canvas>
-      </div>
-    </div>
-    <div id="phase-content" class="fade"></div>
-  </div>
+      <div id="ideas-list" class="panel-body" style="padding:5px;"><div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Запуск агента...</div></div>
+      ${resize}`;
 
-  <!-- RIGHT -->
-  <div id="right">
-    <div class="rtab-bar">
-      <button class="rtab active" onclick="setRTab('signal',this)">Сигнал</button>
-      <button class="rtab" onclick="setRTab('chat',this)" id="chat-tab-btn">💬 Чат</button>
-      <button class="rtab" onclick="setRTab('data',this)">Данные</button>
-    </div>
-    <div id="rpanel-signal" class="rpanel active">
-      <div class="rpanel-scroll">
+    case 'vol': return base + `
+      <div id="vol-list" class="panel-body" style="padding:5px;"><div style="font-size:10px;color:var(--dim);padding:8px;">Загрузка...</div></div>
+      ${resize}`;
+
+    case 'chart1h': return `
+      <div class="chart-panel-hd">
+        <span class="chart-tf" id="ctf1h">1H</span>
+        <div class="chart-emas"><span style="color:#d97706;">━ EMA20</span><span style="color:#7c3aed;">━ EMA50</span><span style="color:#0369a1;">━ EMA100</span><span style="color:#374151;">━ EMA200</span></div>
+        <span id="pump-label" style="margin-left:auto;font-size:9px;font-family:var(--mono);color:var(--muted);"></span>
+        <div style="display:flex;gap:3px;margin-left:8px;">
+          <button onclick="togglePanel('chart1h')" style="font-size:10px;color:var(--dim);" title="Свернуть">—</button>
+        </div>
+      </div>
+      <div class="chart-wrap"><div id="chart1h" style="width:100%;height:100%;"></div></div>
+      ${resize}`;
+
+    case 'chart15m': return `
+      <div class="chart-panel-hd">
+        <span class="chart-tf" id="ctf15m">15M</span>
+        <div class="chart-emas"><span style="color:#d97706;">━ EMA20</span><span style="color:#7c3aed;">━ EMA50</span><span style="color:#0369a1;">━ EMA100</span></div>
+        <span id="entry-lines-label" style="display:none;gap:6px;font-size:9px;margin-left:auto;"><span style="color:var(--green);">╌ TP</span><span style="color:var(--red);">╌ SL</span></span>
+        <div style="display:flex;gap:3px;margin-left:8px;">
+          <button onclick="togglePanel('chart15m')" style="font-size:10px;color:var(--dim);" title="Свернуть">—</button>
+        </div>
+      </div>
+      <div class="chart-wrap"><div id="chart15m" style="width:100%;height:100%;"></div></div>
+      ${resize}`;
+
+    case 'cvd': return `
+      <div class="chart-panel-hd">
+        <span style="font-size:9px;font-weight:700;color:var(--text2);">CVD · 15m</span>
+        <span id="cvd-label" style="margin-left:auto;font-size:9px;font-weight:700;color:var(--muted);">—</span>
+      </div>
+      <div class="chart-wrap"><div id="cvd-chart" style="width:100%;height:100%;"></div></div>
+      ${resize}`;
+
+    case 'volume': return `
+      <div class="chart-panel-hd"><span style="font-size:9px;font-weight:700;color:var(--text2);">Volume · 1h</span></div>
+      <div class="chart-wrap"><div id="vol-chart" style="width:100%;height:100%;"></div></div>
+      ${resize}`;
+
+    case 'analysis': return base + `
+      <div class="ptabs" id="phase-tabs">
+        <div class="ptab done" onclick="setPhase(1,this)"><div class="ptab-dot" style="background:var(--green);"></div><span style="font-family:var(--mono);font-size:11px;font-weight:800;">1</span> ПАМП</div>
+        <div class="ptab done" onclick="setPhase(2,this)"><div class="ptab-dot" style="background:var(--green);"></div><span style="font-family:var(--mono);font-size:11px;font-weight:800;">2</span> ИСТОЩЕНИЕ</div>
+        <div class="ptab active" onclick="setPhase(3,this)"><div class="ptab-dot" style="background:var(--red);animation:dot-blink 1s infinite;"></div><span style="font-family:var(--mono);font-size:11px;font-weight:800;">3</span> СЛОМ</div>
+        <div class="ptab" onclick="setPhase(4,this)"><div class="ptab-dot" style="background:var(--dim);"></div><span style="font-family:var(--mono);font-size:11px;font-weight:800;">4</span> ВХОД</div>
+        <div class="ptab" onclick="setPhase(5,this)" style="font-size:9px;color:var(--muted);">📊 WR</div>
+
+      </div>
+      <div id="phase-content" class="panel-body"></div>
+      ${resize}`;
+
+    case 'signal': return base + `
+      <div class="panel-body">
         <div id="signal-card" class="card"><div style="font-size:11px;color:var(--muted);">Выберите идею из сканера.</div></div>
-        <div id="targets-card" class="card" style="display:none;">
-          <div class="card-title">Цели возврата</div>
-          <div id="targets-content"></div>
-        </div>
+        <div id="targets-card" class="card" style="display:none;"><div class="card-title">Цели возврата</div><div id="targets-content"></div></div>
         <button onclick="runAI()" style="width:100%;background:var(--red-bg);border:1px solid var(--red-b);color:var(--red);padding:8px;border-radius:3px;font-size:10px;font-weight:700;" id="ai-btn2">⚡ AI анализ</button>
       </div>
-    </div>
-    <div id="rpanel-chat" class="rpanel" style="flex-direction:column;">
-      <div id="chat-messages">
-        <div class="msg-ai"><div class="msg-ai-hd">🤖 AI Советник</div>Привет! Слежу за рынком вместе с вами.<br><span style="color:var(--dim);">Спрашивайте про позицию, тренд, CVD, стоп.</span></div>
-      </div>
-      <div class="qbtns">
-        <button class="qbtn" onclick="askQuick('Не развернулся ли тренд?')">↺ тренд?</button>
-        <button class="qbtn" onclick="askQuick('Стоит ли закрыть позицию?')">закрыть?</button>
-        <button class="qbtn" onclick="askQuick('CVD растёт — угроза шорту?')">CVD?</button>
-        <button class="qbtn" onclick="askQuick('Подтянуть стоп к безубытку?')">стоп→БУ</button>
-        <button class="qbtn" onclick="askQuick('Полный анализ текущей ситуации')">анализ</button>
-      </div>
-      <div class="chat-input-row">
-        <textarea id="chat-input" placeholder="Спросите..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
-        <button class="chat-send" onclick="sendChat()">↑</button>
-      </div>
-    </div>
-    <div id="rpanel-data" class="rpanel">
-      <div class="rpanel-scroll">
+      ${resize}`;
+
+    case 'detail': return base + `
+      <div class="panel-body" id="idea-detail-body"><div style="font-size:11px;color:var(--muted);padding:10px;">Нажмите на идею в сканере.</div></div>
+      ${resize}`;
+
+    case 'data': return base + `
+      <div class="panel-body">
         <div class="card">
           <div class="card-title">CVD · реальное время</div>
           <div class="kv"><span class="key">Тренд дельты</span><span class="val" id="cvd-trend">—</span></div>
-          <div class="kv"><span class="key">Delta Exhaustion</span><span class="val" id="cvd-div">—</span></div>
+          <div class="kv"><span class="key">CVD Divergence</span><span class="val" id="cvd-div">—</span></div>
         </div>
         <div class="card">
           <div class="card-title" id="futures-title">Фьючерсы</div>
@@ -362,11 +419,181 @@ canvas{display:block;}
           <div id="fr-warn" style="display:none;font-size:9px;padding:4px 6px;border-radius:3px;margin-top:4px;font-weight:600;"></div>
         </div>
       </div>
-    </div>
-  </div>
-</div>
+      ${resize}`;
 
+    case 'chat': return base + `
+      <div id="chat-messages" class="chat-msgs">
+        <div class="msg-ai"><div class="msg-ai-hd">🤖 AI Советник</div>Привет! Слежу за рынком вместе с вами.<br><span style="color:var(--dim);">Спрашивайте про позицию, тренд, CVD, стоп.</span></div>
+      </div>
+      <div class="qbtns">
+        <button class="qbtn" onclick="askQuick('Не развернулся ли тренд?')">↺ тренд?</button>
+        <button class="qbtn" onclick="askQuick('Стоит ли закрыть позицию?')">закрыть?</button>
+        <button class="qbtn" onclick="askQuick('CVD растёт — угроза шорту?')">CVD?</button>
+        <button class="qbtn" onclick="askQuick('Подтянуть стоп к безубытку?')">стоп→БУ</button>
+        <button class="qbtn" onclick="askQuick('Полный анализ текущей ситуации')">анализ</button>
+      </div>
+      <div class="chat-input-row">
+        <textarea id="chat-input" placeholder="Спросите... или введите монету: 'Анализ BTCUSDT'" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+        <button class="chat-send" onclick="sendChat()">↑</button>
+      </div>
+      ${resize}`;
+
+    default: return base + `<div class="panel-body"><div style="font-size:11px;color:var(--muted);padding:10px;">—</div></div>${resize}`;
+  }
+}
+
+// Toggle collapse
+const collapsed = {};
+function togglePanel(id) {
+  const p = panels.find(p => p.id === id);
+  if (!p) return;
+  collapsed[id] = !collapsed[id];
+  const body = p.el.querySelector('.panel-body, .chart-wrap, .chat-msgs, #ideas-list, #vol-list, #phase-content, #idea-detail-body');
+  if (body) body.style.display = collapsed[id] ? 'none' : '';
+  // resize charts after expand
+  if (!collapsed[id]) setTimeout(redrawAllCharts, 100);
+}
+
+// ═══════════════════════════════════════════════════════
+//  DRAG & DROP
+// ═══════════════════════════════════════════════════════
+function startDrag(e, el) {
+  if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+  e.preventDefault();
+  const ws = document.getElementById('workspace');
+  const wsRect = ws.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const colW = wsRect.width / GRID_COLS;
+  const rowH = (wsRect.height) / GRID_ROWS;
+  const offsetX = e.clientX - elRect.left;
+  const offsetY = e.clientY - elRect.top;
+
+  // Store original grid position
+  const origCol = el.style.gridColumnStart;
+  const origRow = el.style.gridRowStart;
+  const curW = parseInt(el.style.gridColumnEnd) - parseInt(el.style.gridColumnStart);
+  const curH = parseInt(el.style.gridRowEnd) - parseInt(el.style.gridRowStart);
+
+  dragState = { el, offsetX, offsetY, colW, rowH, wsRect, origCol, origRow, curW, curH };
+  el.style.opacity = '0.4';
+
+  // Ghost follows cursor
+  const ghost = document.createElement('div');
+  ghost.id = 'drag-ghost';
+  ghost.style.cssText = `position:fixed;opacity:0.85;pointer-events:none;z-index:9999;width:${elRect.width}px;height:${elRect.height}px;left:${elRect.left}px;top:${elRect.top}px;border:2px solid var(--red);border-radius:6px;background:var(--s1);box-shadow:0 8px 24px rgba(0,0,0,.15);`;
+  ghost.innerHTML = `<div style="padding:8px;font-size:11px;font-weight:700;color:var(--text2);">${el.querySelector('.panel-title')?.textContent || el.querySelector('.chart-tf')?.textContent || '...'}</div>`;
+  document.body.appendChild(ghost);
+
+  // Show grid overlay
+  showGridOverlay(wsRect, colW, rowH);
+
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('mouseup', endDrag);
+}
+
+function showGridOverlay(wsRect, colW, rowH) {
+  let ov = document.getElementById('grid-overlay');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'grid-overlay'; document.getElementById('workspace').appendChild(ov); }
+  ov.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:50;`;
+  let html = '';
+  for (let c = 1; c <= GRID_COLS; c++) {
+    for (let r = 1; r <= GRID_ROWS; r++) {
+      html += `<div style="position:absolute;left:${(c-1)/GRID_COLS*100}%;top:${(r-1)/GRID_ROWS*100}%;width:${1/GRID_COLS*100}%;height:${1/GRID_ROWS*100}%;border:1px solid rgba(37,99,235,.15);border-radius:2px;"></div>`;
+    }
+  }
+  ov.innerHTML = html;
+}
+
+function hideGridOverlay() {
+  const ov = document.getElementById('grid-overlay');
+  if (ov) ov.remove();
+}
+
+function onDrag(e) {
+  if (!dragState) return;
+  const ghost = document.getElementById('drag-ghost');
+  if (ghost) {
+    ghost.style.left = (e.clientX - dragState.offsetX) + 'px';
+    ghost.style.top = (e.clientY - dragState.offsetY) + 'px';
+  }
+  // Highlight target cell
+  const { wsRect, colW, rowH } = dragState;
+  const relX = e.clientX - dragState.offsetX - wsRect.left;
+  const relY = e.clientY - dragState.offsetY - wsRect.top;
+  const snapCol = Math.max(1, Math.min(GRID_COLS, Math.round(relX / colW) + 1));
+  const snapRow = Math.max(1, Math.min(GRID_ROWS, Math.round(relY / rowH) + 1));
+  if (ghost) ghost.dataset.col = snapCol;
+}
+
+function endDrag(e) {
+  if (!dragState) return;
+  const { el, colW, rowH, wsRect, curW, curH } = dragState;
+  const ghost = document.getElementById('drag-ghost');
+  if (ghost) ghost.remove();
+  el.style.opacity = '';
+  hideGridOverlay();
+
+  // Snap position to grid
+  const newLeft = e.clientX - dragState.offsetX - wsRect.left;
+  const newTop  = e.clientY - dragState.offsetY - wsRect.top;
+  let newCol = Math.round(newLeft / colW) + 1;
+  let newRow = Math.round(newTop  / rowH) + 1;
+  newCol = Math.max(1, Math.min(GRID_COLS - curW + 1, newCol));
+  newRow = Math.max(1, Math.min(GRID_ROWS - curH + 1, newRow));
+
+  el.style.gridColumn = `${newCol} / ${newCol + curW}`;
+  el.style.gridRow    = `${newRow} / ${newRow + curH}`;
+
+  dragState = null;
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('mouseup', endDrag);
+  setTimeout(redrawAllCharts, 100);
+}
+
+// ═══════════════════════════════════════════════════════
+//  RESIZE
+// ═══════════════════════════════════════════════════════
+function startResize(e, el) {
+  e.preventDefault();
+  const ws = document.getElementById('workspace');
+  const wsRect = ws.getBoundingClientRect();
+  const colW = wsRect.width / GRID_COLS;
+  const rowH = wsRect.height / GRID_ROWS;
+  const startCol = parseInt(el.style.gridColumnStart);
+  const startRow = parseInt(el.style.gridRowStart);
+
+  resizeState = { el, startX: e.clientX, startY: e.clientY, colW, rowH, startCol, startRow, wsRect };
+  document.addEventListener('mousemove', onResize);
+  document.addEventListener('mouseup', endResize);
+}
+
+function onResize(e) {
+  if (!resizeState) return;
+  const { el, startX, startY, colW, rowH, startCol, startRow, wsRect } = resizeState;
+  const curEndX = e.clientX - wsRect.left;
+  const curEndY = e.clientY - wsRect.top;
+  let newEndCol = Math.round(curEndX / colW) + 1;
+  let newEndRow = Math.round(curEndY / rowH) + 1;
+  newEndCol = Math.max(startCol + 2, Math.min(GRID_COLS + 1, newEndCol));
+  newEndRow = Math.max(startRow + 2, Math.min(GRID_ROWS + 1, newEndRow));
+  el.style.gridColumn = `${startCol} / ${newEndCol}`;
+  el.style.gridRow = `${startRow} / ${newEndRow}`;
+}
+
+function endResize(e) {
+  if (!resizeState) return;
+  resizeState = null;
+  document.removeEventListener('mousemove', onResize);
+  document.removeEventListener('mouseup', endResize);
+  setTimeout(redrawAllCharts, 100);
+}
+
+// Init chat panel function
+function initChatPanel() {}
+
+</script>
 <script>
+
 // ═══════════════════════════════════════════════════════
 //  CONSTANTS
 // ═══════════════════════════════════════════════════════
@@ -463,101 +690,118 @@ function fmtAge(ts) {
   return Math.floor(s/3600)+'ч назад';
 }
 
+
 // ═══════════════════════════════════════════════════════
-//  CANVAS CHARTS
+//  LIGHTWEIGHT CHARTS (replaces canvas)
 // ═══════════════════════════════════════════════════════
+const LWC = {};
+
+function getChart(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  if (LWC[id]) return LWC[id].chart;
+  const chart = LightweightCharts.createChart(el, {
+    width: el.clientWidth || 400,
+    height: el.clientHeight || 200,
+    layout: { background:{color:'#ffffff'}, textColor:'#334155', fontSize:10 },
+    grid: { vertLines:{color:'#f8fafc',style:1}, horzLines:{color:'#f8fafc',style:1} },
+    crosshair: { mode: 0 },
+    rightPriceScale: { borderColor:'#e2e8f0' },
+    timeScale: { borderColor:'#e2e8f0', timeVisible:true, secondsVisible:false, rightOffset:12, barSpacing:5 },
+    handleScroll: true, handleScale: true,
+  });
+  const ro = new ResizeObserver(() => {
+    if (LWC[id]) LWC[id].chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+  });
+  ro.observe(el);
+  LWC[id] = { chart, ro, series:{} };
+  return chart;
+}
+
+function destroyChart(id) {
+  if (LWC[id]) { LWC[id].ro.disconnect(); try{LWC[id].chart.remove();}catch{} delete LWC[id]; }
+}
+
+function cdsToLW(cds) {
+  return cds.map(c => ({ time: Math.floor(c.time/1000), open:c.open, high:c.high, low:c.low, close:c.close }));
+}
+
+function emaToLW(cds, arr) {
+  return arr.map((v,i) => v!=null && i<cds.length ? { time: Math.floor(cds[i].time/1000), value:v } : null).filter(Boolean);
+}
+
 function drawCandles(id, cds, analysis) {
-  const canvas = document.getElementById(id);
-  if (!canvas||!cds||cds.length<5) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0,0,W,H);
-  const sl = cds.slice(-60);
-  const mn = Math.min(...sl.map(c=>c.low));
-  const mx = Math.max(...sl.map(c=>c.high));
-  const pd = (mx-mn)*0.08||1;
-  const ty = v => H-5-((v-mn+pd)/(mx-mn+2*pd))*(H-10);
-  const tx = i => (i/(sl.length-1))*(W-4)+2;
-  const cs = sl.map(c=>c.close);
-  const e20=ema(cs,Math.min(20,cs.length));
-  const e50=ema(cs,Math.min(50,cs.length));
-  const e100=ema(cs,Math.min(100,cs.length));
-  const e200=ema(cs,Math.min(200,cs.length));
-
-  // Grid
-  ctx.strokeStyle='#f8fafc'; ctx.lineWidth=1;
-  [.25,.5,.75].forEach(p=>{ctx.beginPath();ctx.moveTo(0,H*p);ctx.lineTo(W,H*p);ctx.stroke();});
-
-  // Candles
-  sl.forEach((c,i)=>{
-    const x=tx(i), bw=Math.max(1.5,(W/sl.length)*0.5);
-    const bull=c.close>=c.open; const col=bull?'#16a34a':'#dc2626';
-    ctx.strokeStyle=col; ctx.lineWidth=0.7;
-    ctx.beginPath(); ctx.moveTo(x,ty(c.high)); ctx.lineTo(x,ty(c.low)); ctx.stroke();
-    ctx.fillStyle=col; ctx.globalAlpha=0.9;
-    ctx.fillRect(x-bw/2,Math.min(ty(c.open),ty(c.close)),bw,Math.max(1.5,Math.abs(ty(c.open)-ty(c.close))));
-    ctx.globalAlpha=1;
+  if (!cds || cds.length < 5) return;
+  const chart = getChart(id); if (!chart) return;
+  const lw = LWC[id];
+  // Remove old series
+  ['candle','e20','e50','e100','e200','tp1','sl','entry'].forEach(k => {
+    if (lw.series[k]) { try{chart.removeSeries(lw.series[k]);}catch{} delete lw.series[k]; }
   });
-
-  // EMA lines
-  [[e20,'#d97706',1.5],[e50,'#7c3aed',1.2],[e100,'#0369a1',1.0],[e200,'#374151',.85]].forEach(([arr,col,w])=>{
-    ctx.strokeStyle=col; ctx.lineWidth=w; ctx.globalAlpha=0.85;
-    ctx.beginPath();
-    arr.forEach((v,i)=>{ if(v!=null){i===0||arr[i-1]==null?ctx.moveTo(tx(i),ty(v)):ctx.lineTo(tx(i),ty(v));} });
-    ctx.stroke(); ctx.globalAlpha=1;
+  // Candlestick
+  const cs = chart.addCandlestickSeries({
+    upColor:'#16a34a', downColor:'#dc2626',
+    borderUpColor:'#16a34a', borderDownColor:'#dc2626',
+    wickUpColor:'#16a34a', wickDownColor:'#dc2626',
   });
-
-  // TP/SL dashed
+  cs.setData(cdsToLW(cds));
+  lw.series.candle = cs;
+  // EMAs
+  const closes = cds.map(c => c.close);
+  const emaConf = [{p:20,c:'#d97706',w:1.5,k:'e20'},{p:50,c:'#7c3aed',w:1.3,k:'e50'},{p:100,c:'#0369a1',w:1.0,k:'e100'}];
+  if (id === 'chart1h') emaConf.push({p:200,c:'#374151',w:.85,k:'e200'});
+  emaConf.forEach(({p,c,w,k}) => {
+    const s = chart.addLineSeries({color:c,lineWidth:w,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+    s.setData(emaToLW(cds, ema(closes, p)));
+    lw.series[k] = s;
+  });
+  // TP/SL lines
   if (analysis) {
-    [[analysis.tp1,'#16a34a'],[analysis.sl,'#dc2626'],[analysis.entry,'#64748b']].forEach(([v,col])=>{
-      ctx.strokeStyle=col; ctx.lineWidth=1; ctx.globalAlpha=0.55;
-      ctx.setLineDash([5,3]);
-      ctx.beginPath(); ctx.moveTo(0,ty(v)); ctx.lineTo(W,ty(v)); ctx.stroke();
-      ctx.setLineDash([]); ctx.globalAlpha=1;
+    [[analysis.tp1,'#16a34a','tp1'],[analysis.sl,'#dc2626','sl'],[analysis.entry,'#64748b','entry']].forEach(([price,color,key]) => {
+      if (!price) return;
+      const s = chart.addLineSeries({color,lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false});
+      s.setData([{time:Math.floor(cds[0].time/1000),value:price},{time:Math.floor(cds[cds.length-1].time/1000),value:price}]);
+      lw.series[key] = s;
     });
   }
+  chart.timeScale().fitContent();
 }
 
 function drawCVD(data) {
-  const canvas = document.getElementById('cvd-chart');
-  if (!canvas||!data||data.length<3) return;
-  const ctx=canvas.getContext('2d'); const W=canvas.width,H=canvas.height;
-  ctx.clearRect(0,0,W,H);
-  const mn=Math.min(...data),mx=Math.max(...data); const range=mx-mn||1;
-  const ty=v=>H-3-((v-mn)/range)*(H-6);
-  const tx=i=>(i/(data.length-1))*(W-4)+2;
-  const falling=data[data.length-1]<data[Math.max(0,data.length-10)];
-  ctx.strokeStyle='#cbd5e1'; ctx.lineWidth=0.7; ctx.setLineDash([2,4]);
-  ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.strokeStyle=falling?'#dc2626':'#16a34a'; ctx.lineWidth=1.5;
-  ctx.beginPath();
-  data.forEach((v,i)=>i===0?ctx.moveTo(tx(i),ty(v)):ctx.lineTo(tx(i),ty(v)));
-  ctx.stroke();
+  if (!data || data.length < 3) return;
+  const chart = getChart('cvd-chart'); if (!chart) return;
+  const lw = LWC['cvd-chart'];
+  if (lw.series.cvd) { try{chart.removeSeries(lw.series.cvd);}catch{} delete lw.series.cvd; }
+  const falling = data[data.length-1] < data[Math.max(0, data.length-10)];
+  const now = Math.floor(Date.now()/1000), step = 15*60;
+  const d = data.map((v,i) => ({ time: now-(data.length-1-i)*step, value:v }));
+  const s = chart.addLineSeries({color:falling?'#dc2626':'#16a34a',lineWidth:1.5,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+  s.setData(d); lw.series.cvd = s;
+  chart.timeScale().fitContent();
 }
 
 function drawVolume(cds) {
-  const canvas = document.getElementById('vol-chart');
-  if (!canvas||!cds||cds.length<5) return;
-  const ctx=canvas.getContext('2d'); const W=canvas.width,H=canvas.height;
-  ctx.clearRect(0,0,W,H);
-  const sl=cds.slice(-60);
-  const mx=Math.max(...sl.map(c=>c.volume));
-  const vols=sl.map(c=>c.volume);
-  const ve20=ema(vols,20);
-  const tx=i=>(i/(sl.length-1))*(W-4)+2;
-  sl.forEach((c,i)=>{
-    const x=tx(i), bw=Math.max(1.5,(W/sl.length)*0.5);
-    const h=Math.max(1,(c.volume/mx)*(H-4));
-    const bull=c.close>=c.open;
-    ctx.fillStyle=bull?'#16a34a':'#dc2626'; ctx.globalAlpha=0.35;
-    ctx.fillRect(x-bw/2,H-h-2,bw,h);
-    ctx.globalAlpha=1;
-  });
-  ctx.strokeStyle='#d97706'; ctx.lineWidth=1;
-  ctx.beginPath();
-  ve20.forEach((v,i)=>{ if(v!=null){ const y=H-2-(v/mx)*(H-4); i===0||ve20[i-1]==null?ctx.moveTo(tx(i),y):ctx.lineTo(tx(i),y); } });
-  ctx.stroke();
+  if (!cds || cds.length < 5) return;
+  const chart = getChart('vol-chart'); if (!chart) return;
+  const lw = LWC['vol-chart'];
+  ['vol','vema'].forEach(k => { if(lw.series[k]){try{chart.removeSeries(lw.series[k]);}catch{} delete lw.series[k];} });
+  const hs = chart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'volume',scaleMargins:{top:0.1,bottom:0}});
+  hs.setData(cds.map(c => ({time:Math.floor(c.time/1000),value:c.volume,color:c.close>=c.open?'rgba(22,163,74,.45)':'rgba(220,38,38,.4)'})));
+  lw.series.vol = hs;
+  const ve = ema(cds.map(c=>c.volume), 20);
+  const ls = chart.addLineSeries({color:'#d97706',lineWidth:1.2,priceScaleId:'volume',priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+  ls.setData(emaToLW(cds, ve));
+  lw.series.vema = ls;
+  chart.timeScale().fitContent();
+}
+
+function redrawAllCharts() {
+  setTimeout(() => {
+    if (S.cds1h.length) drawCandles('chart1h', S.cds1h, S.analysis?.readyToShort ? S.analysis : null);
+    if (S.cds15m.length) drawCandles('chart15m', S.cds15m, S.analysis?.readyToShort ? S.analysis : null);
+    if (S.cvdData.length) drawCVD(S.cvdData);
+    if (S.cds1h.length) drawVolume(S.cds1h);
+  }, 100);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -791,6 +1035,36 @@ async function scoreForIdea(sym) {
       longDir = 'LONG';
     }
 
+    // EARLY PUMP: +5-15% speed, vol spike, RSI not yet overbought
+    const isEarlyPump = pumpSpeed>=5 && pumpSpeed<PUMP_THRESH && volRatio>=2 && rsiNow>50 && rsiNow<78;
+    if (isEarlyPump && longConf < 50) {
+      longConf = Math.min(75, 44 + pumpSpeed*1.5 + volRatio*2);
+      longDir = 'LONG';
+      longSigs = ['🚀 Зарождающийся памп: +'+pumpSpeed.toFixed(1)+'% за 2ч', 'Vol×'+volRatio.toFixed(1)+' выше нормы', 'RSI '+rsiNow.toFixed(0)+' — ещё не перекуплен'];
+    }
+
+    // TREND REVERSAL: price crossed EMA50 after downtrend
+    const e50arr = ema(c1h, 50);
+    const e50now = e50arr[n1h] || 0;
+    const e50prev3 = e50arr[Math.max(0, n1h-3)] || 0;
+    const wasBelowE50 = cds1h.slice(Math.max(0,n1h-5), n1h).every(c => c.close < e50now);
+    const nowAboveE50 = price > e50now && (cds1h[n1h-1]?.close || price) < e50prev3;
+    if (nowAboveE50 && wasBelowE50 && volRatio > 1.4 && longConf < 55) {
+      longConf = Math.min(80, 52 + volRatio*3 + (trend4h==='bull'?10:0));
+      longDir = 'LONG';
+      longSigs = ['🔄 Разворот: пробой EMA50 после снижения', 'Vol×'+volRatio.toFixed(1)+' подтверждает', 'Body ratio '+(bodyRatio*100).toFixed(0)+'%'];
+    }
+
+    // ACTIVE PUMP 24H: +15%+ in 24h candles, price still pumping
+    const nBack24 = Math.min(24, n1h);
+    const price24hAgo = c1h[Math.max(0, n1h - nBack24)] || price;
+    const pump24pct = price24hAgo > 0 ? (price - price24hAgo) / price24hAgo * 100 : 0;
+    const isActivePump24 = pump24pct >= 15 && dist >= 5 && !isSharpPump;
+    if (isActivePump24 && shortConf < 50) {
+      shortConf = Math.min(78, 48 + pump24pct*0.5 + dist*0.4 + (cvdFalling?8:0));
+      shortSigs = ['🔥 Активный памп +'+pump24pct.toFixed(1)+'% за 24ч', 'EMA20 dist: +'+dist.toFixed(1)+'%', cvdFalling?'CVD начинает падать':'Объём стабилен'];
+    }
+
     // NEW PUMP detection (separate signal type)
     const isNewPump = pumpPct>=PUMP_THRESH && pumpSpeed>=5 && volRatio>=1.5;
 
@@ -864,12 +1138,12 @@ async function runIdeas(manual=false) {
       }))
       .filter(t=>t.vol>2e6)
       .sort((a,b)=>b.volScore-a.volScore)
-      .slice(0,60);
+      .slice(0,200);
 
     // 2. Analyze in batches
     const newIdeas=[];
     const now=Date.now();
-    const batchSize=8;
+    const batchSize=10;
     for (let i=0; i<Math.min(candidates.length,60); i+=batchSize) {
       const batch=candidates.slice(i,i+batchSize);
       const results=await Promise.all(batch.map(c=>scoreForIdea(c.sym)));
@@ -974,11 +1248,8 @@ Body ratio: ${(idea.bodyRatio*100).toFixed(0)}% | CVD: ${idea.cvdFalling?'↓':'
 3) На что смотреть при входе
 Русский, по делу, без воды.`;
   try {
-    const r=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:prompt}]})
-    });
-    const d=await r.json(); return d.content?.[0]?.text||'';
+    const text = await callGemini(prompt, 200);
+    return text || '';
   } catch { return ''; }
 }
 
@@ -1055,35 +1326,109 @@ function renderVolatility(candidates){
 // ═══════════════════════════════════════════════════════
 //  RENDER IDEAS LIST
 // ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+//  IDEA TABS
+// ═══════════════════════════════════════════════════════
+let activeIdeaTab = 'pump';
+
+function setIdeaTab(tab, btn) {
+  activeIdeaTab = tab;
+  document.querySelectorAll('.itab').forEach(b => {
+    b.classList.remove('active');
+    b.style.borderBottom = '2px solid transparent';
+    b.style.color = 'var(--muted)';
+  });
+  if (btn) {
+    btn.classList.add('active');
+    btn.style.borderBottom = '2px solid var(--red)';
+    btn.style.color = 'var(--red)';
+  }
+  renderAllIdeas();
+}
+
+function categorizeIdea(idea) {
+  const dir = idea.dir;
+  const sigs = (idea.sigs || []).join(' ');
+  // PUMP category: pump exhaustion shorts + active/new pumps
+  if (dir === 'SHORT' || dir === 'ПАМП' || idea.isPump ||
+      sigs.includes('памп') || sigs.includes('Памп') || sigs.includes('Pump')) return 'pump';
+  // BOUNCE category: oversold, RSI<30, pullback
+  if (sigs.includes('перепроданн') || sigs.includes('RSI') && idea.rsiNow < 38 ||
+      sigs.includes('Oversold') || sigs.includes('отскок')) return 'bounce';
+  // REVERSAL category: trend reversal, EMA50 cross, early pump longs
+  if (sigs.includes('Разворот') || sigs.includes('EMA50') || sigs.includes('Зарождающ') ||
+      sigs.includes('Volume Breakout') || sigs.includes('пересечена')) return 'reversal';
+  // Default: longs go to reversal, shorts go to pump
+  return dir === 'LONG' ? 'reversal' : 'pump';
+}
+
+function updateIdeaBadges() {
+  const counts = {pump:0, reversal:0, bounce:0};
+  S.ideas.forEach(idea => { const cat = categorizeIdea(idea); if (counts[cat] !== undefined) counts[cat]++; });
+  ['pump','reversal','bounce'].forEach(tab => {
+    const btn = document.getElementById('itab-' + tab);
+    if (!btn) return;
+    const label = {pump:'🔥 Пампы', reversal:'🔄 Развороты', bounce:'📉 Отскоки'}[tab];
+    const n = counts[tab];
+    btn.innerHTML = label + (n > 0 ? ` <span class="itab-badge" style="background:${n>0?'var(--red-bg)':'var(--s3)'};color:${n>0?'var(--red)':'var(--muted)'};">${n}</span>` : '');
+  });
+  const total = S.ideas.length;
+  const cntEl = document.getElementById('ideas-count');
+  if (cntEl) cntEl.textContent = total > 0 ? `${total} идей` : '';
+}
+
+function renderAllIdeas() {
+  updateIdeaBadges();
+  renderIdeas();
+}
+
 function renderIdeas(){
-  const list=document.getElementById('ideas-list');
+  const list = document.getElementById('ideas-list');
   if (!list) return;
-  if (!S.ideas.length) {
-    list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет идей. Снизьте порог уверенности.</div>';
+  const minConf = parseInt(document.getElementById('conf-slider')?.value || '65');
+
+  // Filter by active tab category
+  const filtered = S.ideas
+    .map((idea, i) => ({idea, i}))
+    .filter(({idea}) => idea.conf >= minConf && categorizeIdea(idea) === activeIdeaTab);
+
+  if (!filtered.length) {
+    const names = {pump:'пампов и шортов', reversal:'разворотов тренда', bounce:'отскоков'};
+    list.innerHTML = `<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">
+      Нет ${names[activeIdeaTab]||'идей'} с уверенностью ≥${minConf}%.<br>
+      <span style="font-size:9px;color:var(--dim);">Снизьте порог или подождите скана (~3м).</span>
+    </div>`;
     return;
   }
-  list.innerHTML=S.ideas.map((idea,i)=>{
-    const isActive=S.activeIdea===i;
-    const borderCol=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
-    const dirCls=idea.isPump?'pump':idea.dir==='LONG'?'long':'short';
-    const dirLabel=idea.isPump?'ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT';
-    const confColor=idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--amber)';
+
+  list.innerHTML = filtered.map(({idea, i}) => {
+    const isActive = S.activeIdea === i;
+    const borderCol = idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
+    const dirCls = idea.isPump?'pump':idea.dir==='LONG'?'long':'short';
+    // Icon and label per type
+    const cat = categorizeIdea(idea);
+    const catIcon = cat==='pump'?'🔥':cat==='reversal'?'🔄':'📉';
+    const dirLabel = idea.isPump?'ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT';
+    // Type-specific subtitle
+    const typeSub = cat==='pump'
+      ? `${idea.pumpPct.toFixed(1)}% · EMA${idea.dist.toFixed(0)}% · RSI ${idea.rsiNow.toFixed(0)}`
+      : cat==='reversal'
+      ? `4h: ${idea.trend4h} · Vol×${idea.volRatio.toFixed(1)} · RSI ${idea.rsiNow.toFixed(0)}`
+      : `RSI ${idea.rsiNow.toFixed(0)} перепр. · Vol×${idea.volRatio.toFixed(1)}`;
+
     return `<div class="idea-card ${dirCls} ${isActive?'active':''}" onclick="selectIdea(${i})" style="border-left-color:${borderCol};${idea.isPump?'animation:pump-glow 1.8s infinite;':''}">
-      ${idea.isPump?'<span class="new-badge">🔥</span>':''}
+      ${idea.isPump||idea.pumpSpeed>8?'<span class="new-badge">'+catIcon+'</span>':''}
       <div class="idea-hd">
         <span class="idea-sym" style="color:${idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--text)'};">${idea.sym.replace('USDT','')}</span>
         <span class="idea-dir ${dirCls}">${dirLabel}</span>
       </div>
       <div class="conf-bar"><div class="conf-fill" style="width:${idea.conf}%;background:${borderCol};"></div></div>
-      <div class="idea-meta">
-        <span style="color:${idea.pumpPct>=PUMP_THRESH?'var(--orange)':'var(--muted)'};">+${idea.pumpPct.toFixed(0)}%</span>
-        <span>RSI ${idea.rsiNow.toFixed(0)}</span>
-        <span>Vol×${idea.volRatio.toFixed(1)}</span>
-        ${idea.cvdDiv?'<span style="color:var(--red);">CVDdiv</span>':''}
-        ${idea.atrRatio>1.3?`<span style="color:var(--amber);">ATR×${idea.atrRatio.toFixed(1)}</span>`:''}
+      <div class="idea-meta" style="font-size:9px;color:var(--muted);">${typeSub}</div>
+      ${idea.pumpSpeed>3?`<div class="idea-sub">⚡ +${idea.pumpSpeed.toFixed(1)}%/2ч${idea.cvdDiv?' · CVDdiv':''}</div>`:''}
+      <div style="display:flex;justify-content:space-between;margin-top:2px;">
+        <span class="idea-age">${fmtAge(idea.ts)}</span>
+        <span style="font-size:8px;font-family:var(--mono);color:${idea.conf>=80?'var(--red)':idea.conf>=70?'var(--orange)':'var(--muted)'};">${idea.conf.toFixed(0)}/100</span>
       </div>
-      ${idea.pumpSpeed>3?`<div class="idea-sub">⚡ скорость +${idea.pumpSpeed.toFixed(1)}%/2ч · body ${(idea.bodyRatio*100).toFixed(0)}%</div>`:''}
-      <div class="idea-age">${fmtAge(idea.ts)} · ${idea.conf.toFixed(0)}/100</div>
     </div>`;
   }).join('');
 }
@@ -1093,9 +1438,12 @@ function renderIdeas(){
 // ═══════════════════════════════════════════════════════
 async function selectIdea(i){
   S.activeIdea=i;
+  renderIdeas(); // update active highlight
   const idea=S.ideas[i];
   if (!idea) return;
-  renderIdeas(); // update active state
+  // Show detail immediately
+  renderIdeaDetail(idea);
+  // Load charts
   await loadSym(idea.sym, idea);
 }
 
@@ -1123,10 +1471,7 @@ async function loadSym(sym, idea=null){
     S.fr);
 
   // Draw everything
-  drawCandles('chart1h', S.cds1h, S.analysis?.readyToShort?S.analysis:null);
-  drawCandles('chart15m', S.cds15m, S.analysis?.readyToShort?S.analysis:null);
-  drawCVD(S.cvdData);
-  drawVolume(S.cds1h);
+  redrawAllCharts();
 
   // Update labels
   const a=S.analysis;
@@ -1520,14 +1865,36 @@ async function sendChat(userMsg){
   setRTab('chat',document.getElementById('chat-tab-btn'));
   appendMsg('user',msg);
   const tid='t'+Date.now(); appendThinking(tid);
-  const msgs=[...chatHistory,{role:'user',content:buildContext()+'\n\n---\nВопрос: '+msg}];
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,system:'Ты — персональный AI советник трейдера. Стратегия: Pump Exhaustion Reversion. Отвечай коротко (2-4 предложения), конкретно, на русском. Говори прямо. Учитывай открытую позицию если есть.',messages:msgs})});
-    const d=await r.json(); const reply=d.content?.[0]?.text||'Ошибка';
-    document.getElementById(tid)?.remove(); appendMsg('ai',reply);
+    if (!getApiKey()) {
+      document.getElementById(tid)?.remove();
+      appendMsg('ai','⚠️ Нужен Gemini API ключ.\nНажмите кнопку 🔑 Gemini в топбаре.\n\nПолучите бесплатно: aistudio.google.com → Get API Key');
+      return;
+    }
+    // Build full prompt with context + chat history summary
+    const ctx = buildContext();
+    const histSummary = chatHistory.slice(-4).map(m=>m.role+': '+m.content.substring(0,100)).join('\n');
+    // Check if user is asking about a specific coin
+    const coinMatch = msg.match(/(?:анализ|посмотри|проверь|что с|как|расскажи[\s]+(?:про|о))[\s]+([A-Z]{2,10}(?:USDT?)?)/i) ||
+                      msg.match(/^([A-Z]{2,10}USDT?)\s*[?!]?$/i);
+    let fullPrompt;
+    if (coinMatch) {
+      let sym = coinMatch[1].toUpperCase();
+      if (!sym.endsWith('USDT')) sym += 'USDT';
+      appendMsg('ai-typing', `Запрашиваю данные по ${sym}...`);
+      const res = await scoreForIdea(sym).catch(()=>null);
+      const coinCtx = res ? `\n\n[ДАННЫЕ ${sym}]\nПамп: +${res.pumpPct?.toFixed(1)||0}% за 8ч, скорость +${res.pumpSpeed?.toFixed(1)||0}%/2ч\nEMA20 dist: ${res.dist?.toFixed(1)||0}% | ATR×${res.atrRatio?.toFixed(2)||1}\nVol×${res.volRatio?.toFixed(1)||1} | RSI ${res.rsiNow?.toFixed(0)||50} | CVD ${res.cvdFalling?'↓':'↑'}${res.cvdDiv?' (дивергенция)':''}\nТренд 4h: ${res.trend4h||'neutral'} | Body ratio: ${((res.bodyRatio||0)*100).toFixed(0)}%\nСигналы: ${(res.bestSigs||res.shortSigs||res.longSigs||[]).join('; ') || 'нет явных'}\nРекомендация агента: ${res.bestDir||'нет сетапа'} (уверенность ${res.bestConf?.toFixed(0)||0}%)` : '';
+      document.querySelector('.msg-ai-typing')?.remove();
+      fullPrompt = ctx + coinCtx + (histSummary?'\n\nКонтекст:\n'+histSummary:'') + '\n\n---\nВопрос: ' + msg;
+    } else {
+      fullPrompt = ctx + (histSummary?'\n\nКонтекст:\n'+histSummary:'') + '\n\n---\nВопрос: ' + msg;
+    }
+    const reply = await callGemini(fullPrompt, 500);
+    if (!reply) throw new Error('empty');
+    document.getElementById(tid)?.remove(); appendMsg('ai', reply);
     chatHistory.push({role:'user',content:msg},{role:'assistant',content:reply});
     if(chatHistory.length>12) chatHistory=chatHistory.slice(-12);
-  }catch(e){document.getElementById(tid)?.remove();appendMsg('ai','Ошибка соединения.');}
+  }catch(e){document.getElementById(tid)?.remove();appendMsg('ai','Ошибка Gemini: '+(e.message||'неизвестная'));}
 }
 function askQuick(q){sendChat(q);}
 function appendMsg(role,text){
@@ -1592,6 +1959,94 @@ setInterval(()=>{
 connectWS();
 loadSym('SOLUSDT');
 setTimeout(()=>runIdeas(false),3000);
+
+
+
+// ═══════════════════════════════════════════════════════
+//  GEMINI AI
+// ═══════════════════════════════════════════════════════
+const GEMINI_MODEL = 'gemini-2.0-flash';
+
+function getApiKey() {
+  return localStorage.getItem('gemini_api_key') || '';
+}
+
+function promptApiKey() {
+  const current = getApiKey();
+  const key = prompt(
+    'Введите Google Gemini API ключ\n' +
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+    '1. Откройте: aistudio.google.com\n' +
+    '2. Нажмите: Get API Key → Create API Key\n' +
+    '3. Скопируйте и вставьте сюда\n\n' +
+    'Бесплатно: 60 запросов/мин, без лимита по токенам',
+    current
+  );
+  if (key && key.length > 20) {
+    localStorage.setItem('gemini_api_key', key.trim());
+    showToast('✓ Gemini AI подключён');
+    // Remove the pulsing button
+    const btn = document.getElementById('api-key-btn');
+    if (btn) { btn.style.animation='none'; btn.style.color='#94a3b8'; btn.style.borderColor='#334155'; btn.textContent='🔑 Gemini'; }
+  } else if (key !== null) {
+    alert('Ключ слишком короткий. Получите на aistudio.google.com');
+  }
+}
+
+async function callGemini(prompt, maxTokens=400) {
+  const key = getApiKey();
+  if (!key) return null;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: maxTokens, temperature: 0.4 },
+    systemInstruction: {
+      parts: [{ text: 'Ты — персональный AI советник трейдера. Стратегии: Pump Exhaustion Reversion, разворот тренда, отскоки от перепроданности.\nОтвечай кратко (3-5 предложений), конкретно, на русском. Говори прямо: входить/не входить, держать/закрывать.\nЕсли тебя просят проанализировать монету — дай оценку тренда, ключевых уровней, рекомендацию по направлению.' }]
+    }
+  };
+  const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  if (!r.ok) {
+    const err = await r.json().catch(()=>({}));
+    const msg = err?.error?.message || `HTTP ${r.status}`;
+    if (r.status === 400 && msg.includes('API_KEY')) throw new Error('Неверный API ключ. Проверьте на aistudio.google.com');
+    if (r.status === 429) throw new Error('Превышен лимит запросов. Подождите минуту.');
+    throw new Error(msg);
+  }
+  const data = await r.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+function checkApiKey() {
+  const tb = document.getElementById('topbar');
+  const divider = tb.querySelector('.tdiv:last-of-type');
+  const btn = document.createElement('button');
+  btn.id = 'api-key-btn';
+  btn.className = 'top-btn';
+  btn.onclick = promptApiKey;
+  if (!getApiKey()) {
+    btn.style.cssText = 'background:rgba(74,222,128,.12);border-color:#4ade80;color:#4ade80;animation:pulse .8s infinite;';
+    btn.textContent = '🔑 Подключить AI';
+  } else {
+    btn.style.cssText = 'color:#4ade80;border-color:#334155;';
+    btn.textContent = '✦ Gemini AI';
+  }
+  if (divider) tb.insertBefore(btn, divider);
+  else tb.appendChild(btn);
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+buildWorkspace(loadLayout());
+connectWS();
+loadSym('SOLUSDT');
+checkApiKey();
+setTimeout(() => runIdeas(false), 3000);
+// Notification permission
+if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+
 </script>
 </body>
 </html>
