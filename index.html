@@ -3,19 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>◈ PUMP FADE v4</title>
+<title>◈ PUMP FADE</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap');
-:root {
-  --bg:#f1f5f9; --s1:#ffffff; --s2:#f8fafc; --s3:#f1f5f9;
-  --border:#e2e8f0; --border2:#cbd5e1;
-  --text:#0f172a; --text2:#334155; --muted:#64748b; --dim:#94a3b8;
-  --red:#dc2626; --red-bg:#fef2f2; --red-b:#fecaca;
-  --green:#16a34a; --green-bg:#f0fdf4; --green-b:#bbf7d0;
-  --amber:#d97706; --amber-bg:#fffbeb; --amber-b:#fde68a;
-  --blue:#2563eb; --blue-bg:#eff6ff; --blue-b:#bfdbfe;
-  --violet:#7c3aed; --sky:#0369a1; --orange:#ea580c;
-  --topbar:#1e293b; --mono:'JetBrains Mono','Courier New',monospace;
+:root{
+  --bg:#f1f5f9;--s1:#fff;--s2:#f8fafc;--s3:#f1f5f9;
+  --border:#e2e8f0;--border2:#cbd5e1;
+  --text:#0f172a;--text2:#334155;--muted:#64748b;--dim:#94a3b8;
+  --red:#dc2626;--red-bg:#fef2f2;--red-b:#fecaca;
+  --green:#16a34a;--green-bg:#f0fdf4;--green-b:#bbf7d0;
+  --amber:#d97706;--amber-bg:#fffbeb;--amber-b:#fde68a;
+  --blue:#2563eb;--blue-bg:#eff6ff;--blue-b:#bfdbfe;
+  --sky:#0369a1;--orange:#ea580c;--violet:#7c3aed;
+  --topbar:#1e293b;--mono:'JetBrains Mono',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;}
@@ -23,171 +24,181 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
 button{cursor:pointer;border:none;font-family:inherit;transition:all .12s;background:transparent;}
-button:hover{opacity:.85;}button:active{transform:scale(.97);}
+button:hover{opacity:.85;}
+
+/* Animations */
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
-@keyframes slideUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-@keyframes blink-red{0%,100%{background:var(--red-bg)}50%{background:#fee2e2}}
-@keyframes live-glow{0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.4)}50%{box-shadow:0 0 0 4px rgba(74,222,128,0)}}
-@keyframes pump-glow{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.3)}50%{box-shadow:0 0 0 5px rgba(245,158,11,0)}}
-@keyframes sig-pulse{0%,100%{border-color:var(--red-b)}50%{border-color:var(--red)}}
-.fade{animation:slideUp .2s ease;}
-.blink{animation:blink-red 1s infinite;}
-.sig-pulse{animation:sig-pulse 2s infinite;}
+@keyframes live-glow{0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.5)}50%{box-shadow:0 0 0 5px rgba(74,222,128,0)}}
+@keyframes pump-glow{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4)}50%{box-shadow:0 0 0 5px rgba(245,158,11,0)}}
+@keyframes sig-blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.fade{animation:fadeIn .2s ease;}
 
-/* TOPBAR */
-#topbar{background:var(--topbar);height:42px;display:flex;align-items:center;padding:0 14px;gap:12px;border-bottom:2px solid #334155;flex-shrink:0;}
+/* ── TOPBAR ── */
+#topbar{
+  background:var(--topbar);height:42px;display:flex;align-items:center;
+  padding:0 14px;gap:10px;border-bottom:2px solid #334155;flex-shrink:0;z-index:100;
+}
 .logo{font-family:var(--mono);font-size:13px;font-weight:700;color:#f59e0b;letter-spacing:2px;}
-.tdiv{width:1px;height:18px;background:#334155;}
-#status-dot{width:7px;height:7px;border-radius:50%;background:#64748b;transition:all .3s;}
-#status-dot.live{background:#4ade80;animation:live-glow 2s infinite;}
-#status-dot.scanning{background:#f59e0b;animation:pulse .6s infinite;}
-#status-text{font-family:var(--mono);font-size:10px;font-weight:700;color:#94a3b8;}
-#status-text.live{color:#4ade80;}
-#status-text.scanning{color:#f59e0b;}
-.top-price{font-family:var(--mono);font-size:20px;font-weight:700;color:#f8fafc;}
-.pump-thresh{display:flex;align-items:center;gap:6px;font-size:10px;color:#94a3b8;}
-.pump-thresh input[type=range]{width:70px;accent-color:#f59e0b;cursor:pointer;}
-.thresh-val{font-family:var(--mono);color:#f59e0b;font-weight:700;min-width:32px;}
+.tdiv{width:1px;height:18px;background:#334155;flex-shrink:0;}
+#live-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;
+  animation:live-glow 2s infinite;flex-shrink:0;}
+#live-dot.scanning{background:#f59e0b;animation:pulse .5s infinite;}
+#live-text{font-family:var(--mono);font-size:10px;font-weight:700;color:#4ade80;}
+#live-text.scanning{color:#f59e0b;}
+.top-price{font-family:var(--mono);font-size:19px;font-weight:700;color:#f8fafc;}
+.pump-thresh{display:flex;align-items:center;gap:5px;font-size:10px;color:#94a3b8;}
+.pump-thresh input{width:65px;accent-color:#f59e0b;}
+.thresh-val{font-family:var(--mono);color:#f59e0b;font-weight:700;min-width:28px;}
+.top-btn{font-size:9px;color:#94a3b8;border:1px solid #334155;padding:2px 8px;border-radius:2px;}
+.top-btn:hover{color:#f8fafc;}
+#gemini-btn{font-family:var(--mono);font-size:10px;font-weight:700;color:#4ade80;
+  border:1px solid #334155;padding:2px 8px;border-radius:2px;cursor:pointer;}
+#gemini-btn.off{color:#f87171;animation:sig-blink 2s infinite;}
+#gemini-btn.working{color:#f59e0b;}
 
-/* ALERT */
-#alert-bar{display:none;padding:7px 14px;font-weight:700;font-size:12px;align-items:center;gap:10px;border-bottom:2px solid transparent;flex-shrink:0;}
-#pump-alert{display:none;padding:6px 14px;background:var(--amber-bg);border-bottom:2px solid var(--amber);font-size:11px;font-weight:700;color:#92400e;align-items:center;gap:8px;flex-shrink:0;animation:pump-glow 1.5s infinite;}
+/* ── PUMP ALERT ── */
+#pump-alert{
+  display:none;padding:5px 14px;background:var(--amber-bg);border-bottom:2px solid var(--amber);
+  font-size:11px;font-weight:700;color:#92400e;align-items:center;gap:8px;flex-shrink:0;
+  animation:pump-glow 1.5s infinite;
+}
 
-/* LAYOUT */
-#body{display:grid;grid-template-columns:225px 1fr 260px;flex:1;min-height:0;overflow:hidden;}
+/* ── BODY LAYOUT ── */
+#body{
+  display:grid;
+  grid-template-columns:230px 1fr 300px;
+  flex:1;min-height:0;overflow:hidden;
+}
 
-/* LEFT */
-#left{background:var(--s1);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
-.col-hd{padding:8px 10px;border-bottom:1px solid var(--border);background:var(--s2);flex-shrink:0;}
-.col-hd-row{display:flex;justify-content:space-between;align-items:center;}
-.col-title{font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;}
+/* ── LEFT: IDEAS LIST ── */
+#left{
+  background:var(--s1);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.left-hd{
+  padding:7px 9px;border-bottom:1px solid var(--border);background:var(--s2);flex-shrink:0;
+}
+.left-hd-row{display:flex;justify-content:space-between;align-items:center;}
+.left-title{font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;}
 .scan-btn{font-size:9px;color:var(--sky);border:1px solid var(--blue-b);padding:2px 7px;border-radius:2px;background:var(--blue-bg);}
-.col-sub{font-size:8px;color:var(--dim);margin-top:1px;}
+.left-sub{font-size:8px;color:var(--dim);margin-top:2px;}
 #ideas-list{flex:1;overflow-y:auto;padding:5px;}
-.idea-card{border:1px solid var(--border);border-radius:5px;padding:7px 8px;margin-bottom:4px;cursor:pointer;transition:all .15s;background:var(--s1);position:relative;}
+
+/* Idea cards */
+.idea-card{border:1px solid var(--border);border-radius:5px;padding:7px 8px;margin-bottom:4px;cursor:pointer;transition:all .15s;background:var(--s1);}
 .idea-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08);}
 .idea-card.long{border-left:3px solid var(--green);}
 .idea-card.short{border-left:3px solid var(--red);}
-.idea-card.pump-new{border-left:3px solid var(--amber);background:linear-gradient(135deg,#fffbeb,#fff);animation:pump-glow 1.8s infinite;}
-.idea-card.stale{opacity:.45;}
+.idea-card.pump{border-left:3px solid var(--amber);background:linear-gradient(135deg,#fffbeb,#fff);animation:pump-glow 2s infinite;}
 .idea-card.active{box-shadow:0 2px 10px rgba(0,0,0,.12);}
 .idea-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;}
 .idea-sym{font-family:var(--mono);font-size:12px;font-weight:700;}
-.idea-dir{font-size:8px;font-weight:700;padding:1px 4px;border-radius:2px;}
-.idea-dir.long{background:var(--green-bg);color:var(--green);border:1px solid var(--green-b);}
-.idea-dir.short{background:var(--red-bg);color:var(--red);border:1px solid var(--red-b);}
-.idea-dir.pump{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-b);}
+.idea-dir-badge{font-size:8px;font-weight:700;padding:1px 4px;border-radius:2px;}
+.idea-dir-badge.long{background:var(--green-bg);color:var(--green);border:1px solid var(--green-b);}
+.idea-dir-badge.short{background:var(--red-bg);color:var(--red);border:1px solid var(--red-b);}
+.idea-dir-badge.pump{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-b);}
 .conf-bar{height:2px;background:var(--s3);border-radius:1px;margin:3px 0;}
 .conf-fill{height:100%;border-radius:1px;}
-.idea-meta{font-size:9px;color:var(--muted);display:flex;gap:5px;flex-wrap:wrap;}
-.idea-sub{font-size:8px;color:var(--dim);margin-top:1px;}
-.idea-age{font-size:8px;color:var(--dim);margin-top:1px;}
-.new-badge{position:absolute;top:4px;right:4px;background:var(--red);color:white;font-size:7px;font-weight:700;padding:1px 4px;border-radius:8px;}
+.idea-meta{font-size:9px;color:var(--muted);display:flex;gap:4px;flex-wrap:wrap;}
+.idea-age{font-size:8px;color:var(--dim);}
 
-/* VOLATILITY */
-#vol-section{border-top:1px solid var(--border);flex-shrink:0;padding:5px 7px;background:var(--s2);max-height:190px;overflow-y:auto;}
-.vol-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
-.vol-title{font-size:9px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;}
-.vol-item{display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:3px;margin-bottom:2px;background:var(--s1);border:1px solid #f1f5f9;cursor:pointer;transition:all .12s;}
+/* Volatility */
+#vol-section{border-top:1px solid var(--border);flex-shrink:0;padding:5px;background:var(--s2);max-height:180px;overflow-y:auto;}
+.vol-hd{font-size:9px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;display:flex;justify-content:space-between;}
+.vol-item{display:flex;align-items:center;gap:4px;padding:3px 4px;border-radius:3px;margin-bottom:2px;background:var(--s1);border:1px solid #f1f5f9;cursor:pointer;}
 .vol-item:hover{background:var(--s2);}
-.vol-rank{font-size:9px;min-width:12px;font-weight:700;color:var(--dim);}
+.vol-rank{font-size:9px;min-width:14px;font-weight:700;color:var(--dim);}
 .vol-sym{font-family:var(--mono);font-size:11px;font-weight:700;flex:1;}
 .vol-bar-wrap{width:36px;height:4px;background:var(--s3);border-radius:2px;}
 .vol-bar-fill{height:100%;border-radius:2px;}
-.vol-atr{font-family:var(--mono);font-size:9px;color:var(--muted);}
 .vol-chg{font-size:9px;font-weight:700;}
 
-/* CENTER */
+/* ── CENTER ── */
 #center{display:flex;flex-direction:column;overflow:hidden;}
-/* Phase tabs */
-#phase-tabs{display:flex;background:var(--s1);border-bottom:2px solid var(--border);flex-shrink:0;padding:0 6px;overflow-x:auto;}
-.ptab{padding:7px 10px;font-size:10px;font-weight:700;color:var(--dim);border-bottom:3px solid transparent;cursor:pointer;display:flex;align-items:center;gap:4px;margin-bottom:-2px;transition:all .15s;white-space:nowrap;}
-.ptab:hover{color:var(--text2);}
-.ptab.done{color:var(--green);}
-.ptab.active{color:var(--red);border-bottom-color:var(--red);}
-.ptab.extra{font-size:9px;color:var(--muted);}
-.ptab-dot{width:6px;height:6px;border-radius:50%;}
-@keyframes dot-blink{0%,100%{opacity:1}50%{opacity:.15}}
 
-/* Charts */
-#charts-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:7px 9px 4px;flex-shrink:0;background:var(--s2);}
-.chart-box{background:var(--s1);border:1px solid var(--border);border-radius:4px;overflow:hidden;}
-.chart-hd{padding:4px 8px;border-bottom:1px solid #f1f5f9;background:var(--s2);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+/* Chart area */
+#charts-area{flex-shrink:0;display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:6px 8px 3px;background:var(--s2);}
+.chart-box{background:var(--s1);border:1px solid var(--border);border-radius:4px;overflow:hidden;display:flex;flex-direction:column;}
+.chart-hd{padding:4px 8px;border-bottom:1px solid var(--border);background:var(--s2);display:flex;align-items:center;gap:7px;flex-shrink:0;flex-wrap:wrap;}
 .chart-tf{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text2);}
-.chart-emas{display:flex;gap:5px;font-size:7px;}
-canvas{display:block;}
+.ema-legend{display:flex;gap:5px;font-size:7px;}
+.chart-wrap{flex:1;min-height:160px;}
 
-/* Phase content */
-#phase-content{flex:1;overflow-y:auto;padding:8px 10px;}
-/* Detail card */
-.detail-card{background:var(--s1);border:1px solid var(--border);border-radius:5px;padding:11px;margin-bottom:8px;}
-.detail-hd{display:flex;align-items:center;gap:7px;margin-bottom:7px;}
-.detail-sym{font-family:var(--mono);font-size:15px;font-weight:800;}
-.detail-type{font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;}
-.why-box{border-radius:4px;padding:7px 9px;margin-bottom:7px;font-size:11px;line-height:1.7;}
+/* CVD + Volume mini */
+#mini-charts{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:0 8px 4px;flex-shrink:0;background:var(--s2);}
+.mini-box{background:var(--s1);border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+.mini-hd{padding:3px 7px;border-bottom:1px solid var(--border);background:var(--s2);display:flex;align-items:center;justify-content:space-between;}
+.mini-hd-title{font-size:9px;font-weight:700;color:var(--text2);}
+.mini-wrap{height:52px;}
+
+/* Phase tabs */
+#phase-tabs{display:flex;background:var(--s1);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;padding:0 6px;}
+.ptab{padding:6px 10px;font-size:9px;font-weight:700;color:var(--dim);border-bottom:3px solid transparent;cursor:pointer;display:flex;align-items:center;gap:3px;margin-bottom:-1px;white-space:nowrap;background:transparent;}
+.ptab:hover{color:var(--text2);}
+.ptab.active{color:var(--red);border-bottom-color:var(--red);}
+.ptab.done{color:var(--green);}
+.ptab-dot{width:5px;height:5px;border-radius:50%;}
+@keyframes dot-blink{0%,100%{opacity:1}50%{opacity:.1}}
+
+/* Dynamic zone — under charts */
+#dynamic-zone{flex:1;overflow-y:auto;padding:8px 10px;background:var(--bg);}
+
+/* Coin card (shown when idea selected) */
+.coin-card{background:var(--s1);border:1px solid var(--border);border-radius:6px;padding:12px;animation:fadeIn .2s ease;}
+.coin-card-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.coin-sym-big{font-family:var(--mono);font-size:16px;font-weight:800;}
+.coin-dir-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:3px;}
+.coin-conf{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto;}
+.why-box{border-radius:4px;padding:8px 10px;margin-bottom:8px;font-size:11px;line-height:1.7;}
 .why-box b{display:block;font-size:8px;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;}
-.levels-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:7px;}
+.levels-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px;}
 .level-box{background:var(--s2);border:1px solid var(--border);border-radius:3px;padding:5px 7px;}
 .level-lbl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);}
-.level-val{font-family:var(--mono);font-size:13px;font-weight:700;}
+.level-val{font-family:var(--mono);font-size:12px;font-weight:700;}
 .level-sub{font-size:8px;color:var(--dim);}
-.stats-row{display:flex;gap:10px;margin:7px 0;flex-wrap:wrap;}
+.stats-row{display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;}
 .stat-item .sl{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;}
 .stat-item .sv{font-family:var(--mono);font-weight:700;font-size:13px;}
-.trinity-box{background:var(--blue-bg);border:1px solid var(--blue-b);border-radius:4px;padding:7px 9px;font-size:10px;line-height:1.7;color:#1e40af;}
-.trinity-box b{font-size:8px;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:2px;}
-.sig-rows{display:flex;flex-direction:column;gap:0;}
-.sig-row{display:flex;gap:6px;align-items:center;font-size:11px;padding:4px 0;border-bottom:1px solid var(--border);}
-.phase-title{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;}
+.tf-badges{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;}
+.tf-badge{font-size:8px;padding:2px 5px;border-radius:3px;font-weight:700;}
+.ai-comment-box{background:var(--blue-bg);border:1px solid var(--blue-b);border-radius:4px;padding:8px 10px;font-size:10px;line-height:1.7;color:#1e40af;margin-bottom:8px;}
+.coin-actions{display:flex;gap:6px;}
+.btn-tv{flex:1;padding:8px;border-radius:3px;font-size:11px;font-weight:700;color:white;border:none;cursor:pointer;}
+.btn-ai{padding:8px 12px;border-radius:3px;font-size:11px;font-weight:700;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;}
+.btn-wr{padding:8px 12px;border-radius:3px;font-size:11px;font-weight:700;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;}
 
-/* RIGHT */
-#right{background:var(--s2);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
-.rtab-bar{display:flex;background:var(--s1);border-bottom:1px solid var(--border);flex-shrink:0;}
-.rtab{flex:1;padding:8px 3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;text-align:center;transition:all .12s;border:none;background:transparent;}
-.rtab:hover{color:var(--text2);}
-.rtab.active{color:var(--red);border-bottom-color:var(--red);}
-.rpanel{display:none;flex-direction:column;flex:1;overflow:hidden;}
-.rpanel.active{display:flex;}
-.rpanel-scroll{flex:1;overflow-y:auto;padding:9px;display:flex;flex-direction:column;gap:8px;}
+/* Phase list (when tab clicked) */
+.phase-list-hd{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border);}
+.phase-coin-row{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;margin-bottom:3px;background:var(--s1);border:1px solid var(--border);cursor:pointer;transition:all .12s;}
+.phase-coin-row:hover{box-shadow:0 1px 4px rgba(0,0,0,.08);}
+.phase-sig-row{display:flex;gap:5px;align-items:center;font-size:11px;padding:4px 0;border-bottom:1px solid var(--border);}
 
-/* Signal card */
-.signal-card{background:var(--s1);border:1px solid var(--red-b);border-radius:5px;padding:11px;}
-.sig-title{font-family:var(--mono);font-size:13px;font-weight:800;margin-bottom:3px;}
-.sig-sub{font-size:9px;color:var(--dim);margin-bottom:7px;}
-.sig-kv{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px;}
-.sig-k{color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
-.sig-v{font-family:var(--mono);font-weight:700;font-size:12px;}
-.open-btn{display:block;width:100%;padding:9px;text-align:center;border-radius:3px;font-size:12px;font-weight:700;cursor:pointer;margin-top:8px;border:none;font-family:inherit;}
-
-/* WR */
-.wr-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:7px;}
+/* Winrate */
+.wr-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px;}
 .wr-box{background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:7px;text-align:center;}
-.wr-v{font-family:var(--mono);font-size:17px;font-weight:800;}
+.wr-v{font-family:var(--mono);font-size:16px;font-weight:800;}
 .wr-l{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:1px;}
-.wr-item{background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:4px 7px;margin-bottom:3px;display:flex;align-items:center;gap:5px;border-left:3px solid var(--border);font-size:10px;}
-.wr-item.win{border-left-color:var(--green);}
-.wr-item.loss{border-left-color:var(--red);}
-.wr-item.pend{border-left-color:var(--amber);}
+.wr-row{display:flex;align-items:center;gap:5px;padding:4px 7px;margin-bottom:3px;background:var(--s1);border:1px solid var(--border);border-radius:4px;font-size:10px;cursor:pointer;}
+.wr-row.win{border-left:3px solid var(--green);}
+.wr-row.loss{border-left:3px solid var(--red);}
+.wr-row.pending{border-left:3px solid var(--amber);}
 
-/* Chat */
-#chat-messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;}
-.msg-user{background:var(--red-bg);border:1px solid var(--red-b);border-radius:6px;padding:8px 10px;font-size:11px;align-self:flex-end;max-width:92%;line-height:1.6;}
+/* ── RIGHT: CHAT ── */
+#right{background:var(--s1);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.right-hd{padding:8px 10px;border-bottom:1px solid var(--border);background:var(--s2);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;}
+.right-title{font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;}
+#chat-messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:0;}
+.msg-user{background:var(--red-bg);border:1px solid var(--red-b);border-radius:6px;padding:8px 10px;font-size:11px;align-self:flex-end;max-width:90%;line-height:1.6;}
 .msg-ai{background:var(--blue-bg);border:1px solid var(--blue-b);border-radius:6px;padding:9px 11px;font-size:11px;color:var(--text2);line-height:1.75;}
-.msg-ai-hd{font-size:9px;color:var(--blue);font-weight:700;margin-bottom:5px;letter-spacing:.5px;text-transform:uppercase;}
+.msg-ai-hd{font-size:9px;color:var(--blue);font-weight:700;margin-bottom:4px;letter-spacing:.5px;text-transform:uppercase;}
 .msg-thinking{background:var(--s3);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11px;color:var(--muted);animation:pulse 1s infinite;}
-.qbtns{padding:6px 8px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px;flex-shrink:0;background:var(--s2);}
-.qbtn{background:var(--s3);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;transition:all .12s;}
+.qbtns{padding:5px 8px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px;flex-shrink:0;background:var(--s2);}
+.qbtn{background:var(--s3);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;}
 .qbtn:hover{background:var(--blue-bg);border-color:var(--blue-b);color:var(--blue);}
-.chat-input-row{padding:8px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0;}
-#chat-input{flex:1;background:var(--s1);border:1px solid var(--border);border-radius:3px;padding:6px 9px;font-size:11px;font-family:inherit;color:var(--text);resize:none;height:50px;outline:none;}
+.chat-input-row{padding:8px;border-top:1px solid var(--border);display:flex;gap:5px;flex-shrink:0;}
+#chat-input{flex:1;background:var(--s1);border:1px solid var(--border);border-radius:3px;padding:6px 8px;font-size:11px;font-family:inherit;color:var(--text);resize:none;height:48px;outline:none;}
 .chat-send{background:var(--red);color:white;border-radius:3px;padding:0 12px;font-size:15px;font-weight:700;align-self:stretch;}
-
-/* Card */
-.card{background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:10px;}
-.card-title{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border);}
-.kv{display:flex;justify-content:space-between;margin-bottom:5px;font-size:11px;}
-.kv .key{color:var(--muted);}
-.kv .val{font-family:var(--mono);font-size:12px;font-weight:700;}
 </style>
 </head>
 <body>
@@ -196,21 +207,20 @@ canvas{display:block;}
 <div id="topbar">
   <div class="logo">◈ PUMP FADE</div>
   <div class="tdiv"></div>
-  <div style="display:flex;align-items:center;gap:5px;">
-    <div id="status-dot"></div>
-    <span id="status-text">CONNECTING</span>
-    <span id="refresh-timer" style="font-size:9px;color:#475569;font-family:var(--mono);"></span>
-  </div>
+  <div id="live-dot"></div>
+  <span id="live-text">LIVE</span>
+  <span id="refresh-timer" style="font-size:9px;color:#475569;font-family:var(--mono);"></span>
   <div class="pump-thresh">
-    Порог:
-    <input type="range" min="5" max="30" value="15" id="thresh-slider" oninput="onThreshChange(this.value)">
+    Порог: <input type="range" min="5" max="30" value="15" id="thresh-slider" oninput="PUMP_THRESH=+this.value;document.getElementById('thresh-val').textContent=this.value+'%'">
     <span class="thresh-val" id="thresh-val">15%</span>
   </div>
   <div style="flex:1"></div>
   <span id="sym-label" style="font-size:10px;color:#94a3b8;"></span>
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
-  <span id="entry-badge" style="display:none;background:rgba(220,38,38,.2);border:1px solid var(--red);color:#fca5a5;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;font-family:var(--mono);">▼ ВХОД</span>
+  <div class="tdiv"></div>
+  <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
+  <button class="top-btn" onclick="resetToDefaults()">⊞</button>
 </div>
 
 <!-- PUMP ALERT -->
@@ -219,165 +229,154 @@ canvas{display:block;}
   <button onclick="document.getElementById('pump-alert').style.display='none'" style="margin-left:auto;background:#92400e;color:white;border:none;border-radius:3px;padding:2px 7px;font-size:9px;cursor:pointer;">✕</button>
 </div>
 
-<!-- POS ALERT -->
-<div id="alert-bar"></div>
-
 <!-- BODY -->
 <div id="body">
 
   <!-- LEFT -->
   <div id="left">
-    <div class="col-hd">
-      <div class="col-hd-row">
-        <span class="col-title" id="scanner-label">💡 Идеи агента</span>
-        <button class="scan-btn" onclick="runIdeas(true)">↻</button>
+    <div class="left-hd">
+      <div class="left-hd-row">
+        <span class="left-title" id="scanner-label">💡 Идеи агента</span>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <span id="ideas-count" style="font-size:9px;color:var(--muted);"></span>
+          <button class="scan-btn" onclick="runIdeas(true)">↻</button>
+        </div>
       </div>
-      <div class="col-sub">1h·15m·4h · дедуп 1ч · авто 3м · min <span id="min-conf-label">65</span>%
-        <input type="range" min="45" max="85" value="65" id="conf-slider" oninput="document.getElementById('min-conf-label').textContent=this.value" style="width:50px;accent-color:var(--red);vertical-align:middle;margin-left:4px;">
+      <div class="left-sub">200 монет · все типы сетапов · min
+        <span id="min-conf-label">65</span>%
+        <input type="range" min="45" max="85" value="65" id="conf-slider"
+          oninput="document.getElementById('min-conf-label').textContent=this.value;renderIdeas()"
+          style="width:45px;accent-color:var(--red);vertical-align:middle;margin-left:3px;">
       </div>
     </div>
-    <div id="ideas-list"><div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Запуск агента...</div></div>
+    <div id="ideas-list" style="flex:1;overflow-y:auto;padding:5px;">
+      <div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Запуск агента...</div>
+    </div>
     <div id="vol-section">
-      <div class="vol-title-row">
-        <span class="vol-title">⚡ Топ волатильных</span>
-        <span style="font-size:8px;color:var(--dim);" id="vol-updated">1м</span>
+      <div class="vol-hd">
+        <span>⚡ Волатильность</span>
+        <span id="vol-ts" style="font-size:8px;color:var(--dim);font-weight:400;">—</span>
       </div>
-      <div id="vol-list"><div style="font-size:10px;color:var(--dim);padding:4px;">Загрузка...</div></div>
+      <div id="vol-list"></div>
     </div>
   </div>
 
   <!-- CENTER -->
   <div id="center">
-    <div id="phase-tabs">
-      <div class="ptab done" id="pt1" onclick="setPhase(1,this)">
-        <div class="ptab-dot" id="pd1" style="background:var(--green);"></div>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:800;">1</span> ПАМП
-      </div>
-      <div class="ptab done" id="pt2" onclick="setPhase(2,this)">
-        <div class="ptab-dot" id="pd2" style="background:var(--green);"></div>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:800;">2</span> ИСТОЩЕНИЕ
-      </div>
-      <div class="ptab active" id="pt3" onclick="setPhase(3,this)">
-        <div class="ptab-dot" id="pd3" style="background:var(--red);animation:dot-blink 1s infinite;"></div>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:800;">3</span> СЛОМ
-      </div>
-      <div class="ptab" id="pt4" onclick="setPhase(4,this)">
-        <div class="ptab-dot" id="pd4" style="background:var(--dim);"></div>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:800;">4</span> ВХОД
-      </div>
-      <div class="ptab extra" onclick="setPhase(5,this)">📊 WINRATES</div>
-      <div class="ptab extra" onclick="setPhase(6,this)">🤖 АГЕНТ</div>
-      <div class="ptab extra" onclick="setPhase(7,this)">💬 ЧАТ</div>
-    </div>
-    <div id="charts-row">
+    <!-- Charts -->
+    <div id="charts-area">
       <div class="chart-box">
         <div class="chart-hd">
           <span class="chart-tf" id="ctf1h">1H</span>
-          <div class="chart-emas">
-            <span style="color:#d97706;">━ EMA20</span>
-            <span style="color:#7c3aed;">━ EMA50</span>
-            <span style="color:#0369a1;">━ EMA100</span>
-            <span style="color:#374151;">━ EMA200</span>
+          <div class="ema-legend">
+            <span style="color:#d97706;">━EMA20</span>
+            <span style="color:#7c3aed;">━EMA50</span>
+            <span style="color:#0369a1;">━EMA100</span>
+            <span style="color:#374151;">━EMA200</span>
           </div>
           <span id="pump-label" style="margin-left:auto;font-size:9px;font-family:var(--mono);color:var(--muted);"></span>
         </div>
-        <canvas id="chart1h" width="420" height="155"></canvas>
+        <div class="chart-wrap"><div id="chart1h" style="width:100%;height:100%;"></div></div>
       </div>
       <div class="chart-box">
         <div class="chart-hd">
           <span class="chart-tf" id="ctf15m">15M</span>
-          <div class="chart-emas">
-            <span style="color:#d97706;">━ EMA20</span>
-            <span style="color:#7c3aed;">━ EMA50</span>
-            <span style="color:#0369a1;">━ EMA100</span>
+          <div class="ema-legend">
+            <span style="color:#d97706;">━EMA20</span>
+            <span style="color:#7c3aed;">━EMA50</span>
+            <span style="color:#0369a1;">━EMA100</span>
           </div>
-          <span id="entry-lines-label" style="display:none;gap:6px;font-size:9px;">
-            <span style="color:var(--green);">╌ TP</span>
-            <span style="color:var(--red);">╌ SL</span>
-          </span>
         </div>
-        <canvas id="chart15m" width="420" height="155"></canvas>
+        <div class="chart-wrap"><div id="chart15m" style="width:100%;height:100%;"></div></div>
       </div>
     </div>
-    <!-- CVD + Volume row -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:3px 9px 4px;flex-shrink:0;background:var(--s2);">
-      <div class="chart-box">
-        <div class="chart-hd"><span style="font-size:9px;font-weight:700;color:var(--text2);">CVD · 15m</span><span id="cvd-label" style="margin-left:auto;font-size:9px;font-weight:700;color:var(--muted);">—</span></div>
-        <canvas id="cvd-chart" width="420" height="45"></canvas>
+
+    <!-- CVD + Volume mini -->
+    <div id="mini-charts">
+      <div class="mini-box">
+        <div class="mini-hd">
+          <span class="mini-hd-title">CVD · 15m</span>
+          <span id="cvd-label" style="font-size:9px;font-weight:700;color:var(--muted);">—</span>
+        </div>
+        <div class="mini-wrap"><div id="cvd-chart" style="width:100%;height:100%;"></div></div>
       </div>
-      <div class="chart-box">
-        <div class="chart-hd"><span style="font-size:9px;font-weight:700;color:var(--text2);">Volume · 1h</span><span id="vol-label" style="margin-left:auto;font-size:9px;color:var(--muted);">—</span></div>
-        <canvas id="vol-chart" width="420" height="45"></canvas>
+      <div class="mini-box">
+        <div class="mini-hd">
+          <span class="mini-hd-title">Volume · 1h</span>
+          <span id="oi-fr" style="font-size:9px;color:var(--muted);">—</span>
+        </div>
+        <div class="mini-wrap"><div id="vol-chart" style="width:100%;height:100%;"></div></div>
       </div>
     </div>
-    <div id="phase-content" class="fade"></div>
+
+    <!-- Phase tabs -->
+    <div id="phase-tabs">
+      <div class="ptab done" onclick="setPhase(1,this)">
+        <div class="ptab-dot" style="background:var(--green);"></div>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:800;">1</span> ПАМП
+      </div>
+      <div class="ptab done" onclick="setPhase(2,this)">
+        <div class="ptab-dot" style="background:var(--green);"></div>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:800;">2</span> ИСТОЩЕНИЕ
+      </div>
+      <div class="ptab active" onclick="setPhase(3,this)">
+        <div class="ptab-dot" style="background:var(--red);animation:dot-blink 1s infinite;"></div>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:800;">3</span> СЛОМ
+      </div>
+      <div class="ptab" onclick="setPhase(4,this)">
+        <div class="ptab-dot" style="background:var(--dim);"></div>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:800;">4</span> ВХОД
+      </div>
+      <div class="ptab" onclick="setPhase(5,this)" style="font-size:9px;">📊 WINRATES</div>
+    </div>
+
+    <!-- Dynamic zone -->
+    <div id="dynamic-zone">
+      <div style="font-size:11px;color:var(--muted);">Нажмите на идею или вкладку фазы.</div>
+    </div>
   </div>
 
-  <!-- RIGHT -->
+  <!-- RIGHT: CHAT ONLY -->
   <div id="right">
-    <div class="rtab-bar">
-      <button class="rtab active" onclick="setRTab('signal',this)">Сигнал</button>
-      <button class="rtab" onclick="setRTab('chat',this)" id="chat-tab-btn">💬 Чат</button>
-      <button class="rtab" onclick="setRTab('data',this)">Данные</button>
+    <div class="right-hd">
+      <span class="right-title">💬 AI Советник · Gemini</span>
+      <span id="chat-status" style="font-size:9px;color:var(--muted);">не подключён</span>
     </div>
-    <div id="rpanel-signal" class="rpanel active">
-      <div class="rpanel-scroll">
-        <div id="signal-card" class="card"><div style="font-size:11px;color:var(--muted);">Выберите идею из сканера.</div></div>
-        <div id="targets-card" class="card" style="display:none;">
-          <div class="card-title">Цели возврата</div>
-          <div id="targets-content"></div>
-        </div>
-        <button onclick="runAI()" style="width:100%;background:var(--red-bg);border:1px solid var(--red-b);color:var(--red);padding:8px;border-radius:3px;font-size:10px;font-weight:700;" id="ai-btn2">⚡ AI анализ</button>
+    <div id="chat-messages">
+      <div class="msg-ai">
+        <div class="msg-ai-hd">✦ Gemini</div>
+        Привет! Слежу за рынком.<br>
+        <span style="color:var(--dim);">Спрашивайте про монету, тренд, CVD.<br>
+        Или нажмите <b>✦ AI</b> в карточке монеты.</span>
       </div>
     </div>
-    <div id="rpanel-chat" class="rpanel" style="flex-direction:column;">
-      <div id="chat-messages">
-        <div class="msg-ai"><div class="msg-ai-hd">🤖 AI Советник</div>Привет! Слежу за рынком вместе с вами.<br><span style="color:var(--dim);">Спрашивайте про позицию, тренд, CVD, стоп.</span></div>
-      </div>
-      <div class="qbtns">
-        <button class="qbtn" onclick="askQuick('Не развернулся ли тренд?')">↺ тренд?</button>
-        <button class="qbtn" onclick="askQuick('Стоит ли закрыть позицию?')">закрыть?</button>
-        <button class="qbtn" onclick="askQuick('CVD растёт — угроза шорту?')">CVD?</button>
-        <button class="qbtn" onclick="askQuick('Подтянуть стоп к безубытку?')">стоп→БУ</button>
-        <button class="qbtn" onclick="askQuick('Полный анализ текущей ситуации')">анализ</button>
-      </div>
-      <div class="chat-input-row">
-        <textarea id="chat-input" placeholder="Спросите..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
-        <button class="chat-send" onclick="sendChat()">↑</button>
-      </div>
+    <div class="qbtns">
+      <button class="qbtn" onclick="askQuick('Анализ текущей монеты')">анализ</button>
+      <button class="qbtn" onclick="askQuick('Стоит ли входить прямо сейчас?')">входить?</button>
+      <button class="qbtn" onclick="askQuick('Не развернулся ли тренд?')">тренд?</button>
+      <button class="qbtn" onclick="askQuick('CVD и OI — что говорят?')">CVD+OI?</button>
+      <button class="qbtn" onclick="askQuick('Где поставить стоп?')">стоп?</button>
     </div>
-    <div id="rpanel-data" class="rpanel">
-      <div class="rpanel-scroll">
-        <div class="card">
-          <div class="card-title">CVD · реальное время</div>
-          <div class="kv"><span class="key">Тренд дельты</span><span class="val" id="cvd-trend">—</span></div>
-          <div class="kv"><span class="key">Delta Exhaustion</span><span class="val" id="cvd-div">—</span></div>
-        </div>
-        <div class="card">
-          <div class="card-title" id="futures-title">Фьючерсы</div>
-          <div class="kv"><span class="key">Open Interest</span><span class="val" id="oi-val">—</span></div>
-          <div class="kv"><span class="key">OI Acceleration</span><span class="val" id="oi-accel">—</span></div>
-          <div class="kv"><span class="key">Funding Rate</span><span class="val" id="fr-val">—</span></div>
-          <div class="kv"><span class="key">OI тренд</span><span class="val" id="oi-trend">—</span></div>
-          <div id="fr-warn" style="display:none;font-size:9px;padding:4px 6px;border-radius:3px;margin-top:4px;font-weight:600;"></div>
-        </div>
-      </div>
+    <div class="chat-input-row">
+      <textarea id="chat-input" placeholder="Спросите или введите монету: BTCUSDT"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+      <button class="chat-send" onclick="sendChat()">↑</button>
     </div>
   </div>
+
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════════
 //  CONSTANTS
 // ═══════════════════════════════════════════════════════
-const BINANCE = 'https://fapi.binance.com/fapi/v1';
-const FAPI    = 'https://fapi.binance.com/fapi/v1';
-const IDEAS_INTERVAL = 3 * 60 * 1000;
-const REFRESH_INTERVAL = 30 * 1000;
-const VOL_INTERVAL = 60 * 1000;
-const IDEA_TTL = 60 * 60 * 1000; // 1 hour dedup
-const IDEA_PRICE_TTL = 1.5; // ATR multiples before stale
-
+const FAPI   = 'https://fapi.binance.com/fapi/v1';
+const BINANCE = FAPI; // same — futures API has no CORS issues
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const REFRESH_INTERVAL = 30000;
+const IDEAS_INTERVAL   = 3 * 60000;
+const VOL_INTERVAL     = 60000;
+const WR_KEY = 'pf_wr_v2';
 let PUMP_THRESH = 15;
 let MIN_CONF = 65;
 
@@ -385,1404 +384,909 @@ let MIN_CONF = 65;
 //  STATE
 // ═══════════════════════════════════════════════════════
 const S = {
-  sym: 'SOLUSDT',
-  cds1h: [], cds15m: [], cds4h: [],
-  prices: {}, oi: null, fr: null, oiHist: [],
-  ideas: [],       // [{sym,dir,conf,entry,sl,tp1,tp2,rr,atr,signals,trinity,why,ts,checked}]
-  ideaDedup: {},   // {sym: ts}
-  volData: [],     // [{sym,atr,atrRatio,chgPct,bodyRatio}]
-  positions: [],
-  cvdData: [],
-  analysis: null,
-  lastPoll: null,
-  nextRefresh: Date.now() + REFRESH_INTERVAL,
-  scanning: false,
-  wsOk: false,
-  phase: 3,
-  activeIdea: null,
-  winrates: [],    // [{sym,dir,entry,tp,sl,ts,result,checkedAt}]
+  sym:'SOLUSDT', cds1h:[], cds15m:[],
+  prices:{}, oi:null, fr:null,
+  ideas:[], ideaDedup:{},
+  volData:[],
+  analysis:null,
+  cvdData:[],
+  positions:[],
+  winrates: loadWR(),
+  scanning:false, phase:3,
+  activeIdea:null,
+  nextRefresh: Date.now()+REFRESH_INTERVAL,
 };
 
 // ═══════════════════════════════════════════════════════
-//  MATH HELPERS
+//  MATH (compact)
 // ═══════════════════════════════════════════════════════
-function ema(arr, p) {
-  const k = 2/(p+1); const out = []; let prev = null; const init = [];
-  for (let i=0; i<arr.length; i++) {
-    if (arr[i]==null) { out.push(null); continue; }
-    if (prev==null) {
-      init.push(arr[i]);
-      if (init.length < p) { out.push(null); continue; }
-      prev = init.reduce((a,b)=>a+b,0)/p; out.push(prev); continue;
-    }
-    prev = arr[i]*k + prev*(1-k); out.push(prev);
-  }
-  return out;
-}
-function rsi(c, p=14) {
-  const r = Array(p).fill(null); let ag=0, al=0;
-  for (let i=1; i<=p; i++) { const d=c[i]-c[i-1]; d>=0?ag+=d:al-=d; }
-  ag/=p; al/=p; r.push(al===0?100:100-100/(1+ag/al));
-  for (let i=p+1; i<c.length; i++) {
-    const d = c[i]-c[i-1];
-    ag=(ag*(p-1)+(d>0?d:0))/p; al=(al*(p-1)+(d<0?-d:0))/p;
-    r.push(al===0?100:100-100/(1+ag/al));
-  }
-  return r;
-}
-function macd(c) {
-  const f=ema(c,12), s=ema(c,26);
-  const ml = c.map((_,i)=>f[i]!=null&&s[i]!=null?f[i]-s[i]:null);
-  const valid = ml.filter(v=>v!=null); const sr = ema(valid,9);
-  let si=0; const sig = ml.map(v=>v!=null?sr[si++]:null);
-  const h = ml.map((v,i)=>v!=null&&sig[i]!=null?v-sig[i]:null);
-  return {ml,sig,h};
-}
-function atrCalc(cds, p=14) {
-  const trs = cds.slice(1).map((c,i)=>Math.max(c.high-c.low,Math.abs(c.high-cds[i].close),Math.abs(c.low-cds[i].close)));
-  return trs.slice(-p).reduce((s,v)=>s+v,0)/p;
-}
-function cvdFromCandles(cds) {
-  let cum = 0;
-  return cds.map(c=>{ const b=c.close-c.open; const r=c.high-c.low||0.0001; cum+=(b/r)*c.volume; return cum; });
-}
-function fmt(n, d=2) {
-  if (n==null) return '—';
-  if (Math.abs(n)>=1e9) return (n/1e9).toFixed(1)+'B';
-  if (Math.abs(n)>=1e6) return (n/1e6).toFixed(1)+'M';
-  if (Math.abs(n)>=1000) return n.toLocaleString('en',{maximumFractionDigits:0});
-  if (Math.abs(n)<0.0001) return n.toFixed(6);
-  if (Math.abs(n)<0.01) return n.toFixed(5);
-  if (Math.abs(n)<1) return n.toFixed(4);
-  return n.toFixed(d);
-}
-function fmtAge(ts) {
-  const s = Math.floor((Date.now()-ts)/1000);
-  if (s < 60) return s+'с назад';
-  if (s < 3600) return Math.floor(s/60)+'м назад';
-  return Math.floor(s/3600)+'ч назад';
-}
+function ema(arr,p){const k=2/(p+1);const out=[];let prev=null;const init=[];for(let i=0;i<arr.length;i++){if(arr[i]==null){out.push(null);continue;}if(prev==null){init.push(arr[i]);if(init.length<p){out.push(null);continue;}prev=init.reduce((a,b)=>a+b,0)/p;out.push(prev);continue;}prev=arr[i]*k+prev*(1-k);out.push(prev);}return out;}
+function rsi(c,p=14){const r=Array(p).fill(null);let ag=0,al=0;for(let i=1;i<=p;i++){const d=c[i]-c[i-1];d>=0?ag+=d:al-=d;}ag/=p;al/=p;r.push(al===0?100:100-100/(1+ag/al));for(let i=p+1;i<c.length;i++){const d=c[i]-c[i-1];ag=(ag*(p-1)+(d>0?d:0))/p;al=(al*(p-1)+(d<0?-d:0))/p;r.push(al===0?100:100-100/(1+ag/al));}return r;}
+function macd(c){const f=ema(c,12),s=ema(c,26);const ml=c.map((_,i)=>f[i]!=null&&s[i]!=null?f[i]-s[i]:null);const valid=ml.filter(v=>v!=null);const sr=ema(valid,9);let si=0;const sig=ml.map(v=>v!=null?sr[si++]:null);const h=ml.map((v,i)=>v!=null&&sig[i]!=null?v-sig[i]:null);return{ml,sig,h};}
+function atrCalc(cds,p=14){if(cds.length<2)return 0;const trs=cds.slice(1).map((c,i)=>Math.max(c.high-c.low,Math.abs(c.high-cds[i].close),Math.abs(c.low-cds[i].close)));return trs.slice(-p).reduce((s,v)=>s+v,0)/Math.min(p,trs.length);}
+function cvdFromCandles(cds){let cum=0;return cds.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cum+=b/r*c.volume;return cum;});}
+function fmt(n,d=2){if(n==null)return'—';if(Math.abs(n)>=1e9)return(n/1e9).toFixed(1)+'B';if(Math.abs(n)>=1e6)return(n/1e6).toFixed(1)+'M';if(Math.abs(n)>=1000)return n.toLocaleString('en',{maximumFractionDigits:0});if(Math.abs(n)<0.0001)return n.toFixed(6);if(Math.abs(n)<0.01)return n.toFixed(5);if(Math.abs(n)<1)return n.toFixed(4);return n.toFixed(d);}
+function fmtAge(ts){const s=Math.floor((Date.now()-ts)/1000);if(s<60)return s+'с';if(s<3600)return Math.floor(s/60)+'м';return Math.floor(s/3600)+'ч';}
 
 // ═══════════════════════════════════════════════════════
-//  CANVAS CHARTS
+//  LIGHTWEIGHT CHARTS
 // ═══════════════════════════════════════════════════════
-function drawCandles(id, cds, analysis) {
-  const canvas = document.getElementById(id);
-  if (!canvas||!cds||cds.length<5) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0,0,W,H);
-  const sl = cds.slice(-60);
-  const mn = Math.min(...sl.map(c=>c.low));
-  const mx = Math.max(...sl.map(c=>c.high));
-  const pd = (mx-mn)*0.08||1;
-  const ty = v => H-5-((v-mn+pd)/(mx-mn+2*pd))*(H-10);
-  const tx = i => (i/(sl.length-1))*(W-4)+2;
-  const cs = sl.map(c=>c.close);
-  const e20=ema(cs,Math.min(20,cs.length));
-  const e50=ema(cs,Math.min(50,cs.length));
-  const e100=ema(cs,Math.min(100,cs.length));
-  const e200=ema(cs,Math.min(200,cs.length));
-
-  // Grid
-  ctx.strokeStyle='#f8fafc'; ctx.lineWidth=1;
-  [.25,.5,.75].forEach(p=>{ctx.beginPath();ctx.moveTo(0,H*p);ctx.lineTo(W,H*p);ctx.stroke();});
-
-  // Candles
-  sl.forEach((c,i)=>{
-    const x=tx(i), bw=Math.max(1.5,(W/sl.length)*0.5);
-    const bull=c.close>=c.open; const col=bull?'#16a34a':'#dc2626';
-    ctx.strokeStyle=col; ctx.lineWidth=0.7;
-    ctx.beginPath(); ctx.moveTo(x,ty(c.high)); ctx.lineTo(x,ty(c.low)); ctx.stroke();
-    ctx.fillStyle=col; ctx.globalAlpha=0.9;
-    ctx.fillRect(x-bw/2,Math.min(ty(c.open),ty(c.close)),bw,Math.max(1.5,Math.abs(ty(c.open)-ty(c.close))));
-    ctx.globalAlpha=1;
+const LWC={};
+function getChart(id){
+  const el=document.getElementById(id);if(!el)return null;
+  if(LWC[id])return LWC[id].chart;
+  const chart=LightweightCharts.createChart(el,{
+    width:el.clientWidth||400,height:el.clientHeight||170,
+    layout:{background:{color:'#fff'},textColor:'#334155',fontSize:10},
+    grid:{vertLines:{color:'#f8fafc',style:1},horzLines:{color:'#f8fafc',style:1}},
+    crosshair:{mode:0},
+    rightPriceScale:{borderColor:'#e2e8f0'},
+    timeScale:{borderColor:'#e2e8f0',timeVisible:true,secondsVisible:false,rightOffset:12,barSpacing:5},
+    handleScroll:true,handleScale:true,
   });
+  const ro=new ResizeObserver(()=>{if(LWC[id])LWC[id].chart.applyOptions({width:el.clientWidth,height:el.clientHeight});});
+  ro.observe(el);
+  LWC[id]={chart,ro,series:{}};
+  return chart;
+}
+function destroyChart(id){if(LWC[id]){LWC[id].ro.disconnect();try{LWC[id].chart.remove();}catch{}delete LWC[id];}}
+function cdsToLW(cds){return cds.map(c=>({time:Math.floor(c.time/1000),open:c.open,high:c.high,low:c.low,close:c.close}));}
+function emaToLW(cds,arr){return arr.map((v,i)=>v!=null&&i<cds.length?{time:Math.floor(cds[i].time/1000),value:v}:null).filter(Boolean);}
 
-  // EMA lines
-  [[e20,'#d97706',1.5],[e50,'#7c3aed',1.2],[e100,'#0369a1',1.0],[e200,'#374151',.85]].forEach(([arr,col,w])=>{
-    ctx.strokeStyle=col; ctx.lineWidth=w; ctx.globalAlpha=0.85;
-    ctx.beginPath();
-    arr.forEach((v,i)=>{ if(v!=null){i===0||arr[i-1]==null?ctx.moveTo(tx(i),ty(v)):ctx.lineTo(tx(i),ty(v));} });
-    ctx.stroke(); ctx.globalAlpha=1;
-  });
-
-  // TP/SL dashed
-  if (analysis) {
-    [[analysis.tp1,'#16a34a'],[analysis.sl,'#dc2626'],[analysis.entry,'#64748b']].forEach(([v,col])=>{
-      ctx.strokeStyle=col; ctx.lineWidth=1; ctx.globalAlpha=0.55;
-      ctx.setLineDash([5,3]);
-      ctx.beginPath(); ctx.moveTo(0,ty(v)); ctx.lineTo(W,ty(v)); ctx.stroke();
-      ctx.setLineDash([]); ctx.globalAlpha=1;
+function drawCandles(id,cds,analysis){
+  if(!cds||cds.length<5)return;
+  const chart=getChart(id);if(!chart)return;
+  const lw=LWC[id];
+  ['candle','e20','e50','e100','e200','tp1','sl','entry'].forEach(k=>{if(lw.series[k]){try{chart.removeSeries(lw.series[k]);}catch{}delete lw.series[k];}});
+  const cs=chart.addCandlestickSeries({upColor:'#16a34a',downColor:'#dc2626',borderUpColor:'#16a34a',borderDownColor:'#dc2626',wickUpColor:'#16a34a',wickDownColor:'#dc2626'});
+  cs.setData(cdsToLW(cds));lw.series.candle=cs;
+  const closes=cds.map(c=>c.close);
+  const emaConf=[{p:20,c:'#d97706',w:1.5,k:'e20'},{p:50,c:'#7c3aed',w:1.3,k:'e50'},{p:100,c:'#0369a1',w:1.0,k:'e100'}];
+  if(id==='chart1h')emaConf.push({p:200,c:'#374151',w:.85,k:'e200'});
+  emaConf.forEach(({p,c,w,k})=>{const s=chart.addLineSeries({color:c,lineWidth:w,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});s.setData(emaToLW(cds,ema(closes,p)));lw.series[k]=s;});
+  if(analysis){
+    [[analysis.tp1,'#16a34a','tp1'],[analysis.sl,'#dc2626','sl'],[analysis.entry,'#94a3b8','entry']].forEach(([price,color,key])=>{
+      if(!price)return;
+      const s=chart.addLineSeries({color,lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false});
+      s.setData([{time:Math.floor(cds[0].time/1000),value:price},{time:Math.floor(cds[cds.length-1].time/1000),value:price}]);
+      lw.series[key]=s;
     });
   }
+  chart.timeScale().fitContent();
 }
 
-function drawCVD(data) {
-  const canvas = document.getElementById('cvd-chart');
-  if (!canvas||!data||data.length<3) return;
-  const ctx=canvas.getContext('2d'); const W=canvas.width,H=canvas.height;
-  ctx.clearRect(0,0,W,H);
-  const mn=Math.min(...data),mx=Math.max(...data); const range=mx-mn||1;
-  const ty=v=>H-3-((v-mn)/range)*(H-6);
-  const tx=i=>(i/(data.length-1))*(W-4)+2;
+function drawCVD(data){
+  if(!data||data.length<3)return;
+  const chart=getChart('cvd-chart');if(!chart)return;
+  const lw=LWC['cvd-chart'];
+  if(lw.series.cvd){try{chart.removeSeries(lw.series.cvd);}catch{}delete lw.series.cvd;}
   const falling=data[data.length-1]<data[Math.max(0,data.length-10)];
-  ctx.strokeStyle='#cbd5e1'; ctx.lineWidth=0.7; ctx.setLineDash([2,4]);
-  ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.strokeStyle=falling?'#dc2626':'#16a34a'; ctx.lineWidth=1.5;
-  ctx.beginPath();
-  data.forEach((v,i)=>i===0?ctx.moveTo(tx(i),ty(v)):ctx.lineTo(tx(i),ty(v)));
-  ctx.stroke();
+  const now=Math.floor(Date.now()/1000),step=15*60;
+  const d=data.map((v,i)=>({time:now-(data.length-1-i)*step,value:v}));
+  const s=chart.addLineSeries({color:falling?'#dc2626':'#16a34a',lineWidth:1.5,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+  s.setData(d);lw.series.cvd=s;chart.timeScale().fitContent();
+  const lbl=document.getElementById('cvd-label');
+  if(lbl){lbl.textContent=falling?'↓ медвежий':'↑ бычий';lbl.style.color=falling?'var(--red)':'var(--green)';}
 }
 
-function drawVolume(cds) {
-  const canvas = document.getElementById('vol-chart');
-  if (!canvas||!cds||cds.length<5) return;
-  const ctx=canvas.getContext('2d'); const W=canvas.width,H=canvas.height;
-  ctx.clearRect(0,0,W,H);
-  const sl=cds.slice(-60);
-  const mx=Math.max(...sl.map(c=>c.volume));
-  const vols=sl.map(c=>c.volume);
-  const ve20=ema(vols,20);
-  const tx=i=>(i/(sl.length-1))*(W-4)+2;
-  sl.forEach((c,i)=>{
-    const x=tx(i), bw=Math.max(1.5,(W/sl.length)*0.5);
-    const h=Math.max(1,(c.volume/mx)*(H-4));
-    const bull=c.close>=c.open;
-    ctx.fillStyle=bull?'#16a34a':'#dc2626'; ctx.globalAlpha=0.35;
-    ctx.fillRect(x-bw/2,H-h-2,bw,h);
-    ctx.globalAlpha=1;
-  });
-  ctx.strokeStyle='#d97706'; ctx.lineWidth=1;
-  ctx.beginPath();
-  ve20.forEach((v,i)=>{ if(v!=null){ const y=H-2-(v/mx)*(H-4); i===0||ve20[i-1]==null?ctx.moveTo(tx(i),y):ctx.lineTo(tx(i),y); } });
-  ctx.stroke();
+function drawVolume(cds){
+  if(!cds||cds.length<5)return;
+  const chart=getChart('vol-chart');if(!chart)return;
+  const lw=LWC['vol-chart'];
+  ['vol','vema'].forEach(k=>{if(lw.series[k]){try{chart.removeSeries(lw.series[k]);}catch{}delete lw.series[k];}});
+  const hs=chart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'vol',scaleMargins:{top:0.1,bottom:0}});
+  hs.setData(cds.map(c=>({time:Math.floor(c.time/1000),value:c.volume,color:c.close>=c.open?'rgba(22,163,74,.45)':'rgba(220,38,38,.4)'})));
+  lw.series.vol=hs;
+  const ve=ema(cds.map(c=>c.volume),20);
+  const ls=chart.addLineSeries({color:'#d97706',lineWidth:1.2,priceScaleId:'vol',priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+  ls.setData(emaToLW(cds,ve));lw.series.vema=ls;
+  chart.timeScale().fitContent();
+}
+
+function redrawCharts(){
+  setTimeout(()=>{
+    if(S.cds1h.length)drawCandles('chart1h',S.cds1h,S.analysis?.readyToShort?S.analysis:null);
+    if(S.cds15m.length)drawCandles('chart15m',S.cds15m,S.analysis?.readyToShort?S.analysis:null);
+    if(S.cvdData.length)drawCVD(S.cvdData);
+    if(S.cds1h.length)drawVolume(S.cds1h);
+  },100);
 }
 
 // ═══════════════════════════════════════════════════════
-//  PUMP EXHAUSTION ANALYSIS
+//  ANALYSIS ENGINE
 // ═══════════════════════════════════════════════════════
-function analyzeFull(cds1h, cds15m, cds4h, oiTrend, frData) {
-  if (!cds1h||cds1h.length<50||!cds15m||cds15m.length<30) return null;
-  const c1h=cds1h.map(c=>c.close), v1h=cds1h.map(c=>c.volume);
-  const n1h=cds1h.length-1;
-  const e20_1h=ema(c1h,20), e50_1h=ema(c1h,50);
-  const ve20=ema(v1h,20);
-  const price=c1h[n1h], e20n=e20_1h[n1h], e50n=e50_1h[n1h];
+function analyzeFull(cds1h,cds15m){
+  if(!cds1h||cds1h.length<30||!cds15m||cds15m.length<20)return null;
+  const c1h=cds1h.map(c=>c.close),v1h=cds1h.map(c=>c.volume),n1h=cds1h.length-1;
+  const e20_1h=ema(c1h,20),e50_1h=ema(c1h,50),ve20=ema(v1h,20);
+  const price=c1h[n1h],e20n=e20_1h[n1h],e50n=e50_1h[n1h];
   const distE20=e20n?(price-e20n)/e20n*100:0;
-
-  // PUMP SPEED — compare per-candle rate
   const pumpLow=Math.min(...cds1h.slice(-8).map(c=>c.low));
   const pumpPct=pumpLow>0?(price-pumpLow)/pumpLow*100:0;
-  const pump2=Math.min(...cds1h.slice(-2).map(c=>c.low));
-  const pumpSpeed=pump2>0?(price-pump2)/pump2*100:0; // last 2 candles
-
-  // Historical ATR for context
-  const atrNow=atrCalc(cds1h);
-  const atrHist=atrCalc(cds1h.slice(0,-1));
+  const p2=Math.min(...cds1h.slice(-2).map(c=>c.low));
+  const pumpSpeed=p2>0?(price-p2)/p2*100:0;
+  const atrNow=atrCalc(cds1h),atrHist=cds1h.length>20?atrCalc(cds1h.slice(0,-1)):atrNow;
   const atrRatio=atrHist>0?atrNow/atrHist:1;
-
-  const volNow=v1h[n1h], volAvg=ve20[n1h]||1;
-  const volRatio=volNow/volAvg;
+  const volRatio=(ve20[n1h]||1)>0?v1h[n1h]/(ve20[n1h]||1):1;
+  const rsi1h=rsi(c1h),rsiNow=rsi1h[n1h];
+  const{h}=macd(c1h);
+  const macdT=h[n1h]!=null&&h[n1h-1]!=null&&h[n1h]<h[n1h-1]&&h[n1h-1]>0;
+  const rsiDiv=c1h[n1h]>c1h[n1h-3]&&rsi1h[n1h]<rsi1h[n1h-3]&&rsiNow>60;
   const isPumped=pumpPct>=PUMP_THRESH&&distE20>=8;
-  const isOverheated=distE20>15;
-
-  // RSI
-  const rsi1h=rsi(c1h); const rsiNow1h=rsi1h[n1h];
-  const {ml:ml1h,h:h1h}=macd(c1h);
-  const hNow1h=h1h[n1h], hPrev1h=h1h[n1h-1];
-
-  // Upper wick ratio
-  const last5=cds1h.slice(-5);
-  const avgWick=last5.reduce((s,c)=>{
-    const wick=c.high-Math.max(c.open,c.close);
-    const body=Math.abs(c.close-c.open)||0.0001;
-    return s+wick/body;
-  },0)/5;
-
-  // RSI divergence
-  const rsiDiv=c1h[n1h]>c1h[n1h-3]&&rsi1h[n1h]<rsi1h[n1h-3]&&rsiNow1h>60;
-  const macdTurning=hNow1h!=null&&hPrev1h!=null&&hNow1h<hPrev1h&&hPrev1h>0&&ml1h[n1h]>0;
-  const volFading=volRatio<0.7&&pumpPct>PUMP_THRESH/2;
-
-  // CVD divergence from 15m
+  // CVD
   const cvd15=cvdFromCandles(cds15m);
-  const cvdNow=cvd15[cvd15.length-1];
-  const cvdPrev=cvd15[Math.max(0,cvd15.length-6)];
+  const cvdNow=cvd15[cvd15.length-1],cvdPrev=cvd15[Math.max(0,cvd15.length-6)];
   const cvdFalling=cvdNow<cvdPrev;
-  // Delta Exhaustion: price higher but CVD lower
-  const c15=cds15m.map(c=>c.close); const n15=cds15m.length-1;
+  const c15=cds15m.map(c=>c.close),n15=cds15m.length-1;
   const cvdDiv=c15[n15]>c15[n15-4]&&cvdNow<cvd15[Math.max(0,n15-4)];
-
-  // OI Acceleration
-  const oiAccel = S.oiHist.length>=3
-    ? (S.oiHist[S.oiHist.length-1]-S.oiHist[S.oiHist.length-2]) -
-      (S.oiHist[S.oiHist.length-2]-S.oiHist[S.oiHist.length-3])
-    : 0;
-  const oiDecelerating=oiAccel<0&&S.oiHist.length>=3;
-  const oiFalling=oiTrend==='falling';
-
+  // Exhaustion signals
   const exSigs=[];
-  if(rsiNow1h>70)   exSigs.push({t:`RSI ${rsiNow1h.toFixed(0)} — перекупленность`,w:2});
-  if(rsiDiv)        exSigs.push({t:'RSI дивергенция: цена выше, RSI ниже',w:3});
-  if(macdTurning)   exSigs.push({t:'MACD разворачивается вниз с хая',w:2});
-  if(avgWick>1.2)   exSigs.push({t:`Верхние тени ×${avgWick.toFixed(1)} — давление продаж`,w:2});
-  if(volFading)     exSigs.push({t:'Объём затухает после пампа',w:2});
-  if(oiFalling)     exSigs.push({t:'OI падает — лонги сворачиваются',w:3});
-  if(oiDecelerating)exSigs.push({t:'OI Acceleration < 0 — темп роста замедляется',w:2});
-  if(frData&&frData>0.05) exSigs.push({t:`Funding ${frData.toFixed(3)}% — лонги перегреты`,w:2});
-  if(cvdDiv)        exSigs.push({t:'CVD дивергенция: цена выше, дельта ниже',w:3});
-  const exScore=exSigs.reduce((s,e)=>s+e.w,0);
-  const isExhausted=exScore>=4;
-
-  // 15m breakdown
-  const e20_15m=ema(c15,20), e50_15m=ema(c15,50);
-  const p15=c15[n15], e20_15n=e20_15m[n15], e50_15n=e50_15m[n15];
+  if(rsiNow>70)exSigs.push({t:`RSI ${rsiNow.toFixed(0)} — перекупленность`,w:2});
+  if(rsiDiv)exSigs.push({t:'RSI дивергенция',w:3});
+  if(macdT)exSigs.push({t:'MACD разворачивается ↓',w:2});
+  if(cvdDiv)exSigs.push({t:'CVD дивергенция',w:3});
+  if(cvdFalling)exSigs.push({t:'CVD ↓ — покупки иссякают',w:2});
+  const exScore=exSigs.reduce((s,e)=>s+e.w,0),isExhausted=exScore>=4;
+  // Breakdown signals
+  const e20_15m=ema(c15,20),e50_15m=ema(c15,50);
+  const p15=c15[n15],e20_15n=e20_15m[n15],e50_15n=e50_15m[n15];
   const recentH=cds15m.slice(-6).map(c=>c.high);
   const lowerHighs=recentH[5]<recentH[4]&&recentH[4]<recentH[3];
   const brokeEma20=p15<e20_15n;
-  const confirmedBelow=c15[n15]<e20_15m[n15]&&c15[n15-1]<(e20_15m[n15-1]||Infinity);
-
   const bkSigs=[];
-  if(lowerHighs)     bkSigs.push({t:'Lower highs на 15m — слом структуры',w:3});
-  if(brokeEma20)     bkSigs.push({t:'Пробой EMA20 на 15m',w:2});
-  if(confirmedBelow) bkSigs.push({t:'Закрепление ниже EMA20 (2 свечи)',w:3});
-  if(cvdFalling)     bkSigs.push({t:'CVD падает — агрессия покупателей иссякает',w:2});
-  if(p15<e50_15n)    bkSigs.push({t:'Пробой EMA50 на 15m',w:2});
-  const bkScore=bkSigs.reduce((s,e)=>s+e.w,0);
-  const hasBreakdown=bkScore>=3;
-
-  const totalScore=(isPumped?4:0)+(isOverheated?2:0)+exScore+bkScore;
+  if(lowerHighs)bkSigs.push({t:'Lower highs на 15m',w:3});
+  if(brokeEma20)bkSigs.push({t:'Пробой EMA20 на 15m',w:2});
+  if(cvdFalling)bkSigs.push({t:'CVD ↓ подтверждает',w:2});
+  if(p15<e50_15n)bkSigs.push({t:'Пробой EMA50 на 15m',w:2});
+  const bkScore=bkSigs.reduce((s,e)=>s+e.w,0),hasBreakdown=bkScore>=3;
+  const totalScore=(isPumped?4:0)+exScore+bkScore;
   let phase=0;
-  if(isPumped) phase=1;
-  if(isPumped&&isExhausted) phase=2;
-  if(isPumped&&isExhausted&&hasBreakdown) phase=3;
+  if(isPumped)phase=1;
+  if(isPumped&&isExhausted)phase=2;
+  if(isPumped&&isExhausted&&hasBreakdown)phase=3;
   const readyToShort=phase===3&&totalScore>=10;
-
-  const atrv=atrCalc(cds15m);
-  const entry=p15;
-  const sl=entry+atrv*1.5;
-  const tp1=Math.max(e20n||0,entry-atrv*2);
-  const tp2=Math.max(e50n||0,entry-atrv*4);
+  const atrv=atrCalc(cds15m),entry=p15,sl=entry+atrv*1.5;
+  const tp1=Math.max(e20n||0,entry-atrv*2),tp2=Math.max(e50n||0,entry-atrv*4);
   const rr=sl>entry?Math.abs(tp1-entry)/Math.abs(sl-entry):0;
-  const impulseBase=Math.min(...cds1h.slice(-8).map(c=>c.open));
-
-  return {
-    phase,readyToShort,totalScore,pumpPct,pumpSpeed,atrRatio,
-    distE20,volRatio,isPumped,isOverheated,exSigs,exScore,isExhausted,
-    rsiNow1h,macdTurning,rsiDiv,avgWick,cvdDiv,oiDecelerating,
-    bkSigs,bkScore,hasBreakdown,cvdFalling,
-    entry,sl,tp1,tp2,rr,atrv,
-    e20_1h:e20n,e50_1h:e50n,e20_15m:e20_15n,price15m:p15,
-    impulseBase,cvdData:cvd15.slice(-80)
-  };
+  return{phase,readyToShort,totalScore,pumpPct,pumpSpeed,atrRatio,distE20,volRatio,isPumped,
+    exSigs,exScore,isExhausted,rsiNow,macdT,rsiDiv,bkSigs,bkScore,hasBreakdown,cvdFalling,cvdDiv,
+    entry,sl,tp1,tp2,rr,atrv,e20_1h:e20n,e50_1h:e50n,e20_15m:e20_15n,price15m:p15,
+    impulseBase:Math.min(...cds1h.slice(-8).map(c=>c.open)),cvdData:cvd15.slice(-80)};
 }
 
 // ═══════════════════════════════════════════════════════
-//  QUICK SCORE FOR IDEAS SCAN (per-coin)
+//  SCORE PER COIN (for scan)
 // ═══════════════════════════════════════════════════════
-async function scoreForIdea(sym) {
-  try {
-    const [r1h, r15m, r4h] = await Promise.all([
-      fetch(`${BINANCE}/klines?symbol=${sym}&interval=1h&limit=120`),
-      fetch(`${BINANCE}/klines?symbol=${sym}&interval=15m&limit=80`),
-      fetch(`${BINANCE}/klines?symbol=${sym}&interval=4h&limit=60`)
+async function scoreForIdea(sym){
+  try{
+    const[r1h,r15m,r4h]=await Promise.all([
+      fetch(`${FAPI}/klines?symbol=${sym}&interval=1h&limit=120`),
+      fetch(`${FAPI}/klines?symbol=${sym}&interval=15m&limit=80`),
+      fetch(`${FAPI}/klines?symbol=${sym}&interval=4h&limit=60`),
     ]);
-    const [j1h, j15m, j4h] = await Promise.all([r1h.json(), r15m.json(), r4h.json()]);
-    if (!Array.isArray(j1h)||j1h.length<50) return null;
-    const parse = arr => arr.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
-    const cds1h=parse(j1h), cds15m=Array.isArray(j15m)?parse(j15m):[], cds4h=Array.isArray(j4h)?parse(j4h):[];
-
-    const c1h=cds1h.map(c=>c.close), v1h=cds1h.map(c=>c.volume);
-    const n1h=cds1h.length-1;
-    const e20=ema(c1h,20), e50=ema(c1h,50);
-    const ve20=ema(v1h,20);
-    const price=c1h[n1h], e20n=e20[n1h];
-
-    // Pump metrics
+    const[j1h,j15m,j4h]=await Promise.all([r1h.json(),r15m.json(),r4h.json()]);
+    if(!Array.isArray(j1h)||j1h.length<30)return null;
+    const parse=arr=>arr.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
+    const cds1h=parse(j1h),cds15m=Array.isArray(j15m)?parse(j15m):[],cds4h=Array.isArray(j4h)?parse(j4h):[];
+    const c1h=cds1h.map(c=>c.close),v1h=cds1h.map(c=>c.volume),n1h=cds1h.length-1;
+    const e20=ema(c1h,20),e50=ema(c1h,50),ve20=ema(v1h,20);
+    const price=c1h[n1h],e20n=e20[n1h];
     const pumpLow=Math.min(...cds1h.slice(-8).map(c=>c.low));
     const pumpPct=pumpLow>0?(price-pumpLow)/pumpLow*100:0;
+    const p2=Math.min(...cds1h.slice(-2).map(c=>c.low));
+    const pumpSpeed=p2>0?(price-p2)/p2*100:0;
     const dist=e20n?(price-e20n)/e20n*100:0;
-
-    // Pump speed (last 2 candles)
-    const p2low=Math.min(...cds1h.slice(-2).map(c=>c.low));
-    const pumpSpeed=p2low>0?(price-p2low)/p2low*100:0;
-
-    // ATR ratio vs historical
-    const atrNow=atrCalc(cds1h);
-    const atrHist=cds1h.length>20?atrCalc(cds1h.slice(0,-1)):atrNow;
+    const atrNow=atrCalc(cds1h),atrHist=cds1h.length>20?atrCalc(cds1h.slice(0,-1)):atrNow;
     const atrRatio=atrHist>0?atrNow/atrHist:1;
-
-    // Candle body ratio (directional strength)
-    const lastC=cds1h[n1h];
-    const bodyRatio=Math.abs(lastC.close-lastC.open)/(lastC.high-lastC.low||0.0001);
-
-    const volRatio=ve20[n1h]?v1h[n1h]/ve20[n1h]:1;
-    const rsiArr=rsi(c1h); const rsiNow=rsiArr[n1h];
-    const {h}=macd(c1h);
+    const lastC=cds1h[n1h],bodyRatio=Math.abs(lastC.close-lastC.open)/(lastC.high-lastC.low||0.0001);
+    const volRatio=(ve20[n1h]||1)>0?v1h[n1h]/(ve20[n1h]||1):1;
+    const rsiArr=rsi(c1h),rsiNow=rsiArr[n1h];
+    const{h}=macd(c1h);
     const hTurning=h[n1h]!=null&&h[n1h-1]!=null&&h[n1h]<h[n1h-1]&&h[n1h-1]>0;
-
-    // CVD from 15m
-    let cvdFalling=false, cvdDiv=false;
-    if (cds15m.length>20) {
-      const cvd15=cvdFromCandles(cds15m);
-      cvdFalling=cvd15[cvd15.length-1]<cvd15[Math.max(0,cvd15.length-6)];
-      const c15=cds15m.map(c=>c.close); const n15=cds15m.length-1;
+    // CVD
+    let cvdFalling=false,cvdDiv=false;
+    if(cds15m.length>20){
+      const cvd15=cvdFromCandles(cds15m);cvdFalling=cvd15[cvd15.length-1]<cvd15[Math.max(0,cvd15.length-6)];
+      const c15=cds15m.map(c=>c.close),n15=cds15m.length-1;
       cvdDiv=c15[n15]>c15[n15-4]&&cvd15[cvd15.length-1]<cvd15[Math.max(0,n15-4)];
     }
-
-    // 4h trend for context
+    // 4h trend
     let trend4h='neutral';
-    if (cds4h.length>=50) {
-      const c4=cds4h.map(c=>c.close); const e50_4=ema(c4,50); const e200_4=ema(c4,200);
-      const p4=c4[c4.length-1]; const e50n4=e50_4[e50_4.length-1]; const e200n4=e200_4[e200_4.length-1];
-      if (e50n4&&e200n4) trend4h=p4>e50n4&&e50n4>e200n4?'bull':p4<e50n4&&e50n4<e200n4?'bear':'neutral';
+    if(cds4h.length>=50){
+      const c4=cds4h.map(c=>c.close),e50_4=ema(c4,50),e200_4=ema(c4,200);
+      const p4=c4[c4.length-1],e50n4=e50_4[e50_4.length-1],e200n4=e200_4[e200_4.length-1];
+      if(e50n4&&e200n4)trend4h=p4>e50n4&&e50n4>e200n4?'bull':p4<e50n4&&e50n4<e200n4?'bear':'neutral';
     }
-
-    // ── SHORT setup (Pump Exhaustion)
-    const isSharpPump = pumpPct>=PUMP_THRESH && dist>=8;
-    const exCount = (rsiNow>70?1:0)+(hTurning?1:0)+(cvdDiv?1:0)+(atrRatio>1.5?1:0);
-    const bkCount = (cvdFalling?1:0);
-    let shortConf=0, shortSigs=[];
-    if (isSharpPump) {
-      shortConf = 40 + pumpPct*0.8 + dist*0.6 + exCount*8 + bkCount*5;
-      if (pumpSpeed>5) { shortConf+=8; shortSigs.push(`Скорость пампа: +${pumpSpeed.toFixed(1)}% за 2 свечи`); }
-      if (rsiNow>70) shortSigs.push(`RSI ${rsiNow.toFixed(0)} — перекупленность`);
-      if (hTurning) shortSigs.push('MACD разворачивается ↓');
-      if (cvdDiv) shortSigs.push('CVD дивергенция — ослабление покупок');
-      if (atrRatio>1.5) shortSigs.push(`ATR ×${atrRatio.toFixed(1)} — аномальная волатильность`);
-      if (cvdFalling) shortSigs.push('CVD падает на 15m');
-      shortConf = Math.min(94, shortConf);
+    // Score SHORT
+    const isSharpPump=pumpPct>=PUMP_THRESH&&dist>=8;
+    const exCount=(rsiNow>70?1:0)+(hTurning?1:0)+(cvdDiv?1:0)+(atrRatio>1.5?1:0);
+    let shortConf=0,shortSigs=[];
+    if(isSharpPump){
+      shortConf=Math.min(94,40+pumpPct*0.8+dist*0.6+exCount*8+(cvdFalling?5:0));
+      if(pumpSpeed>5){shortConf+=8;shortSigs.push(`⚡ Скорость +${pumpSpeed.toFixed(1)}%/2ч`);}
+      if(rsiNow>70)shortSigs.push(`RSI ${rsiNow.toFixed(0)} — перекупленность`);
+      if(hTurning)shortSigs.push('MACD разворачивается ↓');
+      if(cvdDiv)shortSigs.push('CVD дивергенция');
+      if(cvdFalling)shortSigs.push('CVD ↓ на 15m');
     }
-
-    // ── LONG setup (Pullback, Oversold)
-    let longConf=0, longDir=null, longSigs=[];
-    const e20_15m_arr = cds15m.length>20 ? ema(cds15m.map(c=>c.close),20) : [];
-    const p15 = cds15m.length>0 ? cds15m[cds15m.length-1].close : price;
-    const e20_15n = e20_15m_arr.length>0 ? e20_15m_arr[e20_15m_arr.length-1] : null;
-    const crossedUp = e20_15n && p15>e20_15n && cds15m.length>1 && cds15m[cds15m.length-2].close < (e20_15m_arr[e20_15m_arr.length-2]||e20_15n);
+    // Score LONG
+    const e20_15m_arr=cds15m.length>20?ema(cds15m.map(c=>c.close),20):[];
+    const p15=cds15m.length>0?cds15m[cds15m.length-1].close:price;
+    const e20_15n=e20_15m_arr.length>0?e20_15m_arr[e20_15m_arr.length-1]:null;
+    const crossedUp=e20_15n&&p15>e20_15n&&cds15m.length>1&&cds15m[cds15m.length-2].close<(e20_15m_arr[e20_15m_arr.length-2]||e20_15n);
     const rsi15=cds15m.length>20?rsi(cds15m.map(c=>c.close)):[];
     const rsiNow15=rsi15.length?rsi15[rsi15.length-1]:50;
-
-    // Taker proxy: bull candle body ratio
-    const takerProxy=bodyRatio>0.6; // >60% directional
-
-    if (trend4h==='bull' && crossedUp && rsiNow15>45 && !cvdFalling) {
-      longConf = 48 + (takerProxy?8:0) + (!cvdFalling?5:0) + (rsiNow15<60?4:0);
-      longSigs.push('15m EMA20 пересечена снизу вверх');
-      if (!cvdFalling) longSigs.push('CVD ↑ — покупатели активны');
-      if (takerProxy) longSigs.push(`Body ratio ${(bodyRatio*100).toFixed(0)}% — направленное движение`);
-      if (trend4h==='bull') longSigs.push('4h тренд восходящий');
-      longConf = Math.min(88, longConf);
-      longDir = 'LONG';
-    } else if (rsiNow<30 && rsiNow15<32) {
-      longConf = 45 + (hTurning?6:0) + (!cvdFalling?5:0);
-      longSigs.push(`RSI 1h: ${rsiNow.toFixed(0)} — перепроданность`);
-      if (!cvdFalling) longSigs.push('CVD не падает');
-      longConf = Math.min(78, longConf);
-      longDir = 'LONG';
-    } else if (volRatio>2.5 && bodyRatio>0.65 && rsiNow>50 && rsiNow<72) {
-      longConf = 46 + volRatio*3 + (trend4h==='bull'?8:0);
-      longSigs.push(`Volume Breakout: ×${volRatio.toFixed(1)}`);
-      longSigs.push(`Body ratio ${(bodyRatio*100).toFixed(0)}% — чистое движение`);
-      if (trend4h==='bull') longSigs.push('4h тренд поддерживает');
-      longConf = Math.min(82, longConf);
-      longDir = 'LONG';
+    let longConf=0,longDir=null,longSigs=[];
+    if(trend4h==='bull'&&crossedUp&&rsiNow15>45&&!cvdFalling){
+      longConf=Math.min(88,48+(bodyRatio>0.6?8:0)+(!cvdFalling?5:0)+(rsiNow15<60?4:0));
+      longSigs=['📈 EMA20 пересечена ↑ на 15m',!cvdFalling?'CVD ↑ — покупки активны':'','4h тренд восходящий'].filter(Boolean);
+      longDir='LONG';
+    } else if(rsiNow<30&&rsiNow15<32){
+      longConf=Math.min(78,45+(hTurning?6:0)+(!cvdFalling?5:0));
+      longSigs=[`📉 RSI 1h ${rsiNow.toFixed(0)} — перепроданность`];longDir='LONG';
+    } else if(volRatio>2.5&&bodyRatio>0.65&&rsiNow>50&&rsiNow<72){
+      longConf=Math.min(82,46+volRatio*3+(trend4h==='bull'?8:0));
+      longSigs=[`🚀 Volume Breakout ×${volRatio.toFixed(1)}`,`Body ${(bodyRatio*100).toFixed(0)}%`];longDir='LONG';
     }
-
-    // NEW PUMP detection (separate signal type)
-    const isNewPump = pumpPct>=PUMP_THRESH && pumpSpeed>=5 && volRatio>=1.5;
-
-    const result = {
-      sym, cds1h, cds15m, cds4h, price, pumpPct, pumpSpeed, dist,
-      atrRatio, volRatio, rsiNow, bodyRatio, trend4h,
-      shortConf, shortSigs, longConf, longDir, longSigs,
-      isSharpPump, isNewPump, cvdFalling, cvdDiv
-    };
-
-    // Compute entry/sl/tp for best signal
+    // New pump
+    const isNewPump=pumpPct>=PUMP_THRESH&&pumpSpeed>=5&&volRatio>=1.5;
+    const res={sym,cds1h,cds15m,price,pumpPct,pumpSpeed,dist,atrRatio,volRatio,rsiNow,bodyRatio,trend4h,shortConf,shortSigs,longConf,longDir,longSigs,isSharpPump,isNewPump,cvdFalling,cvdDiv};
     const atrv=atrCalc(cds15m.length>14?cds15m:cds1h);
-    if (shortConf>=MIN_CONF && shortConf>longConf) {
-      const entry=p15, sl=entry+atrv*1.5;
-      const tp1=Math.max(e20[n1h]||0,entry-atrv*2);
-      const tp2=Math.max(e50[n1h]||0,entry-atrv*4);
-      result.bestDir='SHORT'; result.bestConf=shortConf; result.bestSigs=shortSigs;
-      result.entry=entry; result.sl=sl; result.tp1=tp1; result.tp2=tp2;
-      result.rr=sl>entry?Math.abs(tp1-entry)/Math.abs(sl-entry):0;
-      result.atrv=atrv;
-      result.why=`+${pumpPct.toFixed(1)}% за 8ч, ${dist.toFixed(1)}% от EMA20. ${shortSigs.slice(0,2).join(', ')}.`;
-    } else if (longConf>=MIN_CONF && longConf>=shortConf && longDir) {
-      const entry=p15, sl=entry-atrv*1.5;
-      const tp1=entry+atrv*2;
-      const tp2=entry+atrv*4;
-      result.bestDir='LONG'; result.bestConf=longConf; result.bestSigs=longSigs;
-      result.entry=entry; result.sl=sl; result.tp1=tp1; result.tp2=tp2;
-      result.rr=Math.abs(tp1-entry)/Math.abs(sl-entry);
-      result.atrv=atrv;
-      result.why=`${longSigs.slice(0,2).join(', ')}. Тренд 4h: ${trend4h}.`;
+    if(shortConf>=MIN_CONF&&shortConf>longConf){
+      const entry=p15,sl=entry+atrv*1.5,tp1=Math.max(e20[n1h]||0,entry-atrv*2),tp2=Math.max(e50[n1h]||0,entry-atrv*4);
+      Object.assign(res,{bestDir:'SHORT',bestConf:shortConf,bestSigs:shortSigs,entry,sl,tp1,tp2,rr:sl>entry?Math.abs(tp1-entry)/Math.abs(sl-entry):0,atrv,why:`+${pumpPct.toFixed(1)}% за 8ч, ${dist.toFixed(1)}% от EMA20. ${shortSigs.slice(0,2).join(', ')}.`});
+    } else if(longConf>=MIN_CONF&&longConf>=shortConf&&longDir){
+      const entry=p15,sl=entry-atrv*1.5,tp1=entry+atrv*2,tp2=entry+atrv*4;
+      Object.assign(res,{bestDir:'LONG',bestConf:longConf,bestSigs:longSigs,entry,sl,tp1,tp2,rr:Math.abs(tp1-entry)/Math.abs(sl-entry),atrv,why:`${longSigs.slice(0,2).join(', ')}. 4h: ${trend4h}.`});
     }
-
-    if (isNewPump) {
-      result.isPumpSignal=true;
-      if (!result.bestDir) {
-        result.bestDir='ПАМП'; result.bestConf=Math.min(95,50+pumpPct+volRatio*5);
-        result.bestSigs=[`+${pumpPct.toFixed(1)}% за 8h`,`скорость +${pumpSpeed.toFixed(1)}%/2ч`,`Vol×${volRatio.toFixed(1)}`,`RSI ${rsiNow.toFixed(0)}`];
-        result.why=`Резкий памп: +${pumpPct.toFixed(1)}% за 8ч, скорость +${pumpSpeed.toFixed(1)}% за 2 свечи, объём ×${volRatio.toFixed(1)}.`;
-        result.entry=price; result.sl=price*(1-atrv/price*2); result.tp1=0; result.tp2=0; result.rr=0; result.atrv=atrv;
-      }
+    if(isNewPump&&!res.bestDir){
+      Object.assign(res,{bestDir:'ПАМП',bestConf:Math.min(95,50+pumpPct+volRatio*5),bestSigs:[`+${pumpPct.toFixed(1)}% за 8h`,`⚡ +${pumpSpeed.toFixed(1)}%/2ч`,`Vol×${volRatio.toFixed(1)}`],why:`Резкий памп +${pumpPct.toFixed(1)}%, скорость +${pumpSpeed.toFixed(1)}%, Vol×${volRatio.toFixed(1)}.`,isPumpSignal:true,entry:price,sl:price*(1-atrv/price*2),tp1:0,tp2:0,rr:0,atrv});
     }
-
-    return result;
-  } catch(e) { return null; }
+    return res;
+  }catch(e){return null;}
 }
 
 // ═══════════════════════════════════════════════════════
-//  IDEAS AGENT — main scan loop
+//  SCAN (200 coins)
 // ═══════════════════════════════════════════════════════
-async function runIdeas(manual=false) {
-  if (S.scanning && !manual) return;
+async function runIdeas(manual=false){
+  if(S.scanning&&!manual)return;
   S.scanning=true;
-  setStatus('SCANNING...','scanning');
-  document.getElementById('scanner-label').textContent='⏳ Сканирую...';
-
-  try {
-    // 1. Get top volatile coins from Binance futures
-    const r = await fetch(`${FAPI}/ticker/24hr`);
-    const tickers = await r.json();
-    if (!Array.isArray(tickers)) throw new Error('bad tickers');
-
-    // Score for volatility
-    const candidates = tickers
+  setLiveStatus('scanning');
+  const lbl=document.getElementById('scanner-label');
+  if(lbl){lbl.textContent='⏳ Сканирую...';lbl.style.animation='pulse .6s infinite';}
+  try{
+    const r=await fetch(`${FAPI}/ticker/24hr`);
+    const tickers=await r.json();
+    if(!Array.isArray(tickers))throw new Error('bad');
+    const candidates=tickers
       .filter(t=>t.symbol.endsWith('USDT')&&!t.symbol.includes('_'))
-      .map(t=>({
-        sym:t.symbol,
-        chgPct:Math.abs(+t.priceChangePercent),
-        vol:+t.quoteVolume,
-        hlRatio:(+t.highPrice-+t.lowPrice)/(+t.lowPrice||1)*100,
-        volScore:Math.abs(+t.priceChangePercent)*2+(+t.quoteVolume>50e6?3:+t.quoteVolume>10e6?1:0)+(+t.priceChangePercent>15?3:+t.priceChangePercent>8?1:0)
-      }))
-      .filter(t=>t.vol>2e6)
-      .sort((a,b)=>b.volScore-a.volScore)
-      .slice(0,60);
-
-    // 2. Analyze in batches
-    const newIdeas=[];
-    const now=Date.now();
-    const batchSize=8;
-    for (let i=0; i<Math.min(candidates.length,60); i+=batchSize) {
-      const batch=candidates.slice(i,i+batchSize);
-      const results=await Promise.all(batch.map(c=>scoreForIdea(c.sym)));
-      results.forEach(res=>{
-        if (!res||!res.bestDir) return;
-        if (res.bestConf<MIN_CONF) return;
-        // Price-based dedup: skip if same sym analyzed <1h ago AND price similar
-        const lastTs=S.ideaDedup[res.sym];
-        if (lastTs && now-lastTs<IDEA_TTL) return;
-        S.ideaDedup[res.sym]=now;
-        newIdeas.push({
-          sym:res.sym, dir:res.bestDir, conf:res.bestConf,
-          sigs:res.bestSigs, why:res.why,
-          entry:res.entry, sl:res.sl, tp1:res.tp1, tp2:res.tp2,
-          rr:res.rr, atrv:res.atrv,
-          pumpPct:res.pumpPct, pumpSpeed:res.pumpSpeed,
-          dist:res.dist, volRatio:res.volRatio, rsiNow:res.rsiNow,
-          atrRatio:res.atrRatio, bodyRatio:res.bodyRatio,
-          trend4h:res.trend4h, cvdFalling:res.cvdFalling, cvdDiv:res.cvdDiv,
-          isPump:res.isPumpSignal,
-          ts:now, result:null,
-          // For AI reasoning
-          cds1h:res.cds1h, cds15m:res.cds15m
-        });
-      });
-      document.getElementById('scanner-label').textContent=`⏳ ${Math.min(i+batchSize,60)}/60...`;
-    }
-
-    // Sort: pumps first, then by conf
-    newIdeas.sort((a,b)=>{
-      if (a.isPump&&!b.isPump) return -1;
-      if (!a.isPump&&b.isPump) return 1;
-      return b.conf-a.conf;
-    });
-
-    // 3. AI reasoning for top 5
-    const top=newIdeas.slice(0,5);
-    for (const idea of top) {
-      idea.reasoning = await getIdeaReasoning(idea);
-    }
-
-    // Merge with existing (keep non-stale old ones)
-    const staleThresh=now-IDEA_TTL;
-    S.ideas=[...newIdeas,...S.ideas.filter(old=>old.ts>staleThresh&&!newIdeas.find(n=>n.sym===old.sym))];
-    // Mark stale by price movement
-    S.ideas.forEach(idea=>{
-      const livePrice=S.prices[idea.sym]?.price;
-      if (livePrice&&idea.entry&&idea.atrv) {
-        const priceDist=Math.abs(livePrice-idea.entry)/idea.atrv;
-        if (priceDist>IDEA_PRICE_TTL) idea.stale=true;
-      }
-      if (now-idea.ts>IDEA_TTL) idea.stale=true;
-    });
-    S.ideas=S.ideas.filter(i=>!i.stale).slice(0,15);
-
-    // Pump alert for new sharp pumps
-    const hotPumps=newIdeas.filter(i=>i.isPump&&i.pumpPct>=PUMP_THRESH);
-    if (hotPumps.length>0) {
-      const hp=hotPumps[0];
-      const alertEl=document.getElementById('pump-alert');
-      document.getElementById('pump-alert-text').innerHTML=
-        `🔥 НОВЫЙ ПАМП · <b>${hp.sym.replace('USDT','')}</b> +${hp.pumpPct.toFixed(1)}% за 8ч · скорость +${hp.pumpSpeed.toFixed(1)}%/2ч · Vol×${hp.volRatio.toFixed(1)} · RSI ${hp.rsiNow.toFixed(0)}`;
-      alertEl.style.display='flex';
-      notify('🔥 Новый памп!',`${hp.sym} +${hp.pumpPct.toFixed(0)}%`);
-    }
-
-    // Schedule winrate checks for new ideas
-    newIdeas.forEach(idea=>{
-      if (idea.entry&&idea.tp1&&idea.sl) {
-        scheduleWinrateCheck(idea);
-      }
-    });
-
-    renderIdeas();
+      .map(t=>({sym:t.symbol,chgPct:Math.abs(+t.priceChangePercent),vol:+t.quoteVolume,
+        hlPct:(+t.highPrice-+t.lowPrice)/(+t.lowPrice||1)*100,price:+t.lastPrice,
+        score:Math.abs(+t.priceChangePercent)*2.5+(+t.quoteVolume>100e6?4:+t.quoteVolume>30e6?2:+t.quoteVolume>5e6?1:0)}))
+      .filter(t=>t.vol>1e6&&t.price>0)
+      .sort((a,b)=>b.score-a.score).slice(0,200);
     renderVolatility(candidates.slice(0,10));
-
-  } catch(e) {
-    console.warn('Ideas scan failed:',e);
-  }
-
+    const now=Date.now(),newIdeas=[];
+    for(let i=0;i<candidates.length;i+=12){
+      if(lbl)lbl.textContent=`⏳ ${i}/${candidates.length}`;
+      const batch=candidates.slice(i,i+12);
+      const results=await Promise.allSettled(batch.map(c=>scoreForIdea(c.sym)));
+      results.forEach(res=>{
+        if(res.status!=='fulfilled'||!res.value||!res.value.bestDir)return;
+        const r=res.value;
+        if(r.bestConf<MIN_CONF)return;
+        const lastTs=S.ideaDedup[r.sym];
+        if(lastTs&&now-lastTs<3600000)return;
+        S.ideaDedup[r.sym]=now;
+        newIdeas.push({sym:r.sym,dir:r.bestDir,conf:r.bestConf,
+          sigs:r.bestSigs||[],why:r.why||'',
+          entry:r.entry,sl:r.sl,tp1:r.tp1,tp2:r.tp2,rr:r.rr,atrv:r.atrv,
+          pumpPct:r.pumpPct,pumpSpeed:r.pumpSpeed,dist:r.dist,
+          volRatio:r.volRatio,rsiNow:r.rsiNow,atrRatio:r.atrRatio,
+          bodyRatio:r.bodyRatio,trend4h:r.trend4h,cvdFalling:r.cvdFalling,
+          cvdDiv:r.cvdDiv,isPump:r.isPumpSignal,ts:now,
+          cds1h:r.cds1h,cds15m:r.cds15m});
+      });
+      await new Promise(r=>setTimeout(r,100));
+    }
+    newIdeas.sort((a,b)=>(a.isPump&&!b.isPump)?-1:(!a.isPump&&b.isPump)?1:b.conf-a.conf);
+    // Merge
+    const stale=now-3600000;
+    S.ideas=[...newIdeas,...S.ideas.filter(o=>o.ts>stale&&!newIdeas.find(n=>n.sym===o.sym))].slice(0,30);
+    // Pump alert
+    const hot=newIdeas.filter(i=>i.isPump&&i.pumpPct>=PUMP_THRESH);
+    if(hot.length){
+      const h=hot[0];
+      const pa=document.getElementById('pump-alert'),pt=document.getElementById('pump-alert-text');
+      if(pa&&pt){pt.innerHTML=`🔥 ПАМП · <b>${h.sym.replace('USDT','')}</b> +${h.pumpPct.toFixed(1)}% · ⚡+${h.pumpSpeed.toFixed(1)}%/2ч · Vol×${h.volRatio.toFixed(1)} · RSI ${h.rsiNow.toFixed(0)}`;pa.style.display='flex';}
+      notify('🔥 Новый памп!',`${h.sym} +${h.pumpPct.toFixed(0)}%`);
+    }
+    // Schedule winrate checks
+    newIdeas.forEach(idea=>{if(idea.entry&&idea.tp1&&idea.sl)scheduleWinrateCheck(idea);});
+    renderIdeas();
+  }catch(e){console.warn('Scan failed:',e);}
   S.scanning=false;
-  document.getElementById('scanner-label').textContent='💡 Идеи агента';
-  setStatus('LIVE','live');
+  if(lbl){lbl.textContent='💡 Идеи агента';lbl.style.animation='none';}
+  setLiveStatus('live');
 }
 
 // ═══════════════════════════════════════════════════════
-//  AI REASONING FOR IDEA
-// ═══════════════════════════════════════════════════════
-async function getIdeaReasoning(idea) {
-  const prompt=`Ты — трейдер. Дай краткое обоснование сетапа (3 предложения max):
-
-Монета: ${idea.sym} | ${idea.dir} | ${idea.conf.toFixed(0)}/100
-Тренд 4h: ${idea.trend4h}
-Памп: +${idea.pumpPct.toFixed(1)}%, скорость +${idea.pumpSpeed.toFixed(1)}%/2ч
-Dist EMA20: ${idea.dist.toFixed(1)}% | ATR ratio: ×${idea.atrRatio.toFixed(2)}
-Vol ratio: ×${idea.volRatio.toFixed(1)} | RSI: ${idea.rsiNow.toFixed(0)}
-Body ratio: ${(idea.bodyRatio*100).toFixed(0)}% | CVD: ${idea.cvdFalling?'↓':'↑'}${idea.cvdDiv?' (дивергенция)':''}
-Сигналы: ${idea.sigs.join('; ')}
-
-1) Что происходит с монетой
-2) Почему это ${idea.dir} момент  
-3) На что смотреть при входе
-Русский, по делу, без воды.`;
-  try {
-    const r=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:prompt}]})
-    });
-    const d=await r.json(); return d.content?.[0]?.text||'';
-  } catch { return ''; }
-}
-
-// ═══════════════════════════════════════════════════════
-//  WINRATE AUTO-CHECK
-// ═══════════════════════════════════════════════════════
-const MEMORY_KEY='pf_winrates_v1';
-function loadWR(){try{return JSON.parse(localStorage.getItem(MEMORY_KEY)||'[]');}catch{return[];}}
-function saveWR(){try{localStorage.setItem(MEMORY_KEY,JSON.stringify(S.winrates));}catch{}}
-S.winrates=loadWR();
-
-function scheduleWinrateCheck(idea){
-  if (!idea.sym || !idea.entry || !idea.sl || !idea.tp1) return;
-  // Don't double-schedule
-  if (S.winrates.find(w => w.sym===idea.sym && Math.abs(w.ts-idea.ts)<60000)) return;
-  // Add pending entry immediately
-  S.winrates.unshift({
-    sym:idea.sym, dir:idea.dir||'?', entry:idea.entry,
-    tp:idea.tp1, sl:idea.sl, ts:idea.ts||Date.now(),
-    result:'pending', checkedAt:null, checkHours:null,
-    pumpPct:idea.pumpPct, conf:idea.conf
-  });
-  saveWR();
-  const checks = [4, 8, 24];
-  checks.forEach(h => {
-    setTimeout(async() => {
-      try {
-        const lp = await fetchPrice(idea.sym);
-        if (!lp) return;
-        const rec = S.winrates.find(w => w.sym===idea.sym && Math.abs((w.ts||0)-(idea.ts||0))<60000);
-        if (!rec || rec.result !== 'pending') return;
-        if (idea.dir==='SHORT') {
-          if (lp <= idea.tp1) rec.result = 'win';
-          else if (lp >= idea.sl) rec.result = 'loss';
-        } else {
-          if (lp >= idea.tp1) rec.result = 'win';
-          else if (lp <= idea.sl) rec.result = 'loss';
-        }
-        if (rec.result !== 'pending') {
-          rec.checkedAt = Date.now(); rec.checkHours = h; rec.closePrice = lp;
-          rec.pnl = idea.dir==='SHORT' ? (idea.entry-lp)/idea.entry*100 : (lp-idea.entry)/idea.entry*100;
-          saveWR(); renderWinrates();
-          if (rec.result==='win') notify(`✅ TP hit — ${idea.sym.replace('USDT','')}`, `+${rec.pnl.toFixed(2)}% за ${h}ч`);
-          else notify(`❌ SL hit — ${idea.sym.replace('USDT','')}`, `${rec.pnl.toFixed(2)}% за ${h}ч`);
-        }
-      } catch(e) {}
-    }, h * 3600 * 1000);
-  });
-}
-
-async function fetchPrice(sym){
-  try{const r=await fetch(`${BINANCE}/ticker/price?symbol=${sym}`);const j=await r.json();return +j.price;}catch{return null;}
-}
-
-function renderWinrates(){
-  if (S.phase===5) renderPhaseContent();
-}
-
-function renderWinratesPanel() {
-  const wins  = S.winrates.filter(w=>w.result==='win').length;
-  const losses = S.winrates.filter(w=>w.result==='loss').length;
-  const pend  = S.winrates.filter(w=>w.result==='pending').length;
-  const total = wins + losses;
-  const wr = total > 0 ? (wins/total*100).toFixed(0) : '—';
-  const avgWin  = S.winrates.filter(w=>w.result==='win'&&w.pnl).reduce((s,w)=>s+w.pnl,0) / (wins||1);
-  const avgLoss = S.winrates.filter(w=>w.result==='loss'&&w.pnl).reduce((s,w)=>s+w.pnl,0) / (losses||1);
-  return `<div class="fade">
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px;">
-      ${[
-        [wr+'%','Winrate','var(--green)'],
-        [wins,'TP','var(--green)'],
-        [losses,'SL','var(--red)'],
-        [pend,'Ожидают','var(--amber)'],
-      ].map(([v,l,c])=>`<div style="background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:7px;text-align:center;">
-        <div style="font-family:var(--mono);font-size:17px;font-weight:800;color:${c};">${v}</div>
-        <div style="font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:1px;">${l}</div>
-      </div>`).join('')}
-    </div>
-    ${total>0?`<div style="font-size:9px;color:var(--muted);margin-bottom:8px;">
-      Ср. прибыль: <b style="color:var(--green);">+${avgWin.toFixed(2)}%</b> · Ср. убыток: <b style="color:var(--red);">${avgLoss.toFixed(2)}%</b>
-    </div>`:''}
-    <div style="height:5px;background:var(--s3);border-radius:3px;margin-bottom:8px;">
-      <div style="height:100%;width:${wr==='—'?0:wr}%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:3px;transition:width .5s;"></div>
-    </div>
-    ${S.winrates.slice(0,30).map(w=>`
-      <div style="background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:5px 8px;margin-bottom:3px;display:flex;align-items:center;gap:6px;border-left:3px solid ${w.result==='win'?'var(--green)':w.result==='loss'?'var(--red)':'var(--amber)'};font-size:10px;cursor:pointer;"
-        onclick="loadSym('${w.sym}')">
-        <span style="font-family:var(--mono);font-size:11px;font-weight:700;">${w.sym.replace('USDT','')}</span>
-        <span style="color:var(--muted);">${w.dir}</span>
-        <span style="color:var(--muted);font-size:9px;">@$${fmt(w.entry)}</span>
-        <span style="margin-left:auto;font-size:9px;color:var(--muted);">${w.checkHours?w.checkHours+'ч':'—'}</span>
-        ${w.pnl!=null?`<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${w.result==='win'?'var(--green)':'var(--red)'};">${w.pnl>=0?'+':''}${w.pnl.toFixed(2)}%</span>`:''}
-        <span style="font-size:9px;font-weight:700;color:${w.result==='win'?'var(--green)':w.result==='loss'?'var(--red)':'var(--amber)'};">
-          ${w.result==='win'?'✓ TP':w.result==='loss'?'✗ SL':'⏳'}
-        </span>
-      </div>`).join('')}
-    ${S.winrates.length===0?'<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет данных. Нажмите ✦ AI анализ на карточке идеи — агент автоматически отслеживает результат.</div>':''}
-  </div>`;
-}
-
-// ═══════════════════════════════════════════════════════
-//  VOLATILITY RANKING
-// ═══════════════════════════════════════════════════════
-function renderVolatility(candidates){
-  const list=document.getElementById('vol-list');
-  if (!list) return;
-  list.innerHTML=candidates.slice(0,10).map((c,i)=>{
-    const hot=c.volScore>=12?2:c.volScore>=7?1:0;
-    const barColor=hot===2?'#dc2626':hot===1?'#f59e0b':'#94a3b8';
-    const maxScore=candidates[0].volScore||1;
-    const barW=Math.round(c.volScore/maxScore*100);
-    const lp=S.prices[c.sym];
-    return `<div class="vol-item" onclick="loadSym('${c.sym}')" style="${hot===2?'background:#fef2f2;border-color:#fee2e2;':hot===1?'background:#fffbeb;border-color:#fef3c7;':''}">
-      <span class="vol-rank" style="color:${hot===2?'#dc2626':hot===1?'#d97706':'#94a3b8'};">${i+1}</span>
-      <span class="vol-sym" style="color:${hot===2?'#dc2626':hot===1?'#d97706':'#0f172a'};">${c.sym.replace('USDT','')}</span>
-      <div class="vol-bar-wrap"><div class="vol-bar-fill" style="width:${barW}%;background:${barColor};"></div></div>
-      <span class="vol-atr">×${(c.hlRatio/Math.max(c.hlRatio,1)).toFixed(2)}</span>
-      <span class="vol-chg" style="color:${c.chgPct>10?'#dc2626':c.chgPct>5?'#d97706':'#64748b'};">+${c.chgPct.toFixed(1)}%</span>
-    </div>`;
-  }).join('');
-  document.getElementById('vol-updated').textContent=new Date().toLocaleTimeString();
-}
-
-// ═══════════════════════════════════════════════════════
-//  RENDER IDEAS LIST
+//  RENDER IDEAS (left column — all types)
 // ═══════════════════════════════════════════════════════
 function renderIdeas(){
-  const list=document.getElementById('ideas-list');
-  if (!list) return;
-  if (!S.ideas.length) {
-    list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет идей. Снизьте порог уверенности.</div>';
+  const list=document.getElementById('ideas-list');if(!list)return;
+  const minConf=parseInt(document.getElementById('conf-slider')?.value||'65');
+  const filtered=S.ideas.filter(i=>i.conf>=minConf);
+  const cnt=document.getElementById('ideas-count');
+  if(cnt)cnt.textContent=filtered.length?`${filtered.length}`:'';
+  if(!filtered.length){
+    list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет идей.<br><span style="font-size:9px;color:var(--dim);">Сканирую 200 монет каждые 3м.</span></div>';
     return;
   }
-  list.innerHTML=S.ideas.map((idea,i)=>{
+  list.innerHTML=filtered.map((idea,_)=>{
+    const i=S.ideas.indexOf(idea);
     const isActive=S.activeIdea===i;
-    const borderCol=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
-    const dirCls=idea.isPump?'pump':idea.dir==='LONG'?'long':'short';
-    const dirLabel=idea.isPump?'ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT';
-    const confColor=idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--amber)';
-    return `<div class="idea-card ${dirCls} ${isActive?'active':''}" onclick="selectIdea(${i})" style="border-left-color:${borderCol};${idea.isPump?'animation:pump-glow 1.8s infinite;':''}">
-      ${idea.isPump?'<span class="new-badge">🔥</span>':''}
+    const bc=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
+    const dc=idea.isPump?'pump':idea.dir==='LONG'?'long':'short';
+    const dl=idea.isPump?'🔥 ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT';
+    const sub=idea.sigs&&idea.sigs[0]?idea.sigs[0].substring(0,34):'';
+    return `<div class="idea-card ${dc} ${isActive?'active':''}" onclick="selectIdea(${i})">
       <div class="idea-hd">
         <span class="idea-sym" style="color:${idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--text)'};">${idea.sym.replace('USDT','')}</span>
-        <span class="idea-dir ${dirCls}">${dirLabel}</span>
+        <span class="idea-dir-badge ${dc}">${dl}</span>
       </div>
-      <div class="conf-bar"><div class="conf-fill" style="width:${idea.conf}%;background:${borderCol};"></div></div>
+      ${sub?`<div style="font-size:8px;color:var(--muted);margin-bottom:2px;">${sub}</div>`:''}
+      <div class="conf-bar"><div class="conf-fill" style="width:${idea.conf}%;background:${bc};"></div></div>
       <div class="idea-meta">
         <span style="color:${idea.pumpPct>=PUMP_THRESH?'var(--orange)':'var(--muted)'};">+${idea.pumpPct.toFixed(0)}%</span>
         <span>RSI ${idea.rsiNow.toFixed(0)}</span>
         <span>Vol×${idea.volRatio.toFixed(1)}</span>
         ${idea.cvdDiv?'<span style="color:var(--red);">CVDdiv</span>':''}
-        ${idea.atrRatio>1.3?`<span style="color:var(--amber);">ATR×${idea.atrRatio.toFixed(1)}</span>`:''}
+        ${idea.trend4h&&idea.trend4h!=='neutral'?`<span style="color:${idea.trend4h==='bull'?'var(--green)':'var(--red)'};">4h:${idea.trend4h==='bull'?'↑':'↓'}</span>`:''}
       </div>
-      ${idea.pumpSpeed>3?`<div class="idea-sub">⚡ скорость +${idea.pumpSpeed.toFixed(1)}%/2ч · body ${(idea.bodyRatio*100).toFixed(0)}%</div>`:''}
-      <div class="idea-age">${fmtAge(idea.ts)} · ${idea.conf.toFixed(0)}/100</div>
+      ${idea.pumpSpeed>3?`<div class="idea-age">⚡ +${idea.pumpSpeed.toFixed(1)}%/2ч</div>`:''}
+      <div style="display:flex;justify-content:space-between;margin-top:2px;">
+        <span class="idea-age">${fmtAge(idea.ts)} назад</span>
+        <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--muted)'};">${idea.conf.toFixed(0)}/100</span>
+      </div>
     </div>`;
   }).join('');
 }
 
+function renderVolatility(candidates){
+  const list=document.getElementById('vol-list');if(!list)return;
+  list.innerHTML=candidates.map((c,i)=>{
+    const hot=c.chgPct>15?2:c.chgPct>8?1:0;
+    const bc=hot===2?'#dc2626':hot===1?'#f59e0b':'#94a3b8';
+    return `<div class="vol-item" onclick="loadSym('${c.sym}')" style="${hot===2?'background:#fef2f2;border-color:#fee2e2;':hot===1?'background:#fffbeb;border-color:#fef3c7;':''}">
+      <span class="vol-rank" style="color:${bc};">${i+1}</span>
+      <span class="vol-sym" style="color:${hot===2?'#dc2626':hot===1?'#d97706':'#0f172a'};">${c.sym.replace('USDT','')}</span>
+      <div class="vol-bar-wrap"><div class="vol-bar-fill" style="width:${Math.round(c.score/candidates[0].score*100)}%;background:${bc};"></div></div>
+      <span class="vol-chg" style="color:${hot===2?'#dc2626':hot===1?'#d97706':'#64748b'};">+${c.chgPct.toFixed(1)}%</span>
+    </div>`;
+  }).join('');
+  const vts=document.getElementById('vol-ts');if(vts)vts.textContent=new Date().toLocaleTimeString();
+}
+
 // ═══════════════════════════════════════════════════════
-//  SELECT IDEA → load full data
+//  SELECT IDEA → load charts + show coin card
 // ═══════════════════════════════════════════════════════
 async function selectIdea(i){
   S.activeIdea=i;
-  const idea=S.ideas[i];
-  if (!idea) return;
-  renderIdeas(); // update active state
-  await loadSym(idea.sym, idea);
+  renderIdeas();
+  const idea=S.ideas[i];if(!idea)return;
+  await loadSym(idea.sym,idea);
 }
 
-async function loadSym(sym, idea=null){
+async function loadSym(sym,idea=null){
   S.sym=sym;
-  document.getElementById('sym-label').textContent=sym.replace('USDT','');
-  document.getElementById('ctf1h').textContent=`1H · ${sym.replace('USDT','')}`;
-  document.getElementById('ctf15m').textContent=`15M · ${sym.replace('USDT','')}`;
-  document.getElementById('futures-title').textContent=`Фьючерсы · ${sym.replace('USDT','')}`;
-
-  // Load candles if not passed from idea
-  const [c1h,c15m] = await Promise.all([
-    idea?.cds1h || fetchCds(sym,'1h',120),
-    idea?.cds15m || fetchCds(sym,'15m',80)
+  const sname=sym.replace('USDT','');
+  const $=id=>document.getElementById(id);
+  [['sym-label',sname],['ctf1h',`1H · ${sname}`],['ctf15m',`15M · ${sname}`]].forEach(([id,v])=>{const el=$(id);if(el)el.textContent=v;});
+  // Load candles
+  const[c1h,c15m]=await Promise.all([
+    idea?.cds1h||fetchCds(sym,'1h',120),
+    idea?.cds15m||fetchCds(sym,'15m',80),
   ]);
-  S.cds1h=c1h; S.cds15m=c15m;
-  await fetchFutures(sym);
-
-  // Compute CVD
+  S.cds1h=c1h;S.cds15m=c15m;
   S.cvdData=cvdFromCandles(S.cds15m.slice(-80));
-
-  // Full analysis
-  S.analysis=analyzeFull(S.cds1h,S.cds15m,S.cds4h,
-    S.oiHist.length>2?(S.oiHist[S.oiHist.length-1]<S.oiHist[S.oiHist.length-3]?'falling':'rising'):'unknown',
-    S.fr);
-
-  // Draw everything
-  drawCandles('chart1h', S.cds1h, S.analysis?.readyToShort?S.analysis:null);
-  drawCandles('chart15m', S.cds15m, S.analysis?.readyToShort?S.analysis:null);
-  drawCVD(S.cvdData);
-  drawVolume(S.cds1h);
-
-  // Update labels
+  S.analysis=analyzeFull(S.cds1h,S.cds15m);
   const a=S.analysis;
-  if (a) {
-    document.getElementById('pump-label').textContent=
-      `${a.isPumped?'🔴':'📊'} +${a.pumpPct.toFixed(1)}% · ${a.distE20.toFixed(1)}% от EMA20`;
-    document.getElementById('pump-label').style.color=a.isPumped?'var(--red)':a.pumpPct>PUMP_THRESH/2?'var(--orange)':'var(--muted)';
-    document.getElementById('entry-lines-label').style.display=a.readyToShort?'flex':'none';
-    document.getElementById('entry-badge').style.display=a.readyToShort?'inline-block':'none';
-    // CVD label
-    const cvdFall=S.cvdData.length>10&&S.cvdData[S.cvdData.length-1]<S.cvdData[Math.max(0,S.cvdData.length-10)];
-    document.getElementById('cvd-label').textContent=cvdFall?'↓ медвежий':'↑ бычий';
-    document.getElementById('cvd-label').style.color=cvdFall?'var(--red)':'var(--green)';
-    document.getElementById('cvd-trend').textContent=cvdFall?'↓ МЕДВЕЖИЙ':'↑ БЫЧИЙ';
-    document.getElementById('cvd-trend').style.color=cvdFall?'var(--red)':'var(--green)';
-    document.getElementById('cvd-div').textContent=a.cvdDiv?'⚠ Дивергенция':'Нет';
-    document.getElementById('cvd-div').style.color=a.cvdDiv?'var(--red)':'var(--muted)';
-    // OI accel
-    const oiAccelEl=document.getElementById('oi-accel');
-    if (a.oiDecelerating) {oiAccelEl.textContent='↓ замедляется';oiAccelEl.style.color='var(--green)';}
-    else {oiAccelEl.textContent='↑ нарастает';oiAccelEl.style.color='var(--red)';}
+  // Update pump label
+  if(a){
+    const pl=$('pump-label');
+    if(pl){pl.textContent=`${a.isPumped?'🔴':'📊'} +${a.pumpPct.toFixed(1)}% · ${a.distE20.toFixed(1)}% от EMA20`;pl.style.color=a.isPumped?'var(--red)':a.pumpPct>PUMP_THRESH/2?'var(--orange)':'var(--muted)';}
   }
-
-  // Update phase & content
-  if (a) {
-    setPhase(Math.max(1,a.phase));
-  }
-
-  // Show idea detail if passed
-  if (idea) renderIdeaDetail(idea);
-  else renderSignalCard();
-
-  renderFutures();
+  // Fetch futures
+  fetchFutures(sym);
+  // Draw charts
+  redrawCharts();
+  // Show coin card in dynamic zone
+  if(idea)showCoinCard(idea,a);
+  else showPhaseContent(S.phase);
 }
 
 // ═══════════════════════════════════════════════════════
-//  RENDER IDEA DETAIL (when clicked in left panel)
+//  COIN CARD (dynamic zone)
 // ═══════════════════════════════════════════════════════
-function renderIdeaDetail(idea){
-  const dirColor=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
-  const dirBg=idea.isPump?'var(--amber-bg)':idea.dir==='LONG'?'var(--green-bg)':'var(--red-bg)';
-  const dirBorder=idea.isPump?'var(--amber-b)':idea.dir==='LONG'?'var(--green-b)':'var(--red-b)';
+function showCoinCard(idea,analysis){
+  const dz=document.getElementById('dynamic-zone');if(!dz)return;
+  const a=analysis||S.analysis;
+  const dc=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
+  const dbg=idea.isPump?'var(--amber-bg)':idea.dir==='LONG'?'var(--green-bg)':'var(--red-bg)';
+  const dbl=idea.isPump?'var(--amber-b)':idea.dir==='LONG'?'var(--green-b)':'var(--red-b)';
+  const dl=idea.isPump?'🔥 ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT';
+  // TF orientation badges from analysis
+  const tfBadges=a?[
+    ['5m',idea.cds15m?.length>5?tfOrient(idea.cds15m.slice(0,Math.floor(idea.cds15m.length/3))):'—'],
+    ['15m',idea.cds15m?.length>5?tfOrient(idea.cds15m):'—'],
+    ['1h',idea.cds1h?.length>50?tfOrient(idea.cds1h):'—'],
+    ['4h',idea.trend4h||'neutral'],
+  ]:[];
+  const tfColor=v=>v==='bull'||v==='BULLISH'?'var(--green)':v==='bear'||v==='BEARISH'?'var(--red)':'var(--muted)';
+  const tfBg=v=>v==='bull'||v==='BULLISH'?'var(--green-bg)':v==='bear'||v==='BEARISH'?'var(--red-bg)':'var(--s3)';
 
-  const content = document.getElementById('phase-content');
-  content.innerHTML=`
-  <div class="detail-card fade">
-    <div class="detail-hd">
-      <span class="detail-sym">${idea.sym}</span>
-      <span class="detail-type" style="background:${dirBg};color:${dirColor};border:1px solid ${dirBorder};">${idea.isPump?'🔥 ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT'}</span>
-      <span style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto;">${idea.conf.toFixed(0)}/100</span>
+  dz.innerHTML=`<div class="coin-card fade">
+    <!-- Header -->
+    <div class="coin-card-hd">
+      <span class="coin-sym-big">${idea.sym}</span>
+      <span class="coin-dir-badge" style="background:${dbg};color:${dc};border:1px solid ${dbl};">${dl}</span>
+      <span class="coin-conf">${idea.conf.toFixed(0)}/100</span>
     </div>
-    <div class="why-box" style="background:${dirBg};border:1px solid ${dirBorder};color:${idea.dir==='LONG'?'#166534':idea.isPump?'#92400e':'#991b1b'};">
-      <b style="color:${dirColor};">Почему</b>
-      ${idea.why||idea.sigs.join('. ')}
+
+    <!-- Why -->
+    <div class="why-box" style="background:${dbg};border:1px solid ${dbl};color:${idea.dir==='LONG'?'#166534':idea.isPump?'#92400e':'#991b1b'};">
+      <b style="color:${dc};">Почему</b>
+      ${idea.why||idea.sigs?.join('. ')||'—'}
     </div>
-    ${idea.entry?`
-    <div class="levels-grid">
+
+    <!-- Levels -->
+    ${idea.entry?`<div class="levels-grid">
       <div class="level-box">
-        <div class="level-lbl">Триггер ${idea.dir==='LONG'?'(STOP BUY)':'(STOP SELL)'}</div>
-        <div class="level-val" style="color:${dirColor};">$${fmt(idea.entry)}</div>
+        <div class="level-lbl">Триггер</div>
+        <div class="level-val" style="color:${dc};">$${fmt(idea.entry)}</div>
       </div>
       <div class="level-box">
         <div class="level-lbl">Стоп-лосс</div>
         <div class="level-val" style="color:var(--red);">$${fmt(idea.sl)}</div>
         <div class="level-sub">тренд сломается</div>
       </div>
-      ${idea.tp1?`<div class="level-box">
-        <div class="level-lbl">TP зона</div>
-        <div class="level-val" style="color:var(--sky);">$${fmt(idea.tp1)}${idea.tp2?'–'+fmt(idea.tp2):''}</div>
-      </div>`:''}
       <div class="level-box">
-        <div class="level-lbl">Ожид. профит</div>
+        <div class="level-lbl">TP зона</div>
+        <div class="level-val" style="color:var(--sky);">$${fmt(idea.tp1)}</div>
+      </div>
+      <div class="level-box">
+        <div class="level-lbl">Профит / R:R</div>
         <div class="level-val" style="color:var(--green);">${idea.tp1&&idea.entry?'~'+(Math.abs(idea.tp1-idea.entry)/idea.entry*100).toFixed(2)+'%':'—'}</div>
-        <div class="level-sub">середина TP зоны</div>
+        <div class="level-sub">R/R ${idea.rr>0?idea.rr.toFixed(1):'—'}</div>
       </div>
-    </div>
+    </div>`:''}
+
+    <!-- Stats -->
     <div class="stats-row">
-      <div class="stat-item"><div class="sl">R/R</div><div class="sv" style="color:var(--sky);">${idea.rr>0?idea.rr.toFixed(1):'—'}</div></div>
-      <div class="stat-item"><div class="sl">ATR%</div><div class="sv">${idea.atrv&&idea.entry?(idea.atrv/idea.entry*100).toFixed(2)+'%':'—'}</div></div>
-      <div class="stat-item"><div class="sl">Vol</div><div class="sv" style="color:var(--amber);">×${idea.volRatio.toFixed(1)}</div></div>
-      <div class="stat-item"><div class="sl">Pump spd</div><div class="sv" style="color:var(--orange);">+${idea.pumpSpeed.toFixed(1)}%</div></div>
+      <div class="stat-item"><div class="sl">Памп 8h</div><div class="sv" style="color:${idea.pumpPct>=PUMP_THRESH?'var(--red)':'var(--text)'};">+${idea.pumpPct.toFixed(1)}%</div></div>
+      <div class="stat-item"><div class="sl">Скорость</div><div class="sv" style="color:${idea.pumpSpeed>5?'var(--orange)':'var(--muted)'};">+${idea.pumpSpeed.toFixed(1)}%</div></div>
+      <div class="stat-item"><div class="sl">Vol/avg</div><div class="sv" style="color:${idea.volRatio>2?'var(--amber)':'var(--muted)'};">×${idea.volRatio.toFixed(1)}</div></div>
+      <div class="stat-item"><div class="sl">RSI</div><div class="sv" style="color:${idea.rsiNow>70?'var(--red)':idea.rsiNow<30?'var(--green)':'var(--muted)'};">${idea.rsiNow.toFixed(0)}</div></div>
       <div class="stat-item"><div class="sl">ATR ratio</div><div class="sv" style="color:${idea.atrRatio>1.5?'var(--red)':'var(--muted)'};">×${idea.atrRatio.toFixed(2)}</div></div>
-    </div>`:''}
-    <div class="trinity-box">
-      <b>Trinity Cross · Ориентиры</b>
-      ${idea.sigs.map(s=>`• ${s}`).join('<br>')}
-      ${idea.trend4h!=='neutral'?`<br>• 4h тренд: ${idea.trend4h==='bull'?'восходящий ↑':'нисходящий ↓'}`:''}
-      ${idea.cvdDiv?'<br>• CVD дивергенция — ослабление давления покупок':''}
-      ${idea.atrRatio>1.3?`<br>• ATR×${idea.atrRatio.toFixed(1)} — повышенная волатильность`:''}
+      <div class="stat-item"><div class="sl">CVD</div><div class="sv" style="color:${idea.cvdDiv?'var(--red)':idea.cvdFalling?'var(--amber)':'var(--green)'};">${idea.cvdDiv?'div':idea.cvdFalling?'↓':'↑'}</div></div>
     </div>
-    ${idea.reasoning?`<div style="margin-top:8px;background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:10px;line-height:1.7;color:var(--text2);">${idea.reasoning}</div>`:''}
-    ${idea.entry?`
-    <div style="display:flex;gap:5px;margin-top:8px;">
-      <button onclick="openPosition('${idea.dir}','${idea.sym}',${idea.entry},${idea.sl},${idea.tp1},${idea.tp2})" style="flex:1;background:${dirColor};color:white;padding:8px;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;border:none;">${idea.dir==='LONG'?'▲ Открыть LONG':idea.isPump?'👀 Наблюдать':'▼ Открыть SHORT'}</button>
+
+    <!-- TF Badges -->
+    ${tfBadges.length?`<div class="tf-badges">
+      <span style="font-size:8px;color:var(--dim);margin-right:4px;">МТФ:</span>
+      ${tfBadges.map(([tf,v])=>`<span class="tf-badge" style="background:${tfBg(v)};color:${tfColor(v)};">${tf}: ${v}</span>`).join('')}
+      ${idea.trend4h&&idea.trend4h!=='neutral'?`<span style="font-size:9px;color:${idea.trend4h==='bull'?'var(--green)':'var(--red)'};">${idea.trend4h==='bull'?'↑ 4h бычий':'↓ 4h медвежий'}</span>`:''}
     </div>`:''}
+
+    <!-- Phase info from analysis -->
+    ${a?`<div style="background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin-bottom:8px;">
+      <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">Фазы истощения · ${a.phase}/3</div>
+      ${a.exSigs?.length?a.exSigs.map(s=>`<div style="font-size:10px;color:var(--text2);padding:2px 0;border-bottom:1px solid var(--border);">✓ ${s.t}</div>`).join(''):'<div style="font-size:10px;color:var(--muted);">Признаков истощения нет</div>'}
+      ${a.bkSigs?.length?'<div style="margin-top:4px;">'+a.bkSigs.map(s=>`<div style="font-size:10px;color:var(--red);padding:2px 0;border-bottom:1px solid var(--border);">▼ ${s.t}</div>`).join('')+'</div>':''}
+    </div>`:''}
+
+    <!-- AI comment placeholder -->
+    <div id="ai-comment-box" style="display:none;" class="ai-comment-box"></div>
+
+    <!-- Actions -->
+    <div class="coin-actions">
+      <button class="btn-tv" style="background:${dc};"
+        onclick="window.open('https://www.tradingview.com/chart/?symbol=BINANCE:${idea.sym}','_blank')">
+        ${idea.dir==='LONG'?'▲ TradingView ↗':idea.isPump?'👁 Наблюдать на TV':'▼ TradingView ↗'}
+      </button>
+      <button class="btn-ai" onclick="askAIAboutIdea(${S.ideas.indexOf(idea)})">
+        ✦ AI анализ
+      </button>
+    </div>
+  </div>`;
+}
+
+function tfOrient(cds){
+  if(!cds||cds.length<22)return'—';
+  const c=cds.map(x=>x.close),n=c.length-1;
+  const e20=ema(c,20),e50=ema(c,50);
+  if(!e20[n]||!e50[n])return'neutral';
+  if(c[n]>e20[n]&&e20[n]>e50[n])return'bull';
+  if(c[n]<e20[n]&&e20[n]<e50[n])return'bear';
+  return'neutral';
+}
+
+// ═══════════════════════════════════════════════════════
+//  PHASE TABS → show coins of that phase in dynamic zone
+// ═══════════════════════════════════════════════════════
+function setPhase(n,el){
+  S.phase=n;
+  document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));
+  if(el)el.classList.add('active');
+  showPhaseContent(n);
+}
+
+function showPhaseContent(phase){
+  const dz=document.getElementById('dynamic-zone');if(!dz)return;
+  if(phase===5){showWinrates();return;}
+  const phaseNames={1:'🔴 Памп',2:'🟡 Истощение',3:'🔴 Слом структуры',4:'✅ Готов к входу'};
+  const sigNames={1:'Фаза 1: памп +15%+ от EMA20',2:'Фаза 2: признаки истощения RSI/MACD/CVD',3:'Фаза 3: слом EMA20 на 15m',4:'Все фазы пройдены — сигнал на вход'};
+  // Filter ideas by phase
+  const coins=S.ideas.filter(idea=>{
+    if(!idea.cds1h||!idea.cds15m||idea.cds1h.length<5)return false;
+    const a=analyzeFull(idea.cds1h,idea.cds15m);
+    return a&&a.phase>=phase;
+  });
+  const phaseSigs=[
+    {1:'RSI>70 — перекупленность',2:'Верхние тени — давление продаж',3:'CVD дивергенция',4:'MACD разворот'},
+    {1:'RSI дивергенция',2:'CVD ↓ — покупки иссякают',3:'Пробой EMA20 на 15m',4:'Lower highs'},
+  ];
+  dz.innerHTML=`<div class="fade">
+    <div class="phase-list-hd">${phaseNames[phase]||'Фаза '+phase} · ${sigNames[phase]||''}</div>
+    ${!coins.length?`<div style="font-size:11px;color:var(--muted);padding:8px 0;">
+      Нет монет на фазе ${phase}.<br>
+      <span style="font-size:9px;color:var(--dim);">Агент сканирует 200 монет каждые 3м.</span>
+    </div>`:''}
+    ${coins.map(idea=>{
+      const a=analyzeFull(idea.cds1h,idea.cds15m);
+      const dc=idea.dir==='LONG'?'var(--green)':'var(--red)';
+      const idx=S.ideas.indexOf(idea);
+      return `<div class="phase-coin-row" onclick="selectIdea(${idx})">
+        <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${dc};">${idea.sym.replace('USDT','')}</span>
+        <span style="font-size:9px;color:${dc};font-weight:700;">${idea.dir==='LONG'?'▲':'▼'} ${idea.dir}</span>
+        <span style="font-size:9px;color:var(--muted);">+${idea.pumpPct.toFixed(1)}% · RSI ${idea.rsiNow.toFixed(0)}</span>
+        ${phase===4&&a?.readyToShort?`<span style="font-size:9px;font-weight:700;color:var(--red);">📊 Entry $${fmt(a.entry)}</span>`:''}
+        <span style="margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:700;color:${idea.conf>=85?'var(--red)':'var(--muted)'};">${idea.conf.toFixed(0)}</span>
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
 // ═══════════════════════════════════════════════════════
-//  RENDER PHASE CONTENT (tabs 1-7)
+//  WINRATES
 // ═══════════════════════════════════════════════════════
-function renderPhaseContent(){
-  const el=document.getElementById('phase-content');
-  if (!el) return;
-  const a=S.analysis;
+function loadWR(){try{return JSON.parse(localStorage.getItem(WR_KEY)||'[]');}catch{return[];}}
+function saveWR(){try{localStorage.setItem(WR_KEY,JSON.stringify(S.winrates));}catch{}}
 
-  if (S.phase===5) { el.innerHTML = renderWinratesPanel(); return; } // WINRATES handled above
+function scheduleWinrateCheck(idea){
+  if(!idea.sym||!idea.entry||!idea.sl||!idea.tp1)return;
+  if(S.winrates.find(w=>w.sym===idea.sym&&Math.abs((w.ts||0)-(idea.ts||0))<60000))return;
+  S.winrates.unshift({sym:idea.sym,dir:idea.dir||'?',entry:idea.entry,tp:idea.tp1,sl:idea.sl,ts:idea.ts||Date.now(),result:'pending',pnl:null,closePrice:null,checkHours:null,conf:idea.conf,pumpPct:idea.pumpPct});
+  saveWR();
+  [4,8,24].forEach(h=>setTimeout(async()=>{
+    try{
+      const lp=await fetchPrice(idea.sym);if(!lp)return;
+      const rec=S.winrates.find(w=>w.sym===idea.sym&&Math.abs((w.ts||0)-(idea.ts||0))<60000);
+      if(!rec||rec.result!=='pending')return;
+      if(idea.dir==='SHORT'){if(lp<=idea.tp1)rec.result='win';else if(lp>=idea.sl)rec.result='loss';}
+      else{if(lp>=idea.tp1)rec.result='win';else if(lp<=idea.sl)rec.result='loss';}
+      if(rec.result!=='pending'){
+        rec.checkHours=h;rec.closePrice=lp;
+        rec.pnl=idea.dir==='SHORT'?(idea.entry-lp)/idea.entry*100:(lp-idea.entry)/idea.entry*100;
+        saveWR();
+        notify(rec.result==='win'?`✅ TP · ${idea.sym.replace('USDT','')}`:`❌ SL · ${idea.sym.replace('USDT','')}`,`${rec.pnl>=0?'+':''}${rec.pnl.toFixed(2)}% за ${h}ч`);
+        if(S.phase===5)showWinrates();
+      }
+    }catch{}
+  },h*3600000));
+}
 
-  if (S.phase===6) { // АГЕНТ
-    el.innerHTML=`<div class="fade">
-      <div style="font-size:9px;color:var(--orange);letter-spacing:1px;font-weight:700;margin-bottom:6px;text-transform:uppercase;padding-bottom:4px;border-bottom:1px solid var(--border);">Приоритеты агента</div>
-      ${S.ideas.slice(0,6).map((idea,i)=>`
-        <div onclick="selectIdea(${i})" style="cursor:pointer;padding:5px 7px;border-radius:3px;margin-bottom:3px;background:${S.activeIdea===i?'var(--red-bg)':'var(--s1)'};border:1px solid ${S.activeIdea===i?'var(--red)':'var(--border)'};display:flex;align-items:center;gap:6px;font-size:11px;">
-          <span style="font-size:11px;">${i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`}</span>
-          <span style="font-family:var(--mono);font-weight:700;color:${idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--text)'};">${idea.sym.replace('USDT','')}</span>
-          <span style="font-size:9px;color:var(--muted);">${idea.isPump?'ПАМП':idea.dir} · +${idea.pumpPct.toFixed(0)}%</span>
-          <span style="margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:700;color:${idea.conf>=85?'var(--red)':'var(--muted)'};">${idea.conf.toFixed(0)}</span>
-        </div>`).join('')}
-    </div>`;
-    return;
-  }
+async function fetchPrice(sym){try{const r=await fetch(`${FAPI}/ticker/price?symbol=${sym}`);const j=await r.json();return+j.price;}catch{return null;}}
 
-  if (S.phase===7) { // ЧАТ - handled by right panel
-    el.innerHTML='<div style="font-size:11px;color:var(--muted);">Чат доступен в правой панели →</div>';
-    return;
-  }
-
-  // Phases 1-4: analysis
-  if (!a) { el.innerHTML='<div style="font-size:11px;color:var(--muted);">Загрузка данных...</div>'; return; }
-
-  const phaseColors=[,'var(--orange)','var(--amber)','var(--red)','var(--green)'];
-  const phaseNames=[,'ПАМП','ИСТОЩЕНИЕ','СЛОМ','ВХОД'];
-
-  el.innerHTML=`<div class="fade">
-  <div class="phase-title" style="color:${phaseColors[S.phase]||'var(--muted)'};border-bottom:1px solid ${S.phase===3?'var(--red-b)':S.phase===2?'var(--amber-b)':'var(--border)'};">
-    Фаза ${S.phase} — ${phaseNames[S.phase]||''} · ${S.sym.replace('USDT','')} ${a.phase>=S.phase?'✓':'⏳'}
-  </div>
-  ${S.phase===1?`
-    <div style="margin-bottom:10px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:6px;">
-        ${[[`+${a.pumpPct.toFixed(1)}%`,'памп 8h',a.pumpPct>=PUMP_THRESH?'var(--red)':a.pumpPct>PUMP_THRESH/2?'var(--orange)':'var(--muted)'],
-           [`+${a.pumpSpeed.toFixed(1)}%`,'скорость 2ч',a.pumpSpeed>5?'var(--red)':a.pumpSpeed>2?'var(--orange)':'var(--muted)'],
-           [`${a.distE20.toFixed(1)}%`,'↑EMA20',a.distE20>=10?'var(--red)':a.distE20>5?'var(--orange)':'var(--muted)'],
-           [`×${a.volRatio.toFixed(1)}`,'объём',a.volRatio>2?'var(--red)':a.volRatio>1.5?'var(--amber)':'var(--muted)'],
-           [`×${a.atrRatio.toFixed(2)}`,'ATR ratio',a.atrRatio>1.5?'var(--orange)':'var(--muted)'],
-           [`${(S.cds1h[S.cds1h.length-1]?(Math.abs(S.cds1h[S.cds1h.length-1].close-S.cds1h[S.cds1h.length-1].open)/(S.cds1h[S.cds1h.length-1].high-S.cds1h[S.cds1h.length-1].low||0.001)):0).toFixed(0)*100}%`,'body ratio','var(--muted)'],
-        ].map(([v,l,c])=>`<div style="background:var(--s1);border:1px solid var(--border);border-radius:3px;padding:6px 8px;"><div style="font-family:var(--mono);font-size:19px;font-weight:700;line-height:1.1;color:${c};">${v}</div><div style="font-size:8px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px;">${l}</div></div>`).join('')}
-      </div>
+function showWinrates(){
+  const dz=document.getElementById('dynamic-zone');if(!dz)return;
+  const wins=S.winrates.filter(w=>w.result==='win').length;
+  const losses=S.winrates.filter(w=>w.result==='loss').length;
+  const pend=S.winrates.filter(w=>w.result==='pending').length;
+  const total=wins+losses;
+  const wr=total>0?(wins/total*100).toFixed(0):'—';
+  const avgW=wins>0?S.winrates.filter(w=>w.result==='win'&&w.pnl!=null).reduce((s,w)=>s+w.pnl,0)/wins:0;
+  const avgL=losses>0?S.winrates.filter(w=>w.result==='loss'&&w.pnl!=null).reduce((s,w)=>s+w.pnl,0)/losses:0;
+  dz.innerHTML=`<div class="fade">
+    <div class="phase-list-hd">📊 Winrate агента · авто-проверка 4h/8h/24h</div>
+    <div class="wr-grid4">
+      <div class="wr-box"><div class="wr-v" style="color:var(--green);">${wr}%</div><div class="wr-l">Winrate</div></div>
+      <div class="wr-box"><div class="wr-v" style="color:var(--green);">${wins}</div><div class="wr-l">TP</div></div>
+      <div class="wr-box"><div class="wr-v" style="color:var(--red);">${losses}</div><div class="wr-l">SL</div></div>
+      <div class="wr-box"><div class="wr-v" style="color:var(--amber);">${pend}</div><div class="wr-l">Ожидают</div></div>
+    </div>
+    ${total>0?`<div style="font-size:9px;color:var(--muted);margin-bottom:8px;">
+      Ср. прибыль: <b style="color:var(--green);">+${avgW.toFixed(2)}%</b> &nbsp;·&nbsp;
+      Ср. убыток: <b style="color:var(--red);">${avgL.toFixed(2)}%</b>
+    </div>
+    <div style="height:5px;background:var(--s3);border-radius:3px;margin-bottom:10px;">
+      <div style="height:100%;width:${wr==='—'?0:wr}%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:3px;"></div>
     </div>`:''}
-  ${S.phase===2?`
-    <div class="sig-rows" style="margin-bottom:8px;">
-      ${a.exSigs.length?a.exSigs.map(s=>`<div class="sig-row"><span style="color:var(--amber);">✓</span>${s.t}<span style="margin-left:auto;font-size:9px;color:var(--dim);">+${s.w}</span></div>`).join('')
-      :'<div style="font-size:11px;color:var(--muted);">Признаков истощения нет</div>'}
-    </div>`:''}
-  ${S.phase===3?`
-    <div class="sig-rows" style="margin-bottom:8px;">
-      ${a.bkSigs.length?a.bkSigs.map(s=>`<div class="sig-row"><span style="color:var(--red);">✓</span>${s.t}<span style="margin-left:auto;font-size:9px;color:var(--dim);">+${s.w}</span></div>`).join('')
-      :'<div style="font-size:11px;color:var(--muted);">Слом структуры не подтверждён</div>'}
-    </div>`:''}
-  ${S.phase===4&&a.readyToShort?`
-    <div style="background:var(--red-bg);border:1px solid var(--red-b);border-radius:4px;padding:10px;margin-bottom:8px;">
-      <div style="font-family:var(--mono);font-size:13px;font-weight:800;color:var(--red);margin-bottom:6px;">▼ ГОТОВ К ВХОДУ · score ${a.totalScore}</div>
-      ${[['ENTRY',a.entry,'var(--text)'],['STOP',a.sl,'var(--red)'],['TP1',a.tp1,'var(--green)'],['TP2',a.tp2,'#16a34a'],['R/R',`1:${a.rr.toFixed(2)}`,'var(--sky)']].map(([l,v,c])=>`
-        <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:11px;">
-          <span style="color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;">${l}</span>
-          <span style="font-family:var(--mono);font-weight:700;font-size:12px;color:${c};">${l==='R/R'?v:'$'+fmt(v)}</span>
-        </div>`).join('')}
-      <button onclick="openPosition('SHORT','${S.sym}',${a.entry},${a.sl},${a.tp1},${a.tp2})" style="width:100%;margin-top:8px;background:var(--red);color:white;padding:8px;border-radius:3px;font-size:12px;font-weight:700;cursor:pointer;border:none;">▼ ОТКРЫТЬ SHORT</button>
-    </div>`:`<div style="background:var(--amber-bg);border:1px solid var(--amber-b);border-radius:4px;padding:8px;font-size:10px;color:var(--amber);font-weight:600;">⚠ Без подтверждения всех фаз — не входить</div>`}
+    ${!S.winrates.length?'<div style="font-size:11px;color:var(--muted);">Нет данных. Нажмите ✦ AI анализ на карточке — агент начнёт отслеживать результат.</div>':''}
+    ${S.winrates.slice(0,30).map(w=>`
+      <div class="wr-row ${w.result}" onclick="loadSym('${w.sym}')">
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;">${w.sym.replace('USDT','')}</span>
+        <span style="color:var(--muted);">${w.dir}</span>
+        <span style="color:var(--dim);font-size:9px;">@$${fmt(w.entry)}</span>
+        <span style="margin-left:auto;font-size:9px;color:var(--dim);">${w.checkHours?w.checkHours+'ч':'⏳'}</span>
+        ${w.pnl!=null?`<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${w.result==='win'?'var(--green)':'var(--red)'};">${w.pnl>=0?'+':''}${w.pnl.toFixed(2)}%</span>`:''}
+        <span style="font-size:9px;font-weight:700;color:${w.result==='win'?'var(--green)':w.result==='loss'?'var(--red)':'var(--amber)'};">${w.result==='win'?'✓TP':w.result==='loss'?'✗SL':'⏳'}</span>
+      </div>`).join('')}
   </div>`;
 }
 
 // ═══════════════════════════════════════════════════════
-//  SIGNAL CARD (right panel)
+//  GEMINI AI
 // ═══════════════════════════════════════════════════════
-function renderSignalCard(){
-  const a=S.analysis;
-  const el=document.getElementById('signal-card');
-  const targ=document.getElementById('targets-card');
-  if (!a){
-    el.innerHTML='<div style="font-size:11px;color:var(--muted);">Загрузка...</div>';
-    if(targ)targ.style.display='none'; return;
+function getApiKey(){return localStorage.getItem('gemini_api_key')||'';}
+
+function promptApiKey(){
+  const key=prompt('Google Gemini API ключ\n\nПолучите бесплатно: aistudio.google.com → Get API Key\n(После пополнения баланса лимиты снимаются)',getApiKey());
+  if(key&&key.length>20){
+    localStorage.setItem('gemini_api_key',key.trim());
+    updateGeminiBtn(true);
+    showToast('✓ Gemini AI подключён');
   }
-  if (a.readyToShort) {
-    el.className='signal-card sig-pulse';
-    el.innerHTML=`
-      <div class="sig-title" style="color:var(--red);">▼ SHORT СИГНАЛ</div>
-      <div class="sig-sub">Все 3 фазы · score ${a.totalScore} · ATR×${a.atrRatio.toFixed(2)}</div>
-      ${[['ENTRY',a.entry,'var(--text)'],['STOP',a.sl,'var(--red)'],['TP1 EMA20',a.tp1,'var(--green)'],['TP2 EMA50',a.tp2,'var(--green)'],['R/R',`1:${a.rr.toFixed(2)}`,'var(--sky)'],['ATR%',a.atrv&&a.entry?(a.atrv/a.entry*100).toFixed(2)+'%':'—','var(--muted)']].map(([k,v,c])=>`
-        <div class="sig-kv"><span class="sig-k">${k}</span><span class="sig-v" style="color:${c};">${k.includes('TP')||k==='ENTRY'||k==='STOP'?'$'+fmt(v):v}</span></div>`).join('')}
-      <button onclick="openPosition('SHORT','${S.sym}',${a.entry},${a.sl},${a.tp1},${a.tp2})" class="open-btn" style="background:var(--red);color:white;">▼ ОТКРЫТЬ SHORT</button>`;
-    if (targ) {
-      targ.style.display='block';
-      document.getElementById('targets-content').innerHTML=
-        [['EMA20 (1h)',a.e20_1h,'Цель 1'],['EMA50 (1h)',a.e50_1h,'Цель 2'],['База пампа',a.impulseBase,'Цель 3']]
-        .map(([l,v,s])=>`<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;font-size:11px;"><span style="color:var(--muted);">${l}</span><span style="font-family:var(--mono);font-weight:700;font-size:12px;color:var(--green);">$${fmt(v)}</span></div><div style="font-size:8px;color:var(--dim);">${s}</div></div>`).join('');
+}
+
+function updateGeminiBtn(ok){
+  const btn=document.getElementById('gemini-btn');
+  const status=document.getElementById('chat-status');
+  if(btn){
+    if(ok===true){btn.className='';btn.textContent='✦ Gemini ●';btn.style.color='#4ade80';}
+    else if(ok==='working'){btn.style.color='#f59e0b';}
+    else{btn.className='off';btn.textContent='🔑 AI';btn.style.color='#f87171';}
+  }
+  if(status){status.textContent=ok===true?'подключён':ok==='working'?'думает...':'не подключён';status.style.color=ok===true?'var(--green)':ok==='working'?'var(--amber)':'var(--dim)';}
+}
+
+function showToast(msg){
+  const t=document.createElement('div');
+  t.style.cssText='position:fixed;bottom:20px;right:20px;background:#1e293b;color:#f8fafc;padding:8px 14px;border-radius:6px;font-size:11px;font-weight:600;z-index:9999;';
+  t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);
+}
+
+async function callGemini(prompt,maxTokens=400){
+  const key=getApiKey();if(!key)return null;
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+  const body={
+    contents:[{parts:[{text:prompt}]}],
+    generationConfig:{maxOutputTokens:maxTokens,temperature:0.4},
+    systemInstruction:{parts:[{text:'Ты — AI советник трейдера. Стратегии: Pump Exhaustion Reversion, разворот тренда, перепроданность RSI. Отвечай кратко (3-5 предложений), конкретно, на русском. Говори прямо: входить/не входить, держать/закрывать. Учитывай все таймфреймы.'}]}
+  };
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){
+    const err=await r.json().catch(()=>({}));
+    const msg=err?.error?.message||`HTTP ${r.status}`;
+    if(r.status===429){
+      await new Promise(r=>setTimeout(r,15000));
+      const r2=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(!r2.ok)throw new Error('Лимит запросов. Подождите минуту.');
+      const d2=await r2.json();updateGeminiBtn(true);return d2?.candidates?.[0]?.content?.parts?.[0]?.text||'';
     }
-  } else {
-    el.className='card';
-    el.innerHTML=`<div style="font-family:var(--mono);font-size:13px;font-weight:800;color:var(--amber);margin-bottom:6px;">⏳ ФАЗА ${a.phase}/3</div>
-      <div style="font-size:10px;color:var(--muted);line-height:1.8;">${
-        a.phase===0?`Памп < ${PUMP_THRESH}%. Выберите монету из идей.`
-        :a.phase===1?`✓ Памп +${a.pumpPct.toFixed(1)}%<br>⏳ Ждём истощения (Фаза 2)`
-        :a.phase===2?`✓ Памп + Истощение<br>⏳ Ждём слома EMA20 (Фаза 3)`
-        :'Нет данных'
-      }</div>
-      <div style="margin-top:8px;padding:5px 7px;background:var(--amber-bg);border:1px solid var(--amber-b);border-radius:3px;font-size:9px;color:var(--amber);font-weight:600;">⚠ Без слома — не входить</div>`;
-    if (targ) targ.style.display='none';
+    updateGeminiBtn(false);throw new Error(msg);
+  }
+  const data=await r.json();
+  updateGeminiBtn(true);
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text||'';
+}
+
+// AI analysis for coin card
+async function askAIAboutIdea(idx){
+  const idea=S.ideas[idx];if(!idea)return;
+  const box=document.getElementById('ai-comment-box');
+  if(box){box.style.display='block';box.innerHTML='<span style="animation:pulse 1s infinite;display:inline-block;color:var(--muted);">✦ Gemini анализирует...</span>';}
+  const a=S.analysis;
+  const prompt=`Монета: ${idea.sym} | ${idea.dir} | уверенность ${idea.conf.toFixed(0)}/100
+Памп 8h: +${idea.pumpPct.toFixed(1)}% | Скорость: +${idea.pumpSpeed.toFixed(1)}%/2ч | EMA20 dist: ${idea.dist.toFixed(1)}%
+Vol×${idea.volRatio.toFixed(1)} | RSI: ${idea.rsiNow.toFixed(0)} | CVD: ${idea.cvdFalling?'↓':'↑'}${idea.cvdDiv?' + дивергенция':''}
+ATR ratio: ×${idea.atrRatio.toFixed(2)} | 4h тренд: ${idea.trend4h||'neutral'}
+${a?`Фаза истощения: ${a.phase}/3 | Готов к входу: ${a.readyToShort?'ДА':'НЕТ'}
+Истощение: ${a.exSigs?.map(s=>s.t).join(', ')||'нет'}
+Слом: ${a.bkSigs?.map(s=>s.t).join(', ')||'нет'}`:''}
+${idea.entry?`Entry: $${fmt(idea.entry)} | SL: $${fmt(idea.sl)} | TP: $${fmt(idea.tp1)} | R/R: ${idea.rr?.toFixed(1)||'—'}`:''}
+
+Ответь конкретно:
+1) Что происходит с монетой
+2) Надёжен ли этот сигнал (учти МТФ)
+3) Рекомендация: ВХОДИТЬ / ЖДАТЬ / ПРОПУСТИТЬ`;
+  try{
+    updateGeminiBtn('working');
+    const reply=await callGemini(prompt,300);
+    if(box&&reply){
+      box.style.display='block';
+      box.innerHTML=`<b style="font-size:9px;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">✦ Gemini · ${new Date().toLocaleTimeString()}</b>${reply.replace(/\n/g,'<br>')}`;
+    }
+    // Also add to chat
+    appendMsg('ai',`[${idea.sym}] ${reply}`);
+    // Track winrate
+    if(idea.entry&&idea.sl&&idea.tp1)scheduleWinrateCheck(idea);
+  }catch(e){
+    if(box){box.style.display='block';box.innerHTML=`<span style="color:var(--red);">❌ ${e.message}</span>`;}
+    updateGeminiBtn(false);
   }
 }
 
 // ═══════════════════════════════════════════════════════
-//  POSITIONS
+//  CHAT
 // ═══════════════════════════════════════════════════════
-function openPosition(dir,sym,entry,sl,tp1,tp2){
-  S.positions.push({dir,sym,entry,sl,tp1,tp2,time:Date.now()});
-  notify(`${dir==='SHORT'?'▼':'▲'} Позиция открыта`,`${sym} @ $${fmt(entry)}`);
-  setPhase(4); renderPhaseContent();
+let chatHistory=[];
+
+function buildContext(){
+  const a=S.analysis,lp=S.prices[S.sym]?.price;
+  let ctx=`[Рынок · ${new Date().toLocaleTimeString()}]\nМонета: ${S.sym} | Цена: $${fmt(lp)}\n`;
+  if(a)ctx+=`Памп: +${a.pumpPct?.toFixed(1)||0}% | EMA dist: ${a.distE20?.toFixed(1)||0}%\nФаза: ${a.phase}/3 | ${a.readyToShort?'✅ ГОТОВ К ВХОДУ':'⏳ Ждём'}\nCVD: ${a.cvdFalling?'↓':'↑'}${a.cvdDiv?' (дивергенция)':''} | RSI: ${a.rsiNow?.toFixed(0)||'?'}\n`;
+  return ctx;
+}
+
+async function sendChat(userMsg){
+  const inp=document.getElementById('chat-input');
+  const msg=userMsg||inp?.value?.trim();if(!msg)return;
+  if(inp&&!userMsg)inp.value='';
+  appendMsg('user',msg);
+  const tid='t'+Date.now();appendThinking(tid);
+  try{
+    if(!getApiKey()){
+      document.getElementById(tid)?.remove();
+      appendMsg('ai','⚠️ Нужен Gemini API ключ.\nНажмите кнопку 🔑 AI в топбаре.\nКлюч бесплатно: aistudio.google.com → Get API Key');
+      return;
+    }
+    // Detect coin in message
+    const coinMatch=msg.match(/^([A-Z]{2,10})(USDT?)?\\s*[?!]?$/i)||msg.match(/(?:анализ|посмотри|что с|как)\\s+([A-Z]{2,10})/i);
+    let extra='';
+    if(coinMatch){
+      let sym=(coinMatch[1]||'').toUpperCase();if(!sym.endsWith('USDT'))sym+='USDT';
+      try{
+        const res=await scoreForIdea(sym);
+        if(res)extra=`\n\n[Данные ${sym}]\nЦена: $${fmt(res.price)} | Сетап: ${res.bestDir||'нет'} (${res.bestConf?.toFixed(0)||0}/100)\nПамп: +${res.pumpPct?.toFixed(1)||0}% | RSI: ${res.rsiNow?.toFixed(0)||50} | Vol×${res.volRatio?.toFixed(1)||1}\nCVD: ${res.cvdFalling?'↓':'↑'} | 4h: ${res.trend4h||'neutral'}`;
+      }catch{}
+    }
+    updateGeminiBtn('working');
+    const hist=chatHistory.slice(-4).map(m=>`${m.role}: ${m.content.substring(0,100)}`).join('\n');
+    const fullPrompt=buildContext()+extra+(hist?'\n\n[История]\n'+hist:'')+'\n\n---\nВопрос: '+msg;
+    const reply=await callGemini(fullPrompt,500);
+    document.getElementById(tid)?.remove();
+    if(!reply){appendMsg('ai','⚠️ Gemini не ответил. Попробуйте снова.');return;}
+    appendMsg('ai',reply);
+    chatHistory.push({role:'user',content:msg},{role:'assistant',content:reply});
+    if(chatHistory.length>12)chatHistory=chatHistory.slice(-12);
+  }catch(e){
+    document.getElementById(tid)?.remove();
+    if(e.message?.includes('429')||e.message?.includes('лимит'))
+      appendMsg('ai','⏳ Лимит Gemini (15 запросов/мин). Подождите минуту.');
+    else appendMsg('ai','❌ Ошибка: '+(e.message||'неизвестная'));
+  }
+}
+
+function askQuick(q){sendChat(q);}
+
+function appendMsg(role,text){
+  const msgs=document.getElementById('chat-messages');if(!msgs)return;
+  const div=document.createElement('div');
+  if(role==='user'){div.className='msg-user';div.textContent=text;}
+  else{div.className='msg-ai';const safe=String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');div.innerHTML=`<div class="msg-ai-hd">✦ Gemini · ${new Date().toLocaleTimeString()}</div>${safe}`;}
+  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
+}
+
+function appendThinking(id){
+  const msgs=document.getElementById('chat-messages');if(!msgs)return;
+  const div=document.createElement('div');div.className='msg-thinking';div.id=id;div.textContent='● думаю...';
+  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
 }
 
 // ═══════════════════════════════════════════════════════
-//  FUTURES DATA
+//  DATA FETCHING
 // ═══════════════════════════════════════════════════════
+async function fetchCds(sym,iv,limit=120){
+  try{const r=await fetch(`${FAPI}/klines?symbol=${sym}&interval=${iv}&limit=${limit}`);const raw=await r.json();if(Array.isArray(raw)&&raw.length>0)return raw.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));}catch{}
+  return[];
+}
+
 async function fetchFutures(sym){
   try{const r=await fetch(`${FAPI}/openInterest?symbol=${sym}`);const j=await r.json();if(j.openInterest)S.oi=+j.openInterest;}catch{S.oi=null;}
   try{const r=await fetch(`${FAPI}/fundingRate?symbol=${sym}&limit=1`);const j=await r.json();if(Array.isArray(j)&&j[0])S.fr=+j[0].fundingRate*100;}catch{S.fr=null;}
-  S.oiHist=[]; // openInterestHist blocked by browser CORS
-  renderFutures();
-}
-
-function renderFutures(){
-  const oiTrend=S.oiHist.length>2?(S.oiHist[S.oiHist.length-1]<S.oiHist[S.oiHist.length-3]?'↓ падает':'↑ растёт'):'—';
-  const oiTrendCol=S.oiHist.length>2?(S.oiHist[S.oiHist.length-1]<S.oiHist[S.oiHist.length-3]?'var(--green)':'var(--red)'):'var(--dim)';
-  const frEl=document.getElementById('fr-val');
-  if(frEl){frEl.textContent=S.fr!=null?`${S.fr>0?'+':''}${S.fr.toFixed(4)}%`:'—';frEl.style.color=S.fr!=null?(S.fr>0?'var(--red)':'var(--green)'):'var(--dim)';}
-  const oiEl=document.getElementById('oi-val');
-  if(oiEl){oiEl.textContent=S.oi!=null?fmt(S.oi)+' контр':'—';oiEl.style.color='var(--sky)';}
-  const oiTEl=document.getElementById('oi-trend');
-  if(oiTEl){oiTEl.textContent=oiTrend;oiTEl.style.color=oiTrendCol;}
-  const warn=document.getElementById('fr-warn');
-  if(warn){
-    if(S.fr!=null&&Math.abs(S.fr)>0.05){
-      warn.style.display='block';
-      warn.textContent=S.fr>0?'⚠ Лонги перегреты — фаворизирует шорт':'⚠ Шорты перегреты';
-      warn.style.color=S.fr>0?'var(--red)':'var(--green)';
-      warn.style.background=S.fr>0?'var(--red-bg)':'var(--green-bg)';
-    } else warn.style.display='none';
-  }
+  // Update OI/FR display
+  const el=document.getElementById('oi-fr');
+  if(el)el.textContent=S.fr!=null?`FR: ${S.fr>0?'+':''}${S.fr.toFixed(4)}%`:'—';
 }
 
 // ═══════════════════════════════════════════════════════
-//  FETCH CANDLES
-// ═══════════════════════════════════════════════════════
-async function fetchCds(sym,iv,limit=200){
-  try{
-    const r=await fetch(`${FAPI}/klines?symbol=${sym}&interval=${iv}&limit=${limit}`);
-    const raw=await r.json();
-    if(Array.isArray(raw)) return raw.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
-  }catch{}
-  return [];
-}
-
-// ═══════════════════════════════════════════════════════
-//  WEBSOCKET PRICES
+//  WEBSOCKET
 // ═══════════════════════════════════════════════════════
 function connectWS(){
-  const topSyms=['SOLUSDT','AVAXUSDT','INJUSDT','SUIUSDT','ARBUSDT','OPUSDT','WIFUSDT','NEARUSDT','APTUSDT','FETUSDT','LINKUSDT','DOTUSDT','RUNEUSDT','LDOUSDT','STXUSDT','ORDIUSDT','PENDLEUSDT','ENAUSDT','MATICUSDT','SEIUSDT'];
-  const streams=topSyms.map(s=>`${s.toLowerCase()}@miniTicker`).join('/');
-  let ws,retries=0;
+  const syms=['SOLUSDT','AVAXUSDT','INJUSDT','SUIUSDT','ARBUSDT','WIFUSDT','NEARUSDT','APTUSDT','LINKUSDT','DOTUSDT','RUNEUSDT','LDOUSDT','STXUSDT','ORDIUSDT','PENDLEUSDT','ENAUSDT','MATICUSDT','SEIUSDT','OPUSDT','FETUSDT'];
+  const streams=syms.map(s=>`${s.toLowerCase()}@miniTicker`).join('/');
+  let retries=0;
   const connect=()=>{
-    ws=new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
-    ws.onopen=()=>{S.wsOk=true;setStatus('LIVE','live');};
-    ws.onmessage=e=>{
-      try{const{data:d}=JSON.parse(e.data);if(d){S.prices[d.s]={price:+d.c,change:+d.P};S.lastPoll=Date.now();updateTopbar();}}catch{}
-    };
-    ws.onclose=()=>{S.wsOk=false;if(retries<5){setTimeout(connect,3000);retries++;}};
-    ws.onerror=()=>{S.wsOk=false;};
+    const ws=new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+    ws.onopen=()=>setLiveStatus('live');
+    ws.onmessage=e=>{try{const{data:d}=JSON.parse(e.data);if(d){S.prices[d.s]={price:+d.c,change:+d.P||0};updateTopbar();}}catch{}};
+    ws.onclose=()=>{if(retries<5){setTimeout(connect,3000);retries++;}};
+    ws.onerror=()=>{};
   };
   connect();
 }
 
 // ═══════════════════════════════════════════════════════
-//  POSITION ALERTS
-// ═══════════════════════════════════════════════════════
-function checkPositionAlerts(){
-  S.positions.forEach(pos=>{
-    const lp=S.prices[pos.sym]?.price; if(!lp) return;
-    const pnl=pos.dir==='SHORT'?(pos.entry-lp)/pos.entry*100:(lp-pos.entry)/pos.entry*100;
-    const slD=Math.abs(lp-pos.sl)/Math.abs(pos.entry-pos.sl);
-    const alertEl=document.getElementById('alert-bar');
-    if(slD<0.08){
-      alertEl.style.display='flex';alertEl.style.background='var(--red-bg)';alertEl.style.borderBottomColor='var(--red)';alertEl.className='blink';
-      alertEl.innerHTML=`🚨 СТОП-ЛОСС! ${pos.sym} PnL: ${pnl.toFixed(2)}%<button onclick="S.positions=S.positions.filter(p=>p.sym!=='${pos.sym}');document.getElementById('alert-bar').style.display='none';" style="margin-left:auto;background:var(--red);color:white;border:none;border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;">✕</button>`;
-      notify('🚨 СТОП-ЛОСС',pos.sym);
-    } else if((pos.dir==='SHORT'&&lp<=pos.tp1)||(pos.dir==='LONG'&&lp>=pos.tp1)){
-      alertEl.style.display='flex';alertEl.style.background='var(--green-bg)';alertEl.style.borderBottomColor='var(--green)';alertEl.className='';
-      alertEl.innerHTML=`✅ TP1 достигнут! ${pos.sym} +${Math.abs(pnl).toFixed(2)}%`;
-    }
-  });
-}
-
-// ═══════════════════════════════════════════════════════
 //  UI HELPERS
 // ═══════════════════════════════════════════════════════
-function setStatus(text, cls){
-  const dot=document.getElementById('status-dot');
-  const txt=document.getElementById('status-text');
-  if(!dot||!txt) return;
-  dot.className=cls; txt.className=cls; txt.textContent=text;
+function setLiveStatus(s){
+  const dot=document.getElementById('live-dot'),txt=document.getElementById('live-text');
+  if(!dot||!txt)return;
+  if(s==='live'){dot.className='';dot.style.background='#4ade80';txt.textContent='LIVE';txt.className='';txt.style.color='#4ade80';}
+  else if(s==='scanning'){dot.className='scanning';txt.textContent='SCAN';txt.className='scanning';}
 }
 
 function updateTopbar(){
   const t=S.prices[S.sym];
   if(t){
-    document.getElementById('price-display').textContent='$'+fmt(t.price);
+    const pd=document.getElementById('price-display');if(pd)pd.textContent='$'+fmt(t.price);
     const cd=document.getElementById('change-display');
-    cd.textContent=(t.change>=0?'▲':'▼')+Math.abs(t.change).toFixed(2)+'%';
-    cd.style.color=t.change>=0?'#4ade80':'#f87171';
+    if(cd){const chg=t.change||0;cd.textContent=(chg>=0?'▲':'▼')+Math.abs(chg).toFixed(2)+'%';cd.style.color=chg>=0?'#4ade80':'#f87171';}
   }
   const sec=Math.max(0,Math.round((S.nextRefresh-Date.now())/1000));
-  const rt=document.getElementById('refresh-timer');
-  if(rt){rt.textContent=`↻${sec}с`;rt.style.color=sec<5?'#f59e0b':'#475569';}
+  const rt=document.getElementById('refresh-timer');if(rt){rt.textContent=`↻${sec}с`;rt.style.color=sec<5?'#f59e0b':'#475569';}
 }
 
-function setPhase(n, el=null){
-  S.phase=n;
-  document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));
-  const target=document.getElementById(`pt${n}`)||el;
-  if(target) target.classList.add('active');
-  renderPhaseContent();
-  renderPhaseCoins(n); // show coins at this phase in sidebar
-}
-
-function renderPhaseCoins(phase) {
-  const list = document.getElementById('ideas-list');
-  if (!list) return;
-  const phaseNames = {1:'🔴 Памп', 2:'🟡 Истощение', 3:'🔴 Слом', 4:'✅ Вход', 5:'📊 Winrates', 6:'🤖 Агент'};
-  if (phase >= 5) { renderIdeas(); return; }
-  // Filter ideas that reached this phase
-  const coins = S.ideas.filter(idea => {
-    if (!idea.cds1h || !idea.cds15m) return false;
-    const a = analyzeFull(idea.cds1h, idea.cds15m, 'unknown', null);
-    return a && a.phase >= phase;
-  });
-  if (!coins.length) {
-    list.innerHTML = `<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">
-      Нет монет на фазе ${phase}.<br>
-      <span style="font-size:9px;color:var(--dim);">Агент сканирует рынок каждые 3м.</span>
-    </div>`;
-    return;
-  }
-  list.innerHTML = `<div style="padding:5px 7px;font-size:9px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border);">${phaseNames[phase]||'Фаза '+phase} · ${coins.length} монет</div>` +
-    coins.map((idea, i) => {
-      const a = analyzeFull(idea.cds1h, idea.cds15m, 'unknown', null);
-      const dc = idea.dir==='LONG'?'var(--green)':idea.dir==='SHORT'?'var(--red)':'var(--amber)';
-      return `<div class="idea-card ${idea.dir==='LONG'?'long':idea.dir==='SHORT'?'short':''}"
-        onclick="selectIdea(${S.ideas.indexOf(idea)})"
-        style="cursor:pointer;">
-        <div class="idea-hd">
-          <span class="idea-sym" style="color:${dc};">${idea.sym.replace('USDT','')}</span>
-          <span style="font-size:9px;color:${dc};font-weight:700;">${idea.dir||'?'}</span>
-        </div>
-        <div style="font-size:9px;color:var(--muted);">
-          +${idea.pumpPct?.toFixed(1)||0}% · RSI ${idea.rsiNow?.toFixed(0)||'?'} · Vol×${idea.volRatio?.toFixed(1)||'?'}
-        </div>
-        <div style="font-size:8px;color:var(--dim);margin-top:2px;">${fmtAge(idea.ts)} · ${idea.conf?.toFixed(0)||0}/100</div>
-      </div>`;
-    }).join('');
-}
-
-function setRTab(name, btn){
-  document.querySelectorAll('.rtab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  ['signal','chat','data'].forEach(n=>{
-    const p=document.getElementById(`rpanel-${n}`);
-    if(p){p.className='rpanel';if(n===name)p.classList.add('active');}
-  });
-}
-
-function onThreshChange(val){
-  PUMP_THRESH=+val;
-  document.getElementById('thresh-val').textContent=val+'%';
-}
-
-// ═══════════════════════════════════════════════════════
-//  AI CHAT
-// ═══════════════════════════════════════════════════════
-let chatHistory=[];
-function buildContext(){
-  const a=S.analysis; const lp=S.prices[S.sym]?.price;
-  const oiTrend=S.oiHist.length>2?(S.oiHist[S.oiHist.length-1]<S.oiHist[S.oiHist.length-3]?'falling':'rising'):'unknown';
-  const cvdFall=S.cvdData.length>10&&S.cvdData[S.cvdData.length-1]<S.cvdData[Math.max(0,S.cvdData.length-10)];
-  let ctx=`[ДАННЫЕ · ${new Date().toLocaleTimeString()}]\nМонета: ${S.sym} | Цена: $${fmt(lp)}\n`;
-  if(a){ctx+=`Памп: +${a.pumpPct.toFixed(1)}% · скорость +${a.pumpSpeed.toFixed(1)}%/2ч\nEMA20 dist: ${a.distE20.toFixed(1)}% | ATR×${a.atrRatio.toFixed(2)}\nФаза: ${a.phase}/3 | ${a.readyToShort?'✅ СИГНАЛ':'⏳ Ждём'}\nCVD: ${cvdFall?'↓ медвежий':'↑ бычий'}${a.cvdDiv?' (дивергенция)':''} | OI: ${oiTrend} | Funding: ${S.fr!=null?(S.fr>0?'+':'')+S.fr.toFixed(4)+'%':'—'}\n`;}
-  if(S.positions.length){
-    const pos=S.positions[0]; const lp2=S.prices[pos.sym]?.price||pos.entry;
-    const pnl=pos.dir==='SHORT'?(pos.entry-lp2)/pos.entry*100:(lp2-pos.entry)/pos.entry*100;
-    ctx+=`\n[ПОЗИЦИЯ] ${pos.dir} ${pos.sym} | Вход $${fmt(pos.entry)} | Сейчас $${fmt(lp2)} | PnL ${pnl>=0?'+':''}${pnl.toFixed(2)}% | SL $${fmt(pos.sl)} | TP $${fmt(pos.tp1)}`;
-  }
-  return ctx;
-}
-async function sendChat(userMsg){
-  const inp=document.getElementById('chat-input');
-  const msg=userMsg||inp.value.trim(); if(!msg) return;
-  if(!userMsg) inp.value='';
-  setRTab('chat',document.getElementById('chat-tab-btn'));
-  appendMsg('user',msg);
-  const tid='t'+Date.now(); appendThinking(tid);
-  const msgs=[...chatHistory,{role:'user',content:buildContext()+'\n\n---\nВопрос: '+msg}];
-  try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,system:'Ты — персональный AI советник трейдера. Стратегия: Pump Exhaustion Reversion. Отвечай коротко (2-4 предложения), конкретно, на русском. Говори прямо. Учитывай открытую позицию если есть.',messages:msgs})});
-    const d=await r.json(); const reply=d.content?.[0]?.text||'Ошибка';
-    document.getElementById(tid)?.remove(); appendMsg('ai',reply);
-    chatHistory.push({role:'user',content:msg},{role:'assistant',content:reply});
-    if(chatHistory.length>12) chatHistory=chatHistory.slice(-12);
-  }catch(e){document.getElementById(tid)?.remove();appendMsg('ai','Ошибка соединения.');}
-}
-function askQuick(q){ sendChat(q); }
-
-async function askAIAboutIdea(idx) {
-  const idea = S.ideas[idx];
-  if (!idea) return;
-  const commentEl = document.getElementById('ai-comment-' + idea.sym);
-  if (commentEl) { commentEl.style.color='var(--amber)'; commentEl.textContent='✦ Gemini анализирует...'; }
-  const a = idea.cds1h && idea.cds15m ? analyzeFull(idea.cds1h, idea.cds15m, 'unknown', null) : null;
-  const prompt = `Монета: ${idea.sym} | ${idea.dir} | уверенность ${idea.conf?.toFixed(0)||0}/100
-Памп: +${idea.pumpPct?.toFixed(1)||0}% за 8ч | Скорость: +${idea.pumpSpeed?.toFixed(1)||0}%/2ч
-EMA20 dist: ${idea.dist?.toFixed(1)||0}% | ATR×${idea.atrRatio?.toFixed(2)||1}
-Vol×${idea.volRatio?.toFixed(1)||1} | RSI: ${idea.rsiNow?.toFixed(0)||50}
-CVD: ${idea.cvdFalling?'↓ падает':'↑ растёт'}${idea.cvdDiv?' + дивергенция':''}
-Тренд 4h: ${idea.trend4h||'neutral'}
-Фаза анализа: ${a?.phase||0}/3 | Готов к входу: ${a?.readyToShort?'ДА':'НЕТ'}
-${a?.exSigs?.length ? 'Сигналы истощения: ' + a.exSigs.map(s=>s.t).join(', ') : ''}
-${a?.bkSigs?.length ? 'Слом структуры: ' + a.bkSigs.map(s=>s.t).join(', ') : ''}
-
-Дай конкретный ответ (3-4 предложения):
-1) Что происходит с монетой прямо сейчас
-2) Надёжен ли этот сигнал для входа
-3) Главный риск
-4) Рекомендация: входить / ждать / пропустить`;
-  try {
-    setGeminiStatus('working');
-    const reply = await callGemini(prompt, 250);
-    if (commentEl && reply) {
-      commentEl.style.cssText = 'margin-top:6px;font-size:10px;color:#1e40af;padding:8px 10px;background:var(--blue-bg);border:1px solid var(--blue-b);border-radius:4px;line-height:1.7;';
-      commentEl.innerHTML = '✦ <b>Gemini:</b> ' + reply.replace(/\n/g,'<br>');
-    }
-    // Also update winrate tracking
-    if (idea.entry && idea.sl && idea.tp1) scheduleWinrateCheck(idea);
-  } catch(e) {
-    if (commentEl) { commentEl.style.color='var(--red)'; commentEl.textContent='❌ ' + e.message; }
-    setGeminiStatus(false, e.message);
-  }
-}
-function appendMsg(role,text){
-  const msgs=document.getElementById('chat-messages');
-  const div=document.createElement('div');
-  if(role==='user'){div.className='msg-user';div.textContent=text;}
-  else{div.className='msg-ai';div.innerHTML=`<div class="msg-ai-hd">🤖 AI · ${new Date().toLocaleTimeString()}</div>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}`;}
-  msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
-}
-function appendThinking(id){
-  const msgs=document.getElementById('chat-messages');
-  const div=document.createElement('div'); div.className='msg-thinking'; div.id=id; div.textContent='● думаю...';
-  msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
-}
-
-// ═══════════════════════════════════════════════════════
-//  AI ANALYSIS (full)
-// ═══════════════════════════════════════════════════════
-async function runAI(){
-  setRTab('chat',document.getElementById('chat-tab-btn'));
-  await sendChat('Полный анализ текущей ситуации — памп, фазы, CVD, OI, стоит ли входить.');
-}
-
-// ═══════════════════════════════════════════════════════
-//  NOTIFICATIONS
-// ═══════════════════════════════════════════════════════
 function notify(title,body){
-  if(typeof Notification==='undefined'||Notification.permission!=='granted') return;
+  if(typeof Notification==='undefined'||Notification.permission!=='granted')return;
   try{new Notification(title,{body});}catch{}
 }
-if(typeof Notification!=='undefined'&&Notification.permission==='default'){
-  const b=document.createElement('div');
-  b.style.cssText='background:var(--amber-bg);border-bottom:1px solid var(--amber-b);padding:6px 14px;display:flex;align-items:center;gap:8px;font-size:11px;flex-shrink:0;';
-  b.innerHTML='<span style="color:var(--amber);">🔔 Уведомления о новых пампах?</span><button onclick="Notification.requestPermission();this.parentElement.remove();" style="background:var(--amber);color:white;border:none;padding:3px 10px;border-radius:3px;font-size:10px;cursor:pointer;font-weight:700;font-family:inherit;">Разрешить</button><button onclick="this.parentElement.remove();" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:3px;font-size:10px;cursor:pointer;font-family:inherit;">Нет</button>';
-  document.body.insertBefore(b,document.getElementById('topbar').nextSibling);
-}
 
+function resetToDefaults(){
+  S.ideas=[];S.ideaDedup={};renderIdeas();
+}
 
 // ═══════════════════════════════════════════════════════
-//  GEMINI AI
+//  INIT
 // ═══════════════════════════════════════════════════════
-const GEMINI_MODEL = 'gemini-2.5-flash';
+// Check API key status
+if(getApiKey())updateGeminiBtn(true);
 
-function getApiKey() {
-  return localStorage.getItem('gemini_api_key') || '';
-}
+// Connect WS
+connectWS();
 
-function promptApiKey() {
-  const key = prompt(
-    'Введите Google Gemini API ключ\n' +
-    'Бесплатно: aistudio.google.com → Get API Key',
-    getApiKey()
-  );
-  if (key && key.length > 20) {
-    localStorage.setItem('gemini_api_key', key.trim());
-    showToast('✓ Gemini AI подключён');
-    const btn = document.getElementById('api-key-btn');
-    if (btn) { btn.style.animation='none'; btn.style.color='#4ade80'; btn.textContent='✦ Gemini'; }
-  }
-}
+// Load initial symbol
+loadSym('SOLUSDT');
 
-function setGeminiStatus(ok, msg) {
-  const btn = document.getElementById('gemini-status-btn') || document.getElementById('api-key-btn');
-  if (!btn) return;
-  if (ok === 'working') {
-    btn.style.color = '#f59e0b'; btn.textContent = '✦ Gemini ●';
-  } else if (ok === true) {
-    btn.style.color = '#4ade80'; btn.textContent = '✦ Gemini ●';
-  } else {
-    btn.style.color = '#f87171'; btn.title = msg || 'Ошибка';
-    btn.textContent = '✦ Gemini ✕';
-  }
-}
+// Start scan
+setTimeout(()=>runIdeas(false),2000);
 
-async function callGemini(prompt, maxTokens=400) {
-  const key = getApiKey();
-  if (!key) return null;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
-  const body = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: maxTokens, temperature: 0.4 },
-    systemInstruction: {
-      parts: [{ text: 'Ты — AI советник трейдера. Стратегия: Pump Exhaustion Reversion. Отвечай кратко (2-4 предложения), конкретно, на русском. Говори прямо.' }]
-    }
-  };
-  const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-  if (!r.ok) {
-    const err = await r.json().catch(()=>({}));
-    throw new Error(err?.error?.message || `HTTP ${r.status}`);
-  }
-  const data = await r.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  setGeminiStatus(true);
-  return text;
-}
-
-function checkApiKey() {
-  const tb = document.getElementById('topbar');
-  if (!tb) return;
-  const btn = document.createElement('button');
-  btn.id = 'api-key-btn';
-  btn.className = 'top-btn';
-  btn.onclick = promptApiKey;
-  if (!getApiKey()) {
-    btn.style.cssText = 'background:rgba(220,38,38,.12);border-color:#dc2626;color:#f87171;animation:pulse .8s infinite;';
-    btn.textContent = '🔑 Подключить AI';
-  } else {
-    btn.style.cssText = 'color:#4ade80;border-color:#334155;';
-    btn.textContent = '✦ Gemini ●';
-    btn.id = 'gemini-status-btn';
-  }
-  const divider = tb.querySelector('.tdiv:last-of-type');
-  if (divider) tb.insertBefore(btn, divider); else tb.appendChild(btn);
-}
-
-function showToast(msg) {
-  const t = document.createElement('div');
-  t.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#1e293b;color:#f8fafc;padding:8px 14px;border-radius:6px;font-size:11px;font-weight:600;z-index:9999;';
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 2500);
-}
-
-// ── AI Chat ──────────────────────────────────────────────────────
-// chatHistory declared above
-
-// ═══════════════════════════════════════════════════════
-//  TIMERS & INIT
-// ═══════════════════════════════════════════════════════
+// Timers
 setInterval(updateTopbar,1000);
-setInterval(checkPositionAlerts,3000);
 setInterval(()=>{
-  fetchCds(S.sym,'1h',120).then(c=>{if(c.length){S.cds1h=c;drawCandles('chart1h',S.cds1h,S.analysis?.readyToShort?S.analysis:null);drawVolume(S.cds1h);}});
-  fetchCds(S.sym,'15m',80).then(c=>{if(c.length){S.cds15m=c;S.cvdData=cvdFromCandles(c.slice(-80));drawCandles('chart15m',S.cds15m,S.analysis?.readyToShort?S.analysis:null);drawCVD(S.cvdData);}});
-  fetchFutures(S.sym);
+  if(S.sym){
+    fetchCds(S.sym,'1h',120).then(c=>{if(c.length){S.cds1h=c;if(S.cds1h.length)drawCandles('chart1h',S.cds1h,null);if(S.cds1h.length)drawVolume(S.cds1h);}}).catch(()=>{});
+    fetchCds(S.sym,'15m',80).then(c=>{if(c.length){S.cds15m=c;S.cvdData=cvdFromCandles(c.slice(-80));drawCandles('chart15m',S.cds15m,null);drawCVD(S.cvdData);}}).catch(()=>{});
+    fetchFutures(S.sym);
+  }
   S.nextRefresh=Date.now()+REFRESH_INTERVAL;
 },REFRESH_INTERVAL);
 setInterval(()=>runIdeas(false),IDEAS_INTERVAL);
 setInterval(()=>{
-  // Refresh vol ranking with latest prices from Binance
   fetch(`${FAPI}/ticker/24hr`).then(r=>r.json()).then(t=>{
-    if(!Array.isArray(t)) return;
+    if(!Array.isArray(t))return;
     const top=t.filter(x=>x.symbol.endsWith('USDT')&&!x.symbol.includes('_'))
-      .map(x=>({sym:x.symbol,chgPct:Math.abs(+x.priceChangePercent),vol:+x.quoteVolume,hlRatio:(+x.highPrice-+x.lowPrice)/(+x.lowPrice||1)*100,volScore:Math.abs(+x.priceChangePercent)*2+(+x.quoteVolume>50e6?3:1)}))
-      .filter(x=>x.vol>2e6).sort((a,b)=>b.volScore-a.volScore).slice(0,10);
+      .map(x=>({sym:x.symbol,chgPct:Math.abs(+x.priceChangePercent),vol:+x.quoteVolume,score:Math.abs(+x.priceChangePercent)*2.5+(+x.quoteVolume>100e6?4:+x.quoteVolume>30e6?2:1)}))
+      .filter(x=>x.vol>1e6).sort((a,b)=>b.score-a.score).slice(0,10);
     renderVolatility(top);
   }).catch(()=>{});
 },VOL_INTERVAL);
 
-// INIT
-connectWS();
-loadSym('SOLUSDT');
-checkApiKey();
-setTimeout(()=>runIdeas(false),3000);
+// Notification permission
+if(typeof Notification!=='undefined'&&Notification.permission==='default'){Notification.requestPermission();}
 </script>
 </body>
 </html>
