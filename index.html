@@ -1767,7 +1767,7 @@ function connectWS(){
     ws=new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
     ws.onopen=()=>{S.wsOk=true;setStatus('LIVE','live');};
     ws.onmessage=e=>{
-      try{const{data:d}=JSON.parse(e.data);if(d){S.prices[d.s]={price:+d.c,change:+d.P};S.lastPoll=Date.now();updateTopbar();}}catch{}
+      try{const{data:d}=JSON.parse(e.data);if(d){S.prices[d.s]={price:+d.c,change:+d.P||0};S.lastPoll=Date.now();updateTopbar();}}catch{}
     };
     ws.onclose=()=>{S.wsOk=false;if(retries<5){setTimeout(connect,3000);retries++;}};
     ws.onerror=()=>{S.wsOk=false;};
@@ -1810,8 +1810,9 @@ function updateTopbar(){
   if(t){
     document.getElementById('price-display').textContent='$'+fmt(t.price);
     const cd=document.getElementById('change-display');
-    cd.textContent=(t.change>=0?'▲':'▼')+Math.abs(t.change).toFixed(2)+'%';
-    cd.style.color=t.change>=0?'#4ade80':'#f87171';
+    const chg = t.change||0;
+    cd.textContent=(chg>=0?'▲':'▼')+Math.abs(chg).toFixed(2)+'%';
+    cd.style.color=chg>=0?'#4ade80':'#f87171';
   }
   const sec=Math.max(0,Math.round((S.nextRefresh-Date.now())/1000));
   const rt=document.getElementById('refresh-timer');
@@ -1920,6 +1921,13 @@ async function sendChat(userMsg){
   }
 }
 function askQuick(q){sendChat(q);}
+function askAIAboutSignal(sym, label, dir, reason) {
+  const msg = `Проанализируй сигнал: ${sym} ${label} ${dir}. Причина: ${reason}. Надёжный ли сигнал? Стоит ли входить?`;
+  sendChat(msg);
+  // Switch to chat panel if visible
+  const chatMsgs = document.getElementById('chat-messages');
+  if (chatMsgs) chatMsgs.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
  function appendMsg(role,text){
   const msgs=document.getElementById('chat-messages');
   if(!msgs) return;
