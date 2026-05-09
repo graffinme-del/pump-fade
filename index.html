@@ -991,29 +991,41 @@ function saveWR(){try{localStorage.setItem(MEMORY_KEY,JSON.stringify(S.winrates)
 S.winrates=loadWR();
 
 function scheduleWinrateCheck(idea){
-  const checks=[4,8,24]; // hours
-  checks.forEach(h=>{
-    setTimeout(async()=>{
-      const lp=await fetchPrice(idea.sym);
-      if (!lp) return;
-      let result='pending';
-      if (idea.dir==='SHORT') {
-        if (lp<=idea.tp1) result='win';
-        else if (lp>=idea.sl) result='loss';
-      } else if (idea.dir==='LONG') {
-        if (lp>=idea.tp1) result='win';
-        else if (lp<=idea.sl) result='loss';
-      }
-      if (result!=='pending') {
-        const existing=S.winrates.find(w=>w.sym===idea.sym&&w.ts===idea.ts);
-        if (!existing||existing.result==='pending') {
-          if (existing) existing.result=result;
-          else S.winrates.unshift({sym:idea.sym,dir:idea.dir,entry:idea.entry,tp:idea.tp1,sl:idea.sl,ts:idea.ts,result,checkedAt:Date.now(),checkHours:h});
-          saveWR(); renderWinrates();
-          if (result==='win') notify(`✅ TP достигнут — ${idea.sym.replace('USDT','')}`,`+${Math.abs((lp-idea.entry)/idea.entry*100).toFixed(1)}%`);
+  if (!idea.sym || !idea.entry || !idea.sl || !idea.tp1) return;
+  // Don't double-schedule
+  if (S.winrates.find(w => w.sym===idea.sym && Math.abs(w.ts-idea.ts)<60000)) return;
+  // Add pending entry immediately
+  S.winrates.unshift({
+    sym:idea.sym, dir:idea.dir||'?', entry:idea.entry,
+    tp:idea.tp1, sl:idea.sl, ts:idea.ts||Date.now(),
+    result:'pending', checkedAt:null, checkHours:null,
+    pumpPct:idea.pumpPct, conf:idea.conf
+  });
+  saveWR();
+  const checks = [4, 8, 24];
+  checks.forEach(h => {
+    setTimeout(async() => {
+      try {
+        const lp = await fetchPrice(idea.sym);
+        if (!lp) return;
+        const rec = S.winrates.find(w => w.sym===idea.sym && Math.abs((w.ts||0)-(idea.ts||0))<60000);
+        if (!rec || rec.result !== 'pending') return;
+        if (idea.dir==='SHORT') {
+          if (lp <= idea.tp1) rec.result = 'win';
+          else if (lp >= idea.sl) rec.result = 'loss';
+        } else {
+          if (lp >= idea.tp1) rec.result = 'win';
+          else if (lp <= idea.sl) rec.result = 'loss';
         }
-      }
-    }, h*3600*1000);
+        if (rec.result !== 'pending') {
+          rec.checkedAt = Date.now(); rec.checkHours = h; rec.closePrice = lp;
+          rec.pnl = idea.dir==='SHORT' ? (idea.entry-lp)/idea.entry*100 : (lp-idea.entry)/idea.entry*100;
+          saveWR(); renderWinrates();
+          if (rec.result==='win') notify(`✅ TP hit — ${idea.sym.replace('USDT','')}`, `+${rec.pnl.toFixed(2)}% за ${h}ч`);
+          else notify(`❌ SL hit — ${idea.sym.replace('USDT','')}`, `${rec.pnl.toFixed(2)}% за ${h}ч`);
+        }
+      } catch(e) {}
+    }, h * 3600 * 1000);
   });
 }
 
@@ -1022,11 +1034,49 @@ async function fetchPrice(sym){
 }
 
 function renderWinrates(){
-  const wins=S.winrates.filter(w=>w.result==='win').length;
-  const total=S.winrates.filter(w=>w.result!=='pending').length;
-  const wr=total>0?(wins/total*100).toFixed(0):0;
-  // Update winrate display in phase content if active
   if (S.phase===5) renderPhaseContent();
+}
+
+function renderWinratesPanel() {
+  const wins  = S.winrates.filter(w=>w.result==='win').length;
+  const losses = S.winrates.filter(w=>w.result==='loss').length;
+  const pend  = S.winrates.filter(w=>w.result==='pending').length;
+  const total = wins + losses;
+  const wr = total > 0 ? (wins/total*100).toFixed(0) : '—';
+  const avgWin  = S.winrates.filter(w=>w.result==='win'&&w.pnl).reduce((s,w)=>s+w.pnl,0) / (wins||1);
+  const avgLoss = S.winrates.filter(w=>w.result==='loss'&&w.pnl).reduce((s,w)=>s+w.pnl,0) / (losses||1);
+  return `<div class="fade">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px;">
+      ${[
+        [wr+'%','Winrate','var(--green)'],
+        [wins,'TP','var(--green)'],
+        [losses,'SL','var(--red)'],
+        [pend,'Ожидают','var(--amber)'],
+      ].map(([v,l,c])=>`<div style="background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:7px;text-align:center;">
+        <div style="font-family:var(--mono);font-size:17px;font-weight:800;color:${c};">${v}</div>
+        <div style="font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:1px;">${l}</div>
+      </div>`).join('')}
+    </div>
+    ${total>0?`<div style="font-size:9px;color:var(--muted);margin-bottom:8px;">
+      Ср. прибыль: <b style="color:var(--green);">+${avgWin.toFixed(2)}%</b> · Ср. убыток: <b style="color:var(--red);">${avgLoss.toFixed(2)}%</b>
+    </div>`:''}
+    <div style="height:5px;background:var(--s3);border-radius:3px;margin-bottom:8px;">
+      <div style="height:100%;width:${wr==='—'?0:wr}%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:3px;transition:width .5s;"></div>
+    </div>
+    ${S.winrates.slice(0,30).map(w=>`
+      <div style="background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:5px 8px;margin-bottom:3px;display:flex;align-items:center;gap:6px;border-left:3px solid ${w.result==='win'?'var(--green)':w.result==='loss'?'var(--red)':'var(--amber)'};font-size:10px;cursor:pointer;"
+        onclick="loadSym('${w.sym}')">
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;">${w.sym.replace('USDT','')}</span>
+        <span style="color:var(--muted);">${w.dir}</span>
+        <span style="color:var(--muted);font-size:9px;">@$${fmt(w.entry)}</span>
+        <span style="margin-left:auto;font-size:9px;color:var(--muted);">${w.checkHours?w.checkHours+'ч':'—'}</span>
+        ${w.pnl!=null?`<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${w.result==='win'?'var(--green)':'var(--red)'};">${w.pnl>=0?'+':''}${w.pnl.toFixed(2)}%</span>`:''}
+        <span style="font-size:9px;font-weight:700;color:${w.result==='win'?'var(--green)':w.result==='loss'?'var(--red)':'var(--amber)'};">
+          ${w.result==='win'?'✓ TP':w.result==='loss'?'✗ SL':'⏳'}
+        </span>
+      </div>`).join('')}
+    ${S.winrates.length===0?'<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет данных. Нажмите ✦ AI анализ на карточке идеи — агент автоматически отслеживает результат.</div>':''}
+  </div>`;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1233,30 +1283,7 @@ function renderPhaseContent(){
   if (!el) return;
   const a=S.analysis;
 
-  if (S.phase===5) { // WINRATES
-    const wins=S.winrates.filter(w=>w.result==='win').length;
-    const losses=S.winrates.filter(w=>w.result==='loss').length;
-    const pend=S.winrates.filter(w=>w.result==='pending').length;
-    const total=wins+losses;
-    const wr=total>0?(wins/total*100).toFixed(0):0;
-    el.innerHTML=`<div class="fade">
-      <div class="wr-grid">
-        <div class="wr-box"><div class="wr-v" style="color:var(--green);">${wr}%</div><div class="wr-l">WR</div></div>
-        <div class="wr-box"><div class="wr-v" style="color:var(--green);">${wins}</div><div class="wr-l">TP</div></div>
-        <div class="wr-box"><div class="wr-v" style="color:var(--red);">${losses}</div><div class="wr-l">SL</div></div>
-      </div>
-      <div style="height:5px;background:var(--s3);border-radius:3px;margin-bottom:4px;"><div style="height:100%;width:${wr}%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:3px;"></div></div>
-      <div style="font-size:9px;color:var(--dim);margin-bottom:10px;">Авто-проверка 4h / 8h / 24h · ${pend} ожидают</div>
-      ${S.winrates.slice(0,20).map(w=>`
-        <div class="wr-item ${w.result}">
-          <span style="font-family:var(--mono);font-size:11px;font-weight:700;">${w.sym.replace('USDT','')}</span>
-          <span style="font-size:9px;color:var(--muted);flex:1;margin:0 5px;">${w.dir}</span>
-          <span style="font-family:var(--mono);font-size:9px;color:var(--dim);">${new Date(w.ts).toLocaleDateString()}</span>
-          <span style="font-size:9px;font-weight:700;color:${w.result==='win'?'var(--green)':w.result==='loss'?'var(--red)':'var(--amber)'};">${w.result==='win'?'✓ TP':w.result==='loss'?'✗ SL':'⏳'}</span>
-        </div>`).join('')}
-    </div>`;
-    return;
-  }
+  if (S.phase===5) { el.innerHTML = renderWinratesPanel(); return; } // WINRATES handled above
 
   if (S.phase===6) { // АГЕНТ
     el.innerHTML=`<div class="fade">
@@ -1480,6 +1507,44 @@ function setPhase(n, el=null){
   const target=document.getElementById(`pt${n}`)||el;
   if(target) target.classList.add('active');
   renderPhaseContent();
+  renderPhaseCoins(n); // show coins at this phase in sidebar
+}
+
+function renderPhaseCoins(phase) {
+  const list = document.getElementById('ideas-list');
+  if (!list) return;
+  const phaseNames = {1:'🔴 Памп', 2:'🟡 Истощение', 3:'🔴 Слом', 4:'✅ Вход', 5:'📊 Winrates', 6:'🤖 Агент'};
+  if (phase >= 5) { renderIdeas(); return; }
+  // Filter ideas that reached this phase
+  const coins = S.ideas.filter(idea => {
+    if (!idea.cds1h || !idea.cds15m) return false;
+    const a = analyzeFull(idea.cds1h, idea.cds15m, 'unknown', null);
+    return a && a.phase >= phase;
+  });
+  if (!coins.length) {
+    list.innerHTML = `<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">
+      Нет монет на фазе ${phase}.<br>
+      <span style="font-size:9px;color:var(--dim);">Агент сканирует рынок каждые 3м.</span>
+    </div>`;
+    return;
+  }
+  list.innerHTML = `<div style="padding:5px 7px;font-size:9px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border);">${phaseNames[phase]||'Фаза '+phase} · ${coins.length} монет</div>` +
+    coins.map((idea, i) => {
+      const a = analyzeFull(idea.cds1h, idea.cds15m, 'unknown', null);
+      const dc = idea.dir==='LONG'?'var(--green)':idea.dir==='SHORT'?'var(--red)':'var(--amber)';
+      return `<div class="idea-card ${idea.dir==='LONG'?'long':idea.dir==='SHORT'?'short':''}"
+        onclick="selectIdea(${S.ideas.indexOf(idea)})"
+        style="cursor:pointer;">
+        <div class="idea-hd">
+          <span class="idea-sym" style="color:${dc};">${idea.sym.replace('USDT','')}</span>
+          <span style="font-size:9px;color:${dc};font-weight:700;">${idea.dir||'?'}</span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);">
+          +${idea.pumpPct?.toFixed(1)||0}% · RSI ${idea.rsiNow?.toFixed(0)||'?'} · Vol×${idea.volRatio?.toFixed(1)||'?'}
+        </div>
+        <div style="font-size:8px;color:var(--dim);margin-top:2px;">${fmtAge(idea.ts)} · ${idea.conf?.toFixed(0)||0}/100</div>
+      </div>`;
+    }).join('');
 }
 
 function setRTab(name, btn){
@@ -1529,7 +1594,43 @@ async function sendChat(userMsg){
     if(chatHistory.length>12) chatHistory=chatHistory.slice(-12);
   }catch(e){document.getElementById(tid)?.remove();appendMsg('ai','Ошибка соединения.');}
 }
-function askQuick(q){sendChat(q);}
+function askQuick(q){ sendChat(q); }
+
+async function askAIAboutIdea(idx) {
+  const idea = S.ideas[idx];
+  if (!idea) return;
+  const commentEl = document.getElementById('ai-comment-' + idea.sym);
+  if (commentEl) { commentEl.style.color='var(--amber)'; commentEl.textContent='✦ Gemini анализирует...'; }
+  const a = idea.cds1h && idea.cds15m ? analyzeFull(idea.cds1h, idea.cds15m, 'unknown', null) : null;
+  const prompt = `Монета: ${idea.sym} | ${idea.dir} | уверенность ${idea.conf?.toFixed(0)||0}/100
+Памп: +${idea.pumpPct?.toFixed(1)||0}% за 8ч | Скорость: +${idea.pumpSpeed?.toFixed(1)||0}%/2ч
+EMA20 dist: ${idea.dist?.toFixed(1)||0}% | ATR×${idea.atrRatio?.toFixed(2)||1}
+Vol×${idea.volRatio?.toFixed(1)||1} | RSI: ${idea.rsiNow?.toFixed(0)||50}
+CVD: ${idea.cvdFalling?'↓ падает':'↑ растёт'}${idea.cvdDiv?' + дивергенция':''}
+Тренд 4h: ${idea.trend4h||'neutral'}
+Фаза анализа: ${a?.phase||0}/3 | Готов к входу: ${a?.readyToShort?'ДА':'НЕТ'}
+${a?.exSigs?.length ? 'Сигналы истощения: ' + a.exSigs.map(s=>s.t).join(', ') : ''}
+${a?.bkSigs?.length ? 'Слом структуры: ' + a.bkSigs.map(s=>s.t).join(', ') : ''}
+
+Дай конкретный ответ (3-4 предложения):
+1) Что происходит с монетой прямо сейчас
+2) Надёжен ли этот сигнал для входа
+3) Главный риск
+4) Рекомендация: входить / ждать / пропустить`;
+  try {
+    setGeminiStatus('working');
+    const reply = await callGemini(prompt, 250);
+    if (commentEl && reply) {
+      commentEl.style.cssText = 'margin-top:6px;font-size:10px;color:#1e40af;padding:8px 10px;background:var(--blue-bg);border:1px solid var(--blue-b);border-radius:4px;line-height:1.7;';
+      commentEl.innerHTML = '✦ <b>Gemini:</b> ' + reply.replace(/\n/g,'<br>');
+    }
+    // Also update winrate tracking
+    if (idea.entry && idea.sl && idea.tp1) scheduleWinrateCheck(idea);
+  } catch(e) {
+    if (commentEl) { commentEl.style.color='var(--red)'; commentEl.textContent='❌ ' + e.message; }
+    setGeminiStatus(false, e.message);
+  }
+}
 function appendMsg(role,text){
   const msgs=document.getElementById('chat-messages');
   const div=document.createElement('div');
@@ -1589,6 +1690,19 @@ function promptApiKey() {
   }
 }
 
+function setGeminiStatus(ok, msg) {
+  const btn = document.getElementById('gemini-status-btn') || document.getElementById('api-key-btn');
+  if (!btn) return;
+  if (ok === 'working') {
+    btn.style.color = '#f59e0b'; btn.textContent = '✦ Gemini ●';
+  } else if (ok === true) {
+    btn.style.color = '#4ade80'; btn.textContent = '✦ Gemini ●';
+  } else {
+    btn.style.color = '#f87171'; btn.title = msg || 'Ошибка';
+    btn.textContent = '✦ Gemini ✕';
+  }
+}
+
 async function callGemini(prompt, maxTokens=400) {
   const key = getApiKey();
   if (!key) return null;
@@ -1606,7 +1720,9 @@ async function callGemini(prompt, maxTokens=400) {
     throw new Error(err?.error?.message || `HTTP ${r.status}`);
   }
   const data = await r.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  setGeminiStatus(true);
+  return text;
 }
 
 function checkApiKey() {
@@ -1617,11 +1733,12 @@ function checkApiKey() {
   btn.className = 'top-btn';
   btn.onclick = promptApiKey;
   if (!getApiKey()) {
-    btn.style.cssText = 'background:rgba(74,222,128,.12);border-color:#4ade80;color:#4ade80;animation:pulse .8s infinite;';
+    btn.style.cssText = 'background:rgba(220,38,38,.12);border-color:#dc2626;color:#f87171;animation:pulse .8s infinite;';
     btn.textContent = '🔑 Подключить AI';
   } else {
     btn.style.cssText = 'color:#4ade80;border-color:#334155;';
-    btn.textContent = '✦ Gemini';
+    btn.textContent = '✦ Gemini ●';
+    btn.id = 'gemini-status-btn';
   }
   const divider = tb.querySelector('.tdiv:last-of-type');
   if (divider) tb.insertBefore(btn, divider); else tb.appendChild(btn);
@@ -1637,75 +1754,6 @@ function showToast(msg) {
 
 // ── AI Chat ──────────────────────────────────────────────────────
 // chatHistory declared above
-
-function buildContext() {
-  const a = S.analysis; const lp = S.prices[S.sym]?.price;
-  let ctx = `[Рынок · ${new Date().toLocaleTimeString()}]\nМонета: ${S.sym} | Цена: $${fmt(lp)}\n`;
-  if (a) {
-    ctx += `Памп: +${a.pumpPct?.toFixed(1)||0}% | Фаза: ${a.phase}/3 | ${a.readyToShort?'✅ СИГНАЛ':'⏳ Ждём'}\n`;
-    ctx += `EMA20 dist: ${a.distE20?.toFixed(1)||0}% | ATR×${a.atrRatio?.toFixed(2)||1} | RSI: ${a.rsiNow1h?.toFixed(0)||50}\n`;
-  }
-  return ctx;
-}
-
-async function sendChat(userMsg) {
-  const inp = document.getElementById('chat-input');
-  const msg = userMsg || inp?.value?.trim();
-  if (!msg) return;
-  if (inp && !userMsg) inp.value = '';
-  appendMsg('user', msg);
-  const tid = 't' + Date.now();
-  appendThinking(tid);
-  try {
-    if (!getApiKey()) {
-      document.getElementById(tid)?.remove();
-      appendMsg('ai', '⚠️ Нужен Gemini API ключ.\nНажмите 🔑 Подключить AI в топбаре.\n\nКлюч бесплатно: aistudio.google.com → Get API Key');
-      return;
-    }
-    const fullPrompt = buildContext() + '\n---\nВопрос: ' + msg;
-    const reply = await callGemini(fullPrompt, 400);
-    document.getElementById(tid)?.remove();
-    if (!reply) { appendMsg('ai', '⚠️ Gemini не ответил. Попробуйте снова.'); return; }
-    appendMsg('ai', reply);
-    chatHistory.push({role:'user',content:msg},{role:'assistant',content:reply});
-    if (chatHistory.length > 10) chatHistory = chatHistory.slice(-10);
-  } catch(e) {
-    document.getElementById(tid)?.remove();
-    if (e.message?.includes('429')) {
-      appendMsg('ai', '⏳ Лимит Gemini (15 запросов/мин). Подождите минуту и повторите.');
-    } else {
-      appendMsg('ai', '❌ Ошибка: ' + (e.message || 'неизвестная'));
-    }
-  }
-}
-
-function askQuick(q) { sendChat(q); }
-
-function appendMsg(role, text) {
-  const msgs = document.getElementById('chat-messages');
-  if (!msgs) return;
-  const div = document.createElement('div');
-  if (role === 'user') {
-    div.className = 'msg-user'; div.textContent = text;
-  } else {
-    div.className = 'msg-ai';
-    const safe = String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
-    div.innerHTML = `<div class="msg-ai-hd">✦ Gemini · ${new Date().toLocaleTimeString()}</div>${safe}`;
-  }
-  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
-}
-
-function appendThinking(id) {
-  const msgs = document.getElementById('chat-messages');
-  if (!msgs) return;
-  const div = document.createElement('div');
-  div.className = 'msg-thinking'; div.id = id; div.textContent = '● думаю...';
-  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
-}
-
-async function runAI() {
-  await sendChat('Полный анализ текущей ситуации — стоит ли входить?');
-}
 
 // ═══════════════════════════════════════════════════════
 //  TIMERS & INIT
