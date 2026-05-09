@@ -1903,9 +1903,7 @@ function askQuick(q){sendChat(q);}
   else{div.className='msg-ai';const safe=String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');div.innerHTML=`<div class="msg-ai-hd">✦ Gemini · ${new Date().toLocaleTimeString()}</div>${safe}`;}
   msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
 }
-  else{div.className='msg-ai';div.innerHTML=`<div class="msg-ai-hd">🤖 AI · ${new Date().toLocaleTimeString()}</div>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}`;}
-  msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
-}
+
 function appendThinking(id){
   const msgs=document.getElementById('chat-messages');
   if(!msgs) return;
