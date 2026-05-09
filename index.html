@@ -1435,10 +1435,9 @@ async function selectIdea(i){
 
 async function loadSym(sym, idea=null){
   S.sym=sym;
-  document.getElementById('sym-label').textContent=sym.replace('USDT','');
-  document.getElementById('ctf1h').textContent=`1H · ${sym.replace('USDT','')}`;
-  document.getElementById('ctf15m').textContent=`15M · ${sym.replace('USDT','')}`;
-  document.getElementById('futures-title').textContent=`Фьючерсы · ${sym.replace('USDT','')}`;
+  const _$=id=>document.getElementById(id);
+  const sname=sym.replace('USDT','');
+  [['sym-label',sname],['ctf1h','1H · '+sname],['ctf15m','15M · '+sname],['futures-title','Фьючерсы · '+sname]].forEach(([id,val])=>{const el=_$(id);if(el)el.textContent=val;});
 
   // Load candles if not passed from idea
   const [c1h,c15m] = await Promise.all([
@@ -1459,26 +1458,19 @@ async function loadSym(sym, idea=null){
   // Draw everything
   redrawAllCharts();
 
-  // Update labels
+  // Update labels (null-safe)
   const a=S.analysis;
+  const $=id=>document.getElementById(id);
   if (a) {
-    document.getElementById('pump-label').textContent=
-      `${a.isPumped?'🔴':'📊'} +${a.pumpPct.toFixed(1)}% · ${a.distE20.toFixed(1)}% от EMA20`;
-    document.getElementById('pump-label').style.color=a.isPumped?'var(--red)':a.pumpPct>PUMP_THRESH/2?'var(--orange)':'var(--muted)';
-    document.getElementById('entry-lines-label').style.display=a.readyToShort?'flex':'none';
-    document.getElementById('entry-badge').style.display=a.readyToShort?'inline-block':'none';
-    // CVD label
+    const pl=$('pump-label');
+    if(pl){pl.textContent=`${a.isPumped?'🔴':'📊'} +${a.pumpPct.toFixed(1)}% · ${a.distE20.toFixed(1)}% от EMA20`;pl.style.color=a.isPumped?'var(--red)':a.pumpPct>PUMP_THRESH/2?'var(--orange)':'var(--muted)';}
+    const ell=$('entry-lines-label');if(ell)ell.style.display=a.readyToShort?'flex':'none';
+    const eb=$('entry-badge');if(eb)eb.style.display=a.readyToShort?'inline-block':'none';
     const cvdFall=S.cvdData.length>10&&S.cvdData[S.cvdData.length-1]<S.cvdData[Math.max(0,S.cvdData.length-10)];
-    document.getElementById('cvd-label').textContent=cvdFall?'↓ медвежий':'↑ бычий';
-    document.getElementById('cvd-label').style.color=cvdFall?'var(--red)':'var(--green)';
-    document.getElementById('cvd-trend').textContent=cvdFall?'↓ МЕДВЕЖИЙ':'↑ БЫЧИЙ';
-    document.getElementById('cvd-trend').style.color=cvdFall?'var(--red)':'var(--green)';
-    document.getElementById('cvd-div').textContent=a.cvdDiv?'⚠ Дивергенция':'Нет';
-    document.getElementById('cvd-div').style.color=a.cvdDiv?'var(--red)':'var(--muted)';
-    // OI accel
-    const oiAccelEl=document.getElementById('oi-accel');
-    if (a.oiDecelerating) {oiAccelEl.textContent='↓ замедляется';oiAccelEl.style.color='var(--green)';}
-    else {oiAccelEl.textContent='↑ нарастает';oiAccelEl.style.color='var(--red)';}
+    const cl=$('cvd-label');if(cl){cl.textContent=cvdFall?'↓ медвежий':'↑ бычий';cl.style.color=cvdFall?'var(--red)':'var(--green)';}
+    const ct=$('cvd-trend');if(ct){ct.textContent=cvdFall?'↓ МЕДВЕЖИЙ':'↑ БЫЧИЙ';ct.style.color=cvdFall?'var(--red)':'var(--green)';}
+    const cd=$('cvd-div');if(cd){cd.textContent=a.cvdDiv?'⚠ Дивергенция':'Нет';cd.style.color=a.cvdDiv?'var(--red)':'var(--muted)';}
+    const oa=$('oi-accel');if(oa){oa.textContent=a.oiDecelerating?'↓ замедляется':'↑ нарастает';oa.style.color=a.oiDecelerating?'var(--green)':'var(--red)';}
   }
 
   // Update phase & content
@@ -2014,7 +2006,14 @@ async function callGemini(prompt, maxTokens=400) {
     const err = await r.json().catch(()=>({}));
     const msg = err?.error?.message || `HTTP ${r.status}`;
     if (r.status === 400 && msg.includes('API_KEY')) throw new Error('Неверный API ключ. Проверьте на aistudio.google.com');
-    if (r.status === 429) throw new Error('Превышен лимит запросов. Подождите минуту.');
+    if (r.status === 429) {
+      // Auto-retry after 10 seconds
+      await new Promise(r=>setTimeout(r,10000));
+      const r2 = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      if (!r2.ok) throw new Error('Превышен лимит запросов. Попробуйте через минуту.');
+      const data2 = await r2.json();
+      return data2?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    }
     throw new Error(msg);
   }
   const data = await r.json();
