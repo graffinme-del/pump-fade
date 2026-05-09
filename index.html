@@ -467,6 +467,8 @@ function drawCVD(data){
   s.setData(d);lw.series.cvd=s;chart.timeScale().fitContent();
   const lbl=document.getElementById('cvd-label');
   if(lbl){lbl.textContent=falling?'↓ медвежий':'↑ бычий';lbl.style.color=falling?'var(--red)':'var(--green)';}
+  // Update coin card CVD fields
+  if(typeof updateFuturesDisplay==='function') updateFuturesDisplay();
 }
 
 function drawVolume(cds){
@@ -798,7 +800,7 @@ async function loadSym(sym,idea=null){
     const pl=$('pump-label');
     if(pl){pl.textContent=`${a.isPumped?'🔴':'📊'} +${a.pumpPct.toFixed(1)}% · ${a.distE20.toFixed(1)}% от EMA20`;pl.style.color=a.isPumped?'var(--red)':a.pumpPct>PUMP_THRESH/2?'var(--orange)':'var(--muted)';}
   }
-  // Fetch futures
+  // Fetch futures (and update coin card display)
   fetchFutures(sym);
   // Draw charts
   redrawCharts();
@@ -871,6 +873,33 @@ function showCoinCard(idea,analysis){
       <div class="stat-item"><div class="sl">RSI</div><div class="sv" style="color:${idea.rsiNow>70?'var(--red)':idea.rsiNow<30?'var(--green)':'var(--muted)'};">${idea.rsiNow.toFixed(0)}</div></div>
       <div class="stat-item"><div class="sl">ATR ratio</div><div class="sv" style="color:${idea.atrRatio>1.5?'var(--red)':'var(--muted)'};">×${idea.atrRatio.toFixed(2)}</div></div>
       <div class="stat-item"><div class="sl">CVD</div><div class="sv" style="color:${idea.cvdDiv?'var(--red)':idea.cvdFalling?'var(--amber)':'var(--green)'};">${idea.cvdDiv?'div':idea.cvdFalling?'↓':'↑'}</div></div>
+    </div>
+
+    <!-- OI + CVD Data -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px;">
+      <div style="background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;">
+        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">CVD · 15m</div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+          <span style="color:var(--muted);">Тренд дельты</span>
+          <span id="cc-cvd-trend" style="font-weight:700;">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;">
+          <span style="color:var(--muted);">Дивергенция</span>
+          <span id="cc-cvd-div" style="font-weight:700;">—</span>
+        </div>
+      </div>
+      <div style="background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;">
+        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">Фьючерсы</div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+          <span style="color:var(--muted);">Open Interest</span>
+          <span id="cc-oi" style="font-weight:700;color:var(--sky);">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+          <span style="color:var(--muted);">Funding Rate</span>
+          <span id="cc-fr" style="font-weight:700;">—</span>
+        </div>
+        <div id="cc-fr-warn" style="display:none;font-size:9px;padding:3px 5px;border-radius:2px;margin-top:3px;font-weight:600;"></div>
+      </div>
     </div>
 
     <!-- TF Badges -->
@@ -1064,7 +1093,7 @@ async function callGemini(prompt,maxTokens=400){
   const body={
     contents:[{parts:[{text:prompt}]}],
     generationConfig:{maxOutputTokens:maxTokens,temperature:0.4},
-    systemInstruction:{parts:[{text:'Ты — AI советник трейдера. Стратегии: Pump Exhaustion Reversion, разворот тренда, перепроданность RSI. Отвечай кратко (3-5 предложений), конкретно, на русском. Говори прямо: входить/не входить, держать/закрывать. Учитывай все таймфреймы.'}]}
+    systemInstruction:{parts:[{text:'Ты — AI советник трейдера. Стратегии: Pump Exhaustion Reversion, разворот тренда, перепроданность RSI. Отвечай конкретно и полно, на русском. Не обрывай мысль. Говори прямо: входить/не входить, держать/закрывать. Учитывай все таймфреймы.'}]}
   };
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!r.ok){
@@ -1104,7 +1133,7 @@ ${idea.entry?`Entry: $${fmt(idea.entry)} | SL: $${fmt(idea.sl)} | TP: $${fmt(ide
 3) Рекомендация: ВХОДИТЬ / ЖДАТЬ / ПРОПУСТИТЬ`;
   try{
     updateGeminiBtn('working');
-    const reply=await callGemini(prompt,300);
+    const reply=await callGemini(prompt,600);
     if(box&&reply){
       box.style.display='block';
       box.innerHTML=`<b style="font-size:9px;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">✦ Gemini · ${new Date().toLocaleTimeString()}</b>${reply.replace(/\n/g,'<br>')}`;
@@ -1156,7 +1185,7 @@ async function sendChat(userMsg){
     updateGeminiBtn('working');
     const hist=chatHistory.slice(-4).map(m=>`${m.role}: ${m.content.substring(0,100)}`).join('\n');
     const fullPrompt=buildContext()+extra+(hist?'\n\n[История]\n'+hist:'')+'\n\n---\nВопрос: '+msg;
-    const reply=await callGemini(fullPrompt,500);
+    const reply=await callGemini(fullPrompt,600);
     document.getElementById(tid)?.remove();
     if(!reply){appendMsg('ai','⚠️ Gemini не ответил. Попробуйте снова.');return;}
     appendMsg('ai',reply);
@@ -1197,9 +1226,36 @@ async function fetchCds(sym,iv,limit=120){
 async function fetchFutures(sym){
   try{const r=await fetch(`${FAPI}/openInterest?symbol=${sym}`);const j=await r.json();if(j.openInterest)S.oi=+j.openInterest;}catch{S.oi=null;}
   try{const r=await fetch(`${FAPI}/fundingRate?symbol=${sym}&limit=1`);const j=await r.json();if(Array.isArray(j)&&j[0])S.fr=+j[0].fundingRate*100;}catch{S.fr=null;}
-  // Update OI/FR display
+  updateFuturesDisplay();
+}
+
+function updateFuturesDisplay(){
+  // Mini topbar indicator
   const el=document.getElementById('oi-fr');
   if(el)el.textContent=S.fr!=null?`FR: ${S.fr>0?'+':''}${S.fr.toFixed(4)}%`:'—';
+  // Coin card fields
+  const ccOI=document.getElementById('cc-oi');
+  if(ccOI)ccOI.textContent=S.oi!=null?fmt(S.oi)+' контр':'—';
+  const ccFR=document.getElementById('cc-fr');
+  if(ccFR){
+    ccFR.textContent=S.fr!=null?`${S.fr>0?'+':''}${S.fr.toFixed(4)}%`:'—';
+    if(ccFR)ccFR.style.color=S.fr!=null?(S.fr>0?'var(--red)':'var(--green)'):'var(--muted)';
+  }
+  const ccWarn=document.getElementById('cc-fr-warn');
+  if(ccWarn){
+    if(S.fr!=null&&Math.abs(S.fr)>0.05){
+      ccWarn.style.display='block';
+      ccWarn.textContent=S.fr>0?'⚠ Лонги перегреты — фаворизирует шорт':'⚠ Шорты перегреты';
+      ccWarn.style.cssText=`display:block;font-size:9px;padding:3px 5px;border-radius:2px;margin-top:3px;font-weight:600;background:${S.fr>0?'var(--red-bg)':'var(--green-bg)'};color:${S.fr>0?'var(--red)':'var(--green)'};`;
+    } else ccWarn.style.display='none';
+  }
+  // CVD fields
+  const cvdFall=S.cvdData.length>10&&S.cvdData[S.cvdData.length-1]<S.cvdData[Math.max(0,S.cvdData.length-10)];
+  const cvdDiv=S.analysis?.cvdDiv;
+  const ccCVD=document.getElementById('cc-cvd-trend');
+  if(ccCVD){ccCVD.textContent=cvdFall?'↓ МЕДВЕЖИЙ':'↑ БЫЧИЙ';ccCVD.style.color=cvdFall?'var(--red)':'var(--green)';}
+  const ccCVDdiv=document.getElementById('cc-cvd-div');
+  if(ccCVDdiv){ccCVDdiv.textContent=cvdDiv?'⚠ Дивергенция':'Нет';ccCVDdiv.style.color=cvdDiv?'var(--red)':'var(--muted)';}
 }
 
 // ═══════════════════════════════════════════════════════
