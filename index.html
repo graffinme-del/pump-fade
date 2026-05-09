@@ -1720,7 +1720,8 @@ function openPosition(dir,sym,entry,sl,tp1,tp2){
 async function fetchFutures(sym){
   try{const r=await fetch(`${FAPI}/openInterest?symbol=${sym}`);const j=await r.json();if(j.openInterest)S.oi=+j.openInterest;}catch{S.oi=null;}
   try{const r=await fetch(`${FAPI}/fundingRate?symbol=${sym}&limit=1`);const j=await r.json();if(Array.isArray(j)&&j[0])S.fr=+j[0].fundingRate*100;}catch{S.fr=null;}
-  try{const r=await fetch(`${FAPI}/openInterestHist?symbol=${sym}&period=1h&limit=8`);const j=await r.json();if(Array.isArray(j))S.oiHist=j.map(o=>+o.sumOpenInterest);}catch{S.oiHist=[];}
+  // openInterestHist blocked by CORS on browser - skip
+  S.oiHist=[];
   renderFutures();
 }
 
@@ -1749,9 +1750,10 @@ function renderFutures(){
 // ═══════════════════════════════════════════════════════
 async function fetchCds(sym,iv,limit=200){
   try{
-    const r=await fetch(`${BINANCE}/klines?symbol=${sym}&interval=${iv}&limit=${limit}`);
+    // Try futures API first (no CORS issues)
+    const r=await fetch(`${FAPI}/klines?symbol=${sym}&interval=${iv}&limit=${limit}`);
     const raw=await r.json();
-    if(Array.isArray(raw)) return raw.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
+    if(Array.isArray(raw)&&raw.length>0) return raw.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
   }catch{}
   return [];
 }
@@ -1916,7 +1918,16 @@ async function sendChat(userMsg){
   } catch(e) {
     document.getElementById(tid)?.remove();
     const errMsg = e.message || 'неизвестная ошибка';
-    appendMsg('ai', `❌ Ошибка: ${errMsg}\n\nПроверьте:\n• API ключ на aistudio.google.com\n• Подключение к интернету`);
+    if (errMsg.includes('429') || errMsg.includes('лимит') || errMsg.includes('Лимит')) {
+      appendMsg('ai', '⏳ Превышен лимит Gemini (15 запросов/мин).
+
+Автоматически повторю через 15 секунд...');
+      setTimeout(() => sendChat(msg), 16000);
+    } else {
+      appendMsg('ai', `❌ Ошибка: ${errMsg}
+
+Проверьте API ключ на aistudio.google.com`);
+    }
     console.error('Gemini error:', e);
   }
 }
