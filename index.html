@@ -561,14 +561,16 @@ function analyzeFull(cds1h,cds15m){
 // ═══════════════════════════════════════════════════════
 async function scoreForIdea(sym){
   try{
-    const[r1h,r15m,r4h]=await Promise.all([
+    const[r1h,r15m,r4h,r5m]=await Promise.all([
       fetch(`${FAPI}/klines?symbol=${sym}&interval=1h&limit=120`),
       fetch(`${FAPI}/klines?symbol=${sym}&interval=15m&limit=80`),
       fetch(`${FAPI}/klines?symbol=${sym}&interval=4h&limit=60`),
+      fetch(`${FAPI}/klines?symbol=${sym}&interval=5m&limit=60`),
     ]);
-    const[j1h,j15m,j4h]=await Promise.all([r1h.json(),r15m.json(),r4h.json()]);
+    const[j1h,j15m,j4h,j5m]=await Promise.all([r1h.json(),r15m.json(),r4h.json(),r5m.json()]);
     if(!Array.isArray(j1h)||j1h.length<30)return null;
     const parse=arr=>arr.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
+    const cds5m=Array.isArray(j5m)?parse(j5m):[];
     const cds1h=parse(j1h),cds15m=Array.isArray(j15m)?parse(j15m):[],cds4h=Array.isArray(j4h)?parse(j4h):[];
     const c1h=cds1h.map(c=>c.close),v1h=cds1h.map(c=>c.volume),n1h=cds1h.length-1;
     const e20=ema(c1h,20),e50=ema(c1h,50),ve20=ema(v1h,20);
@@ -619,6 +621,38 @@ async function scoreForIdea(sym){
     const crossedUp=e20_15n&&p15>e20_15n&&cds15m.length>1&&cds15m[cds15m.length-2].close<(e20_15m_arr[e20_15m_arr.length-2]||e20_15n);
     const rsi15=cds15m.length>20?rsi(cds15m.map(c=>c.close)):[];
     const rsiNow15=rsi15.length?rsi15[rsi15.length-1]:50;
+    // ── EARLY PUMP (5m) — из early_pump_scanner.py ──
+    let earlyPumpConf=0,earlyPumpSigs=[];
+    if(cds5m.length>=30){
+      const last5=cds5m[cds5m.length-1];
+      const body5=last5.open>0?(last5.close-last5.open)/last5.open*100:0;
+      const vols5=cds5m.slice(-48).map(c=>c.volume);
+      const med5=[...vols5].sort((a,b)=>a-b)[Math.floor(vols5.length/2)]||1;
+      const vr5=last5.volume/med5;
+      const barRange5=last5.high-last5.low||0.0001;
+      const taker5=Math.abs(last5.close-last5.open)/barRange5;
+      const c5=cds5m.map(c=>c.close);
+      const rsi5arr=rsi(c5); const rsi5now=rsi5arr[rsi5arr.length-1];
+      const e20_5=ema(c5,20); const emaPct5=e20_5[e20_5.length-1]>0?(c5[c5.length-1]-e20_5[e20_5.length-1])/e20_5[e20_5.length-1]*100:0;
+      let cvd5=0; const cvdArr5=cds5m.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cvd5+=b/r*c.volume;return cvd5;});
+      const cvdDelta5=cvdArr5[cvdArr5.length-1]-cvdArr5[Math.max(0,cvdArr5.length-7)];
+      if(body5>=0.35&&body5<=3.0&&vr5>=2.0&&vr5<=28&&rsi5now<80&&rsi5now>40){
+        let q=0;
+        if(vr5>=2&&vr5<=4)q+=25;else if(vr5<=10)q+=20;else q+=12;
+        if(body5>=0.5&&body5<=2.0)q+=18;else if(body5<0.5)q+=8;else q+=12;
+        if(taker5>=0.6)q+=15;else if(taker5>=0.4)q+=8;
+        if(cvdDelta5>0)q+=12;
+        if(rsi5now>=50&&rsi5now<=65)q+=10;else if(rsi5now<=75)q+=6;
+        if(emaPct5>0&&emaPct5<3)q+=10;else if(emaPct5>=3)q+=4;
+        if(cvdDelta5>0&&vr5>=3)q+=10;
+        q=Math.min(100,q);
+        if(q>=72){
+          earlyPumpConf=q;
+          earlyPumpSigs=[`🚀 Старт пампа: тело +${body5.toFixed(2)}%`,`Vol×${vr5.toFixed(1)}/мед`,`taker ${taker5.toFixed(2)}`,`CVD ${cvdDelta5>0?'↑':'↓'}`];
+        }
+      }
+    }
+
     let longConf=0,longDir=null,longSigs=[];
 
     // LONG: EMA20 crossover on 15m (works in any 4h trend)
@@ -664,7 +698,14 @@ async function scoreForIdea(sym){
       longConf=Math.min(78,45+(hTurning?6:0)+(!cvdFalling?5:0)+(rsiNow15<30?6:0));
       longSigs=[`📉 RSI 1h: ${rsiNow.toFixed(0)}, 15m: ${rsiNow15.toFixed(0)} — перепроданность`];longDir='LONG';
     }
-    // New pump
+    // Early pump from 5m scan
+    if(earlyPumpConf>=72&&!res.bestDir){
+      Object.assign(res,{bestDir:'LONG',bestConf:earlyPumpConf,bestSigs:earlyPumpSigs,
+        entry:p15,sl:p15*(1-atrv/p15*1.5||0.02),tp1:p15*(1+(atrv/p15*2||0.03)),tp2:p15*(1+(atrv/p15*4||0.05)),
+        rr:1.3,atrv,why:`Старт пампа 5m: тело +${cds5m.length?((cds5m[cds5m.length-1].close-cds5m[cds5m.length-1].open)/cds5m[cds5m.length-1].open*100).toFixed(2):0}%, качество ${earlyPumpConf}/100`,
+        earlyPump:true});
+    }
+    // New pump (1h)
     const isNewPump=pumpPct>=PUMP_THRESH&&pumpSpeed>=5&&volRatio>=1.5;
     const res={sym,cds1h,cds15m,price,pumpPct,pumpSpeed,dist,atrRatio,volRatio,rsiNow,bodyRatio,trend4h,shortConf,shortSigs,longConf,longDir,longSigs,isSharpPump,isNewPump,cvdFalling,cvdDiv};
     const atrv=atrCalc(cds15m.length>14?cds15m:cds1h);
@@ -1219,7 +1260,10 @@ verdict: GO=входить, SKIP=пропустить, WAIT=ждать подт�
     if (!r.ok) return null;
     const data = await r.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const m = text.match(/\{[\s\S]*?\}/);
+    // Find the outermost JSON object
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    const m = start>=0 && end>start ? [text.slice(start, end+1)] : null;
     if (!m) return null;
     return JSON.parse(m[0]);
   } catch(e) { return null; }
