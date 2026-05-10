@@ -923,8 +923,10 @@ async function runIdeas(manual=false){
           verdict:null, verdictReason:'', verdictConf:0};
         newIdeas.push(ideaObj);
         // Async Gemini verdict — doesn't block scan
-        // Stagger verdict requests to avoid rate limiting
+        // Stagger verdict requests — use newIdeas.length as counter
+        const verdictDelay = (newIdeas.length - 1) * 4000;
         setTimeout(() => {
+          if (!getApiKey()) { ideaObj.verdictChecked = true; return; }
           getGeminiVerdict(ideaObj).then(v => {
             ideaObj.verdictChecked = true;
             if (!v) { renderIdeas(); return; }
@@ -936,7 +938,7 @@ async function runIdeas(manual=false){
             }
             renderIdeas();
           }).catch(() => { ideaObj.verdictChecked = true; renderIdeas(); });
-        }, newIdeas.indexOf(ideaObj) * 3000); // 3s between each verdict request
+        }, verdictDelay);
       });
       await new Promise(r=>setTimeout(r,100));
     }
@@ -1005,7 +1007,8 @@ function renderIdeas(){
           idea.verdict==='SKIP' ? '' :
           idea.verdictChecked ?
           `<span style="font-size:8px;color:var(--dim);">—</span>` :
-          `<span style="font-size:8px;color:var(--dim);animation:pulse 1s infinite;">✦</span>`
+          getApiKey() ? `<span style="font-size:8px;color:var(--dim);animation:pulse 1s infinite;">✦</span>` :
+          `<span style="font-size:8px;color:var(--dim);">—</span>`
         }
         <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--muted)'};">${idea.conf.toFixed(0)}/100</span>
       </div>
