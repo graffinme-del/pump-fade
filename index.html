@@ -1437,6 +1437,7 @@ verdict: GO=входить, SKIP=пропустить, WAIT=ждать подт�
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${getApiKey()}`;
+    console.log('Calling Gemini verdict for', idea.sym, 'model:', GEMINI_MODEL);
     const r = await fetch(url, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
@@ -1444,9 +1445,10 @@ verdict: GO=входить, SKIP=пропустить, WAIT=ждать подт�
         generationConfig:{maxOutputTokens:150, temperature:0.1},
       })
     });
-    if (!r.ok) return null;
+    if (!r.ok) { const err = await r.json().catch(()=>({})); console.error('Verdict HTTP error:', r.status, err?.error?.message); return null; }
     const data = await r.json();
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    console.log('Verdict raw response:', raw.substring(0, 100));
     if (!raw) return null;
     // Remove ALL markdown code fences and get full text
     const clean = raw.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
@@ -1471,7 +1473,7 @@ verdict: GO=входить, SKIP=пропустить, WAIT=ждать подт�
       return {verdict, confidence:70, reason};
     }
     return null;
-  } catch(e) { return null; }
+  } catch(e) { console.error('getGeminiVerdict error:', e.message); return null; }
 }
 
 // AI analysis for coin card
