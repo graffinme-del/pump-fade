@@ -962,7 +962,7 @@ async function runIdeas(manual=false){
             const inList = S.ideas.find(i => i.sym === ideaObj.sym && Math.abs((i.ts||0)-(ideaObj.ts||0))<5000);
             const target = inList || ideaObj;
             target.verdict = v.verdict;
-            target.verdictReason = v.reason || '';
+            target.verdictReason = (v.reason || '').replace(/verdict\s*:\s*/gi,'').replace(/confidence\s*:\s*/gi,'').trim();
             target.verdictConf = parseInt(v.confidence) || 0;
             target.verdictChecked = true;
             if (v.verdict === 'SKIP') {
@@ -1589,7 +1589,12 @@ GO=enter now, SKIP=pass, WAIT=need confirmation`;
     // Fallback
     const upper = raw.toUpperCase();
     const verdict = upper.includes('"GO"')?'GO':upper.includes('"SKIP"')?'SKIP':upper.includes('"WAIT"')?'WAIT':null;
-    if (verdict) return {verdict, confidence:70, reason: clean.replace(/[{}"\n]/g,' ').trim().substring(0,150)};
+    if (verdict) {
+      // Extract just the reason text, remove JSON structure
+      const reasonMatch = clean.match(/"reason"\s*:\s*"([^"]+)"/);
+      const reason = reasonMatch ? reasonMatch[1] : clean.replace(/[{}"\n,]/g,' ').replace(/verdict\s*:\s*\w+/gi,'').replace(/confidence\s*:\s*\d+/gi,'').trim().substring(0,150);
+      return {verdict, confidence:70, reason};
+    }
     return null;
   } catch(e) { return null; }
 }
@@ -1597,8 +1602,26 @@ GO=enter now, SKIP=pass, WAIT=need confirmation`;
 
 async function askAIAboutIdea(idx){
   const idea=S.ideas[idx];if(!idea)return;
-  // Show thinking in chat
   const tid='t'+Date.now(); appendThinking(tid);
+  // If we already have a verdict, explain it — don't re-evaluate
+  if(idea.verdict && idea.verdictReason){
+    document.getElementById(tid)?.remove();
+    const a=S.analysis;
+    const detailPrompt=`${idea.sym} | ${idea.dir} | вердикт: ${idea.verdict}
+Причина вердикта: ${idea.verdictReason}
+Данные: +${idea.pumpPct?.toFixed(1)||0}% памп | EMA ${idea.dist?.toFixed(1)||0}% | RSI ${idea.rsiNow?.toFixed(0)||50} | Vol×${idea.volRatio?.toFixed(1)||1} | CVD:${idea.cvdFalling?'↓':'↑'} | 4h:${idea.trend4h||'?'}
+${a?'Фаза '+a.phase+'/3. '+( a.exSigs?.map(s=>s.t).join(', ')||''):''}
+${idea.entry?'Entry $'+fmt(idea.entry)+' · SL $'+fmt(idea.sl)+' · TP $'+fmt(idea.tp1)+' · R/R '+idea.rr:''}
+
+Объясни подробнее почему ${idea.verdict}: что именно подтверждает или опровергает сигнал, на что смотреть при входе, главный риск.`;
+    if(!getApiKey()){appendMsg('ai','⚠️ Нужен Gemini API ключ.');return;}
+    updateGeminiBtn('working');
+    try{
+      const reply=await callGemini(detailPrompt,600);
+      if(reply) appendMsg('ai',`[${idea.sym} · ${idea.verdict}] ${reply}`);
+    }catch(e){appendMsg('ai','❌ '+e.message);}
+    return;
+  }
   const a=S.analysis;
   const prompt=`Монета: ${idea.sym} | ${idea.dir} | уверенность ${idea.conf.toFixed(0)}/100
 Памп 8h: +${idea.pumpPct.toFixed(1)}% | Скорость: +${idea.pumpSpeed.toFixed(1)}%/2ч | EMA20 dist: ${idea.dist.toFixed(1)}%
