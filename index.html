@@ -632,30 +632,123 @@ async function scoreForIdea(sym){
     const rsi15=cds15m.length>14?rsi(c15):rsiArr;
     const rsiNow15=rsi15[rsi15.length-1];
 
+    // ── ПАТТЕРНЫ СВЕЧЕЙ ────────────────────────────────────
+    function candlePatterns(cds) {
+      if (!cds || cds.length < 3) return {score:0, patterns:[]};
+      const n = cds.length - 1;
+      const c = cds[n], p1 = cds[n-1], p2 = cds[n-2];
+      const body = c => Math.abs(c.close - c.open);
+      const range = c => c.high - c.low || 0.0001;
+      const bullish = c => c.close > c.open;
+      const bearish = c => c.close < c.open;
+      const wickTop = c => c.high - Math.max(c.open, c.close);
+      const wickBot = c => Math.min(c.open, c.close) - c.low;
+      const bodyPct = c => body(c) / range(c);
+      const patterns = [];
+      let score = 0;
+
+      // ── МЕДВЕЖЬИ паттерны (хорошо для SHORT) ──
+      // Доджи на вершине (нерешительность после роста)
+      if (bodyPct(c) < 0.1 && range(c) > 0 && bullish(p1)) {
+        patterns.push({name:'Доджи', dir:'bear', w:6});
+      }
+      // Повешенный (Hanging Man) — малое тело вверху, длинная нижняя тень
+      if (bullish(p1) && bodyPct(c) < 0.35 && wickBot(c) > body(c) * 2 && wickTop(c) < body(c) * 0.5) {
+        patterns.push({name:'Повешенный', dir:'bear', w:9});
+      }
+      // Медвежье поглощение
+      if (bullish(p1) && bearish(c) && c.open >= p1.close && c.close <= p1.open && body(c) > body(p1)) {
+        patterns.push({name:'Медвежье поглощение', dir:'bear', w:14});
+      }
+      // Падающая звезда (Shooting Star) — длинная верхняя тень
+      if (wickTop(c) > body(c) * 2 && wickBot(c) < body(c) * 0.5 && bullish(p1)) {
+        patterns.push({name:'Падающая звезда', dir:'bear', w:11});
+      }
+      // Три вороны (три медвежьих свечи подряд)
+      if (bearish(c) && bearish(p1) && bearish(p2) &&
+          c.close < p1.close && p1.close < p2.close &&
+          bodyPct(c) > 0.5 && bodyPct(p1) > 0.5) {
+        patterns.push({name:'Три вороны', dir:'bear', w:12});
+      }
+      // Вечерняя звезда
+      if (bullish(p2) && bodyPct(p1) < 0.2 && bearish(c) && body(c) > body(p2) * 0.5) {
+        patterns.push({name:'Вечерняя звезда', dir:'bear', w:13});
+      }
+      // Медвежий харами (маленькая свеча внутри большой бычьей)
+      if (bullish(p1) && bearish(c) && c.open < p1.close && c.close > p1.open && body(c) < body(p1) * 0.5) {
+        patterns.push({name:'Харами медвежий', dir:'bear', w:7});
+      }
+
+      // ── БЫЧЬИ паттерны (хорошо для LONG) ──
+      // Молот (Hammer) — длинная нижняя тень, маленькое тело
+      if (bearish(p1) && wickBot(c) > body(c) * 2 && wickTop(c) < body(c) * 0.5 && bodyPct(c) < 0.4) {
+        patterns.push({name:'Молот', dir:'bull', w:10});
+      }
+      // Бычье поглощение
+      if (bearish(p1) && bullish(c) && c.open <= p1.close && c.close >= p1.open && body(c) > body(p1)) {
+        patterns.push({name:'Бычье поглощение', dir:'bull', w:14});
+      }
+      // Утренняя звезда
+      if (bearish(p2) && bodyPct(p1) < 0.2 && bullish(c) && body(c) > body(p2) * 0.5) {
+        patterns.push({name:'Утренняя звезда', dir:'bull', w:13});
+      }
+      // Три солдата (три бычьих свечи подряд)
+      if (bullish(c) && bullish(p1) && bullish(p2) &&
+          c.close > p1.close && p1.close > p2.close &&
+          bodyPct(c) > 0.5 && bodyPct(p1) > 0.5) {
+        patterns.push({name:'Три солдата', dir:'bull', w:12});
+      }
+      // Бычий харами
+      if (bearish(p1) && bullish(c) && c.open > p1.close && c.close < p1.open && body(c) < body(p1) * 0.5) {
+        patterns.push({name:'Харами бычий', dir:'bull', w:7});
+      }
+      // Перевёрнутый молот
+      if (bearish(p1) && wickTop(c) > body(c) * 2 && wickBot(c) < body(c) * 0.5) {
+        patterns.push({name:'Перев. молот', dir:'bull', w:7});
+      }
+
+      // Считаем скор: медвежьи +, бычьи -
+      score = patterns.reduce((s, p) => s + (p.dir === 'bear' ? p.w : -p.w), 0);
+      return {score, patterns};
+    }
+
+    // Паттерны на 1h и 15m
+    const pat1h  = candlePatterns(cds1h);
+    const pat15m = candlePatterns(cds15m);
+    // Общий скор паттернов (положительный = медвежий, отрицательный = бычий)
+    const patScore = pat1h.score * 0.6 + pat15m.score * 0.4;
+    const allPatterns = [...pat1h.patterns.map(p=>({...p,tf:'1h'})), ...pat15m.patterns.map(p=>({...p,tf:'15m'}))];
+
     // ── SHORT: Pump Exhaustion ──────────────────────────────
     const isSharpPump=pumpPct>=PUMP_THRESH&&dist>=8;
     const exCount=(rsiNow>70?1:0)+(hTurning?1:0)+(cvdDiv?1:0)+(atrRatio>1.5?1:0)+(cvdFalling?1:0);
     let shortConf=0,shortSigs=[];
     if(isSharpPump&&exCount>=1){
-      shortConf=Math.min(94,38+pumpPct*1.2+dist*0.8+exCount*7);
+      // patScore>0 = медвежьи паттерны = хорошо для SHORT
+      const patBonus = Math.max(-15, Math.min(20, patScore));
+      shortConf=Math.min(96,38+pumpPct*1.2+dist*0.8+exCount*7+patBonus);
       if(rsiNow>70)shortSigs.push(`RSI ${rsiNow.toFixed(0)} — перекупленность`);
       if(hTurning)shortSigs.push('MACD разворачивается ↓');
       if(cvdDiv)shortSigs.push('CVD дивергенция');
       if(cvdFalling)shortSigs.push('CVD ↓ — покупки иссякают');
       if(pumpSpeed>5)shortSigs.push(`⚡ +${pumpSpeed.toFixed(1)}%/2ч`);
+      // Add bear patterns to sigs
+      allPatterns.filter(p=>p.dir==='bear').forEach(p=>shortSigs.push(`🕯 ${p.name} (${p.tf})`));
     }
 
     // ── LONG сетапы ────────────────────────────────────────
     let longConf=0,longDir=null,longSigs=[];
 
+    // patScore для лонга: отрицательный patScore = бычьи паттерны
+    const longPatBonus = Math.max(-15, Math.min(20, -patScore));
+
     // 1. EMA стек 1h выровнен (h1_context.py: close>EMA20>EMA50)
     if(!longDir){
       const nowBull=price>e20n&&e20n>e50n;
       const prevBull=c1h[n1h-1]>e20_1h[n1h-1]&&e20_1h[n1h-1]>e50_1h[n1h-1];
-      // Либо только что выровнялся, либо стоит в тренде с подтверждением
       if(nowBull&&volRatio>1.2&&!cvdFalling&&rsiNow>45&&rsiNow<72){
-        const fresh=!prevBull?15:0; // бонус если только что выровнялся
-        longConf=Math.min(86,44+fresh+(trend4h==='bull'?12:trend4h==='bear'?-10:0)+volRatio*3+(hTurningUp?8:0));
+        const fresh=!prevBull?15:0;
+        longConf=Math.min(88,44+fresh+(trend4h==='bull'?12:trend4h==='bear'?-10:0)+volRatio*3+(hTurningUp?8:0)+longPatBonus);
         if(longConf>=MIN_CONF){
           longSigs=[`📈 EMA стек ↑ на 1h (close>EMA20>EMA50)`,
             trend4h==='bull'?'4h тренд бычий':fresh?'Только что выровнялся':'',
@@ -753,7 +846,7 @@ async function scoreForIdea(sym){
     // ── Выбор лучшего сигнала ──────────────────────────────
     const res={sym,cds1h,cds15m,price,pumpPct,pumpSpeed,dist,atrRatio,volRatio,
       rsiNow,bodyRatio,trend4h,shortConf,shortSigs,longConf,longDir,longSigs,
-      earlyPumpConf,isSharpPump,cvdFalling,cvdDiv};
+      earlyPumpConf,isSharpPump,cvdFalling,cvdDiv,allPatterns,patScore};
     const atrv=atrCalc(cds15m.length>14?cds15m:cds1h);
 
     if(shortConf>=MIN_CONF&&shortConf>=longConf&&shortConf>=earlyPumpConf){
@@ -1052,6 +1145,19 @@ function showCoinCard(idea,analysis){
       <div class="stat-item"><div class="sl">CVD</div><div class="sv" style="color:${idea.cvdDiv?'var(--red)':idea.cvdFalling?'var(--amber)':'var(--green)'};">${idea.cvdDiv?'div':idea.cvdFalling?'↓':'↑'}</div></div>
     </div>
 
+    <!-- Candle Patterns -->
+    ${idea.allPatterns && idea.allPatterns.length > 0 ? `
+    <div style="margin-bottom:8px;padding:7px 10px;background:var(--s2);border:1px solid var(--border);border-radius:4px;">
+      <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">🕯 Паттерны свечей</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;">
+        ${idea.allPatterns.map(p=>`<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;
+          background:${p.dir==='bear'?'var(--red-bg)':'var(--green-bg)'};
+          color:${p.dir==='bear'?'var(--red)':'var(--green)'};
+          border:1px solid ${p.dir==='bear'?'var(--red-b)':'var(--green-b)'};">
+          ${p.name} <span style="opacity:.6;font-size:8px;">${p.tf}</span>
+        </span>`).join('')}
+      </div>
+    </div>` : ''}
     <!-- OI + CVD Data -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px;">
       <div style="background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;">
