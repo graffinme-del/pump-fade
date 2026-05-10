@@ -936,10 +936,18 @@ async function runIdeas(manual=false){
             const target = inList || ideaObj;
             target.verdict = v.verdict;
             target.verdictReason = v.reason || '';
-            target.verdictConf = v.confidence || 0;
+            target.verdictConf = parseInt(v.confidence) || 0;
             target.verdictChecked = true;
             if (v.verdict === 'SKIP') {
+              // Тихо удаляем
               S.ideas = S.ideas.filter(i => i.sym !== ideaObj.sym);
+            } else if (v.verdict === 'WAIT') {
+              // Перемещаем в наблюдение
+              addToWatch(target);
+            } else if (v.verdict === 'GO') {
+              // Звук сигнала
+              playAlert();
+              notify('✦ GO · ' + target.sym.replace('USDT',''), target.verdictReason);
             }
             renderIdeas();
           }).catch(() => { ideaObj.verdictChecked = true; renderIdeas(); });
@@ -977,11 +985,25 @@ function renderIdeas(){
   const filtered=S.ideas.filter(i=>i.conf>=minConf);
   const cnt=document.getElementById('ideas-count');
   if(cnt)cnt.textContent=filtered.length?`${filtered.length}`:'';
-  if(!filtered.length){
+  const watchItems = Object.values(WATCH_LIST);
+  if(!filtered.length && !watchItems.length){
     list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет идей.<br><span style="font-size:9px;color:var(--dim);">Сканирую 200 монет каждые 3м.</span></div>';
     return;
   }
-  list.innerHTML=filtered.map((idea,_)=>{
+  // Render watch items at top
+  const watchHtml = watchItems.length ? `<div style="padding:4px 6px;font-size:8px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:1px;background:var(--amber-bg);border-bottom:1px solid var(--amber-b);">👁 Наблюдение · ${watchItems.length}</div>` +
+    watchItems.map(w => `<div class="idea-card" onclick="loadSym('${w.idea.sym}')" style="border-left:3px solid var(--amber);opacity:.9;">
+      <div class="idea-hd">
+        <span class="idea-sym" style="color:var(--amber);">${w.idea.sym.replace('USDT','')}</span>
+        <span class="idea-dir-badge" style="background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-b);">⏳ WAIT</span>
+      </div>
+      <div style="font-size:8px;color:var(--muted);margin-top:1px;">${w.idea.verdictReason||'Ожидаем подтверждения...'}</div>
+      <div style="display:flex;justify-content:space-between;margin-top:3px;">
+        <span class="idea-age">${Math.floor((Date.now()-w.addedAt)/60000)}м в наблюдении · ${w.checks} проверок</span>
+        <span style="font-size:8px;color:var(--dim);">${w.idea.conf?.toFixed(0)||0}/100</span>
+      </div>
+    </div>`).join('') : '';
+  list.innerHTML=watchHtml+filtered.map((idea,_)=>{
     const i=S.ideas.indexOf(idea);
     const isActive=S.activeIdea===i;
     const bc=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
@@ -1006,7 +1028,7 @@ function renderIdeas(){
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;">
         <span class="idea-age">${fmtAge(idea.ts)} назад</span>
         ${idea.verdict==='GO' ?
-          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--green-bg);color:var(--green);">✦ GO</span>` :
+          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--green-bg);color:var(--green);">✦ GO${idea.verdictConf>10?' '+idea.verdictConf+'%':''}</span>` :
           idea.verdict==='WAIT' ?
           `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--amber-bg);color:var(--amber);">⏳ WAIT</span>` :
           idea.verdict==='SKIP' ? '' :
@@ -1017,7 +1039,7 @@ function renderIdeas(){
         }
         <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--muted)'};">${idea.conf.toFixed(0)}/100</span>
       </div>
-      ${idea.verdict && idea.verdictReason ? `<div style="font-size:8px;color:var(--muted);margin-top:2px;line-height:1.4;">${idea.verdictReason}</div>` : ''}
+      ${idea.verdictReason ? `<div style="font-size:8px;color:var(--muted);margin-top:2px;line-height:1.4;border-top:1px solid var(--border);padding-top:2px;">${idea.verdictReason}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -1696,6 +1718,121 @@ function resetToDefaults(){
 }
 
 // ═══════════════════════════════════════════════════════
+//  WATCH LIST — монеты на перепроверке (WAIT от Gemini)
+// ═══════════════════════════════════════════════════════
+const WATCH_LIST = {}; // {sym: {idea, addedAt, checks, maxChecks}}
+const WATCH_INTERVAL_MS = 5 * 60 * 1000; // перепроверка каждые 5 мин
+const WATCH_MAX_TIME = 2 * 60 * 60 * 1000; // макс 2 часа
+
+function addToWatch(idea) {
+  if (WATCH_LIST[idea.sym]) return; // уже наблюдаем
+  WATCH_LIST[idea.sym] = {
+    idea: {...idea}, // копия на момент добавления
+    addedAt: Date.now(),
+    checks: 0,
+    maxChecks: 24, // 24 × 5мин = 2 часа
+  };
+  showToast(`👁 ${idea.sym.replace('USDT','')} → Наблюдение`);
+  renderWatchBadge();
+}
+
+function removeFromWatch(sym, reason) {
+  if (!WATCH_LIST[sym]) return;
+  delete WATCH_LIST[sym];
+  renderWatchBadge();
+}
+
+function renderWatchBadge() {
+  const count = Object.keys(WATCH_LIST).length;
+  // Update ideas count display
+  const cnt = document.getElementById('ideas-count');
+  if (cnt) cnt.textContent = (S.ideas.length + count) || '';
+}
+
+async function runWatchChecks() {
+  const syms = Object.keys(WATCH_LIST);
+  if (!syms.length || !getApiKey()) return;
+
+  for (const sym of syms) {
+    const w = WATCH_LIST[sym];
+    if (!w) continue;
+
+    // Превысили лимит времени?
+    if (Date.now() - w.addedAt > WATCH_MAX_TIME || w.checks >= w.maxChecks) {
+      removeFromWatch(sym, 'timeout');
+      showToast(`⏱ ${sym.replace('USDT','')} — время наблюдения истекло`);
+      continue;
+    }
+
+    w.checks++;
+
+    // Получаем свежие данные
+    try {
+      const fresh = await scoreForIdea(sym);
+      if (!fresh || !fresh.bestDir) {
+        removeFromWatch(sym, 'no setup');
+        continue;
+      }
+
+      // Обновляем идею свежими данными
+      w.idea = {...w.idea, ...fresh,
+        dir: fresh.bestDir, conf: fresh.bestConf,
+        sigs: fresh.bestSigs, why: fresh.why,
+        pumpPct: fresh.pumpPct, pumpSpeed: fresh.pumpSpeed,
+        dist: fresh.dist, volRatio: fresh.volRatio,
+        rsiNow: fresh.rsiNow, cvdFalling: fresh.cvdFalling,
+      };
+
+      // Перепрашиваем Gemini
+      const verdict = await getGeminiVerdict(w.idea);
+      if (!verdict) continue;
+
+      if (verdict.verdict === 'GO') {
+        // Сигнал подтверждён!
+        w.idea.verdict = 'GO';
+        w.idea.verdictReason = verdict.reason;
+        w.idea.verdictConf = verdict.confidence;
+        // Добавляем в основной список сигналов
+        if (!S.ideas.find(i => i.sym === sym)) {
+          S.ideas.unshift(w.idea);
+        }
+        playAlert();
+        notify(`✅ GO · ${sym.replace('USDT','')}`, verdict.reason || 'Сигнал подтверждён');
+        showToast(`✅ ${sym.replace('USDT','')} → GO!`);
+        removeFromWatch(sym, 'confirmed');
+        renderIdeas();
+
+      } else if (verdict.verdict === 'SKIP') {
+        removeFromWatch(sym, 'skipped');
+        showToast(`⏭ ${sym.replace('USDT','')} — пропускаем`);
+      }
+      // WAIT — продолжаем наблюдать
+    } catch(e) { /* skip on error */ }
+
+    // Пауза между запросами
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  renderWatchBadge();
+}
+
+// Sound alert
+let _alertCtx = null;
+function playAlert() {
+  try {
+    _alertCtx = _alertCtx || new (window.AudioContext||window.webkitAudioContext)();
+    [880, 1100, 880, 1320].forEach((f, i) => {
+      const o = _alertCtx.createOscillator(), g = _alertCtx.createGain();
+      o.connect(g); g.connect(_alertCtx.destination);
+      o.frequency.value = f; o.type = 'sine';
+      const t = _alertCtx.currentTime + i * 0.15;
+      g.gain.setValueAtTime(0.3, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+      o.start(t); o.stop(t + 0.22);
+    });
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════
 // Check API key status
@@ -1721,6 +1858,7 @@ setInterval(()=>{
   S.nextRefresh=Date.now()+REFRESH_INTERVAL;
 },REFRESH_INTERVAL);
 setInterval(()=>runIdeas(false),IDEAS_INTERVAL);
+setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
 setInterval(()=>{
   fetch(`${FAPI}/ticker/24hr`).then(r=>r.json()).then(t=>{
     if(!Array.isArray(t))return;
