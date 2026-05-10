@@ -960,6 +960,11 @@ async function runIdeas(manual=false){
               notify('✦ GO · ' + target.sym.replace('USDT',''), target.verdictReason);
             }
             renderIdeas();
+            // Refresh coin card if this idea is currently displayed
+            if (S.activeIdea !== null && S.ideas[S.activeIdea]?.sym === ideaObj.sym) {
+              const freshA = analyzeFull(ideaObj.cds1h, ideaObj.cds15m);
+              showCoinCard(ideaObj, freshA);
+            }
           }).catch(() => { ideaObj.verdictChecked = true; renderIdeas(); });
         }, verdictDelay);
       });
@@ -1564,7 +1569,8 @@ GO=enter now, SKIP=pass, WAIT=need confirmation`;
 
 async function askAIAboutIdea(idx){
   const idea=S.ideas[idx];if(!idea)return;
-  // Result goes to right chat panel only
+  // Show thinking in chat
+  const tid='t'+Date.now(); appendThinking(tid);
   const a=S.analysis;
   const prompt=`Монета: ${idea.sym} | ${idea.dir} | уверенность ${idea.conf.toFixed(0)}/100
 Памп 8h: +${idea.pumpPct.toFixed(1)}% | Скорость: +${idea.pumpSpeed.toFixed(1)}%/2ч | EMA20 dist: ${idea.dist.toFixed(1)}%
@@ -1581,14 +1587,21 @@ ${idea.entry?`Entry: $${fmt(idea.entry)} | SL: $${fmt(idea.sl)} | TP: $${fmt(ide
 3) Рекомендация: ВХОДИТЬ / ЖДАТЬ / ПРОПУСТИТЬ`;
   try{
     updateGeminiBtn('working');
-    const reply=await callGemini(prompt,2048);
-    // reply goes to chat
-    // Also add to chat
+    if (!getApiKey()) {
+      document.getElementById(tid)?.remove();
+      appendMsg('ai','⚠️ Нужен Gemini API ключ. Нажмите ✦ Gemini в топбаре.');
+      return;
+    }
+    updateGeminiBtn('working');
+    const reply=await callGemini(prompt,800);
+    document.getElementById(tid)?.remove();
+    if (!reply) { appendMsg('ai','⚠️ Gemini не ответил. Попробуйте снова.'); return; }
     appendMsg('ai',`[${idea.sym}] ${reply}`);
     // Track winrate
     if(idea.entry&&idea.sl&&idea.tp1)scheduleWinrateCheck(idea);
   }catch(e){
-
+    document.getElementById(tid)?.remove();
+    appendMsg('ai','❌ Ошибка: '+(e.message||'неизвестная'));
     updateGeminiBtn(false);
   }
 }
