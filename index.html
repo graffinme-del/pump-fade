@@ -928,13 +928,18 @@ async function runIdeas(manual=false){
         setTimeout(() => {
           if (!getApiKey()) { ideaObj.verdictChecked = true; return; }
           getGeminiVerdict(ideaObj).then(v => {
+            console.log('Verdict received for', ideaObj.sym, ':', v);
             ideaObj.verdictChecked = true;
             if (!v) { renderIdeas(); return; }
-            ideaObj.verdict = v.verdict;
-            ideaObj.verdictReason = v.reason || '';
-            ideaObj.verdictConf = v.confidence || 0;
+            // Find the actual object in S.ideas (reference might differ after merge)
+            const inList = S.ideas.find(i => i.sym === ideaObj.sym && Math.abs((i.ts||0)-(ideaObj.ts||0))<5000);
+            const target = inList || ideaObj;
+            target.verdict = v.verdict;
+            target.verdictReason = v.reason || '';
+            target.verdictConf = v.confidence || 0;
+            target.verdictChecked = true;
             if (v.verdict === 'SKIP') {
-              S.ideas = S.ideas.filter(i => i !== ideaObj);
+              S.ideas = S.ideas.filter(i => i.sym !== ideaObj.sym);
             }
             renderIdeas();
           }).catch(() => { ideaObj.verdictChecked = true; renderIdeas(); });
@@ -1196,10 +1201,21 @@ function showCoinCard(idea,analysis){
     </div>`:''}
 
     <!-- Phase info from analysis -->
-    ${a?`<div style="background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin-bottom:8px;">
-      <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">Фазы истощения · ${a.phase}/3</div>
-      ${a.exSigs?.length?a.exSigs.map(s=>`<div style="font-size:10px;color:var(--text2);padding:2px 0;border-bottom:1px solid var(--border);">✓ ${s.t}</div>`).join(''):'<div style="font-size:10px;color:var(--muted);">Признаков истощения нет</div>'}
-      ${a.bkSigs?.length?'<div style="margin-top:4px;">'+a.bkSigs.map(s=>`<div style="font-size:10px;color:var(--red);padding:2px 0;border-bottom:1px solid var(--border);">▼ ${s.t}</div>`).join('')+'</div>':''}
+    ${a?`<div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:9px 11px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Фазы истощения</span>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted);">${a.phase}/3</span>
+          <div style="display:flex;gap:3px;">
+            ${[0,1,2].map(i=>`<div style="width:20px;height:4px;border-radius:2px;background:${i<a.phase?'var(--green)':i===a.phase?'var(--amber)':'var(--s3)'};${i===a.phase?'animation:pulse 1s infinite;':''}"></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;">
+        ${(a.exSigs||[]).map(s=>`<span style="font-size:9px;padding:2px 7px;border-radius:3px;font-weight:600;background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-b);">${s.t}</span>`).join('')}
+        ${(a.bkSigs||[]).map(s=>`<span style="font-size:9px;padding:2px 7px;border-radius:3px;font-weight:600;background:var(--red-bg);color:var(--red);border:1px solid var(--red-b);">▼ ${s.t}</span>`).join('')}
+        ${!a.exSigs?.length&&!a.bkSigs?.length?'<span style="font-size:9px;color:var(--dim);">Признаков истощения нет</span>':''}
+      </div>
     </div>`:''}
 
     <!-- Actions -->
