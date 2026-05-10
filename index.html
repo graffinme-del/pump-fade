@@ -248,6 +248,16 @@ button:hover{opacity:.85;}
           oninput="MIN_CONF=+this.value;document.getElementById('min-conf-label').textContent=this.value;renderIdeas()"
           style="width:45px;accent-color:var(--red);vertical-align:middle;margin-left:3px;">
       </div>
+      <div style="display:flex;border-top:1px solid var(--border);margin-top:4px;">
+        <button id="tab-signals" onclick="setIdeasTab('signals')"
+          style="flex:1;padding:5px 4px;font-size:9px;font-weight:700;border:none;background:transparent;cursor:pointer;border-bottom:2px solid var(--red);color:var(--red);font-family:inherit;">
+          🔥 Сигналы <span id="tab-signals-count" style="font-size:8px;"></span>
+        </button>
+        <button id="tab-watch" onclick="setIdeasTab('watch')"
+          style="flex:1;padding:5px 4px;font-size:9px;font-weight:700;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);font-family:inherit;">
+          👁 Наблюдение <span id="tab-watch-count" style="font-size:8px;"></span>
+        </button>
+      </div>
     </div>
     <div id="ideas-list" style="flex:1;overflow-y:auto;padding:5px;">
       <div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Запуск агента...</div>
@@ -979,31 +989,72 @@ async function runIdeas(manual=false){
 // ═══════════════════════════════════════════════════════
 //  RENDER IDEAS (left column — all types)
 // ═══════════════════════════════════════════════════════
+let ideasTab = 'signals';
+
+function setIdeasTab(tab) {
+  ideasTab = tab;
+  const sigBtn = document.getElementById('tab-signals');
+  const wchBtn = document.getElementById('tab-watch');
+  if (sigBtn) {
+    sigBtn.style.borderBottom = tab==='signals'?'2px solid var(--red)':'2px solid transparent';
+    sigBtn.style.color = tab==='signals'?'var(--red)':'var(--muted)';
+  }
+  if (wchBtn) {
+    wchBtn.style.borderBottom = tab==='watch'?'2px solid var(--amber)':'2px solid transparent';
+    wchBtn.style.color = tab==='watch'?'var(--amber)':'var(--muted)';
+  }
+  renderIdeas();
+}
+
+function updateTabCounts() {
+  const sc = document.getElementById('tab-signals-count');
+  const wc = document.getElementById('tab-watch-count');
+  const minConf = parseInt(document.getElementById('conf-slider')?.value||'65');
+  if (sc) sc.textContent = S.ideas.filter(i=>i.conf>=minConf).length || '';
+  if (wc) {
+    const n = Object.keys(WATCH_LIST).length;
+    wc.textContent = n || '';
+    wc.style.color = n>0?'var(--amber)':'';
+  }
+}
+
 function renderIdeas(){
   const list=document.getElementById('ideas-list');if(!list)return;
   const minConf=parseInt(document.getElementById('conf-slider')?.value||'65');
   const filtered=S.ideas.filter(i=>i.conf>=minConf);
   const cnt=document.getElementById('ideas-count');
   if(cnt)cnt.textContent=filtered.length?`${filtered.length}`:'';
-  const watchItems = Object.values(WATCH_LIST);
-  if(!filtered.length && !watchItems.length){
-    list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет идей.<br><span style="font-size:9px;color:var(--dim);">Сканирую 200 монет каждые 3м.</span></div>';
-    return;
-  }
-  // Render watch items at top
-  const watchHtml = watchItems.length ? `<div style="padding:4px 6px;font-size:8px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:1px;background:var(--amber-bg);border-bottom:1px solid var(--amber-b);">👁 Наблюдение · ${watchItems.length}</div>` +
-    watchItems.map(w => `<div class="idea-card" onclick="loadSym('${w.idea.sym}')" style="border-left:3px solid var(--amber);opacity:.9;">
+  updateTabCounts();
+
+  // WATCH TAB
+  if (ideasTab === 'watch') {
+    const watchItems = Object.values(WATCH_LIST);
+    if (!watchItems.length) {
+      list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет монет под наблюдением.<br><span style="font-size:9px;color:var(--dim);">Сюда попадают WAIT сигналы.<br>Агент перепроверяет каждые 5м.</span></div>';
+      return;
+    }
+    list.innerHTML = watchItems.map(w => `<div class="idea-card" onclick="loadSym('${w.idea.sym}')" style="border-left:3px solid var(--amber);">
       <div class="idea-hd">
         <span class="idea-sym" style="color:var(--amber);">${w.idea.sym.replace('USDT','')}</span>
         <span class="idea-dir-badge" style="background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-b);">⏳ WAIT</span>
       </div>
-      <div style="font-size:8px;color:var(--muted);margin-top:1px;">${w.idea.verdictReason||'Ожидаем подтверждения...'}</div>
-      <div style="display:flex;justify-content:space-between;margin-top:3px;">
-        <span class="idea-age">${Math.floor((Date.now()-w.addedAt)/60000)}м в наблюдении · ${w.checks} проверок</span>
-        <span style="font-size:8px;color:var(--dim);">${w.idea.conf?.toFixed(0)||0}/100</span>
+      <div style="font-size:9px;color:var(--muted);margin-bottom:2px;">${w.idea.verdictReason||'Ожидаем подтверждения...'}</div>
+      <div style="font-size:9px;color:var(--muted);">${w.idea.sigs?.[0]||''}</div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px;">
+        <span class="idea-age">${Math.floor((Date.now()-w.addedAt)/60000)}м · ${w.checks} проверок из ${w.maxChecks}</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--muted);">${w.idea.conf?.toFixed(0)||0}/100</span>
       </div>
-    </div>`).join('') : '';
-  list.innerHTML=watchHtml+filtered.map((idea,_)=>{
+    </div>`).join('');
+    return;
+  }
+
+  // SIGNALS TAB
+  if(!filtered.length){
+    list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет сигналов.<br><span style="font-size:9px;color:var(--dim);">Сканирую 200 монет каждые 3м.</span></div>';
+    return;
+  }
+  const watchHtml = '';
+  list.innerHTML=filtered.map((idea,_)=>{
     const i=S.ideas.indexOf(idea);
     const isActive=S.activeIdea===i;
     const bc=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
@@ -1714,7 +1765,8 @@ function notify(title,body){
 }
 
 function resetToDefaults(){
-  S.ideas=[];S.ideaDedup={};renderIdeas();
+  // Just reset layout, not ideas
+  renderIdeas();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1743,10 +1795,8 @@ function removeFromWatch(sym, reason) {
 }
 
 function renderWatchBadge() {
-  const count = Object.keys(WATCH_LIST).length;
-  // Update ideas count display
-  const cnt = document.getElementById('ideas-count');
-  if (cnt) cnt.textContent = (S.ideas.length + count) || '';
+  updateTabCounts();
+  renderIdeas();
 }
 
 async function runWatchChecks() {
