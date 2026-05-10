@@ -768,16 +768,16 @@ async function runIdeas(manual=false){
         newIdeas.push(ideaObj);
         // Async Gemini verdict — doesn't block scan
         getGeminiVerdict(ideaObj).then(v => {
-          if (!v) return;
+          ideaObj.verdictChecked = true;
+          if (!v) { renderIdeas(); return; }
           ideaObj.verdict = v.verdict;
           ideaObj.verdictReason = v.reason || '';
           ideaObj.verdictConf = v.confidence || 0;
           if (v.verdict === 'SKIP') {
-            // Remove from ideas, keep log
             S.ideas = S.ideas.filter(i => i !== ideaObj);
           }
           renderIdeas();
-        }).catch(() => {});
+        }).catch(() => { ideaObj.verdictChecked = true; renderIdeas(); });
       });
       await new Promise(r=>setTimeout(r,100));
     }
@@ -839,13 +839,14 @@ function renderIdeas(){
       ${idea.pumpSpeed>3?`<div class="idea-age">⚡ +${idea.pumpSpeed.toFixed(1)}%/2ч</div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;">
         <span class="idea-age">${fmtAge(idea.ts)} назад</span>
-        ${idea.verdict ?
-          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;
-            background:${idea.verdict==='GO'?'var(--green-bg)':idea.verdict==='WAIT'?'var(--amber-bg)':'var(--s3)'};
-            color:${idea.verdict==='GO'?'var(--green)':idea.verdict==='WAIT'?'var(--amber)':'var(--dim)'};">
-            ${idea.verdict==='GO'?'✦ GO':idea.verdict==='WAIT'?'⏳ WAIT':''}
-          </span>` :
-          `<span style="font-size:8px;color:var(--dim);animation:pulse 1s infinite;">✦ AI...</span>`
+        ${idea.verdict==='GO' ?
+          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--green-bg);color:var(--green);">✦ GO</span>` :
+          idea.verdict==='WAIT' ?
+          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--amber-bg);color:var(--amber);">⏳ WAIT</span>` :
+          idea.verdict==='SKIP' ? '' :
+          idea.verdictChecked ?
+          `<span style="font-size:8px;color:var(--dim);">—</span>` :
+          `<span style="font-size:8px;color:var(--dim);animation:pulse 1s infinite;">✦</span>`
         }
         <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--muted)'};">${idea.conf.toFixed(0)}/100</span>
       </div>
@@ -1260,13 +1261,23 @@ verdict: GO=входить, SKIP=пропустить, WAIT=ждать подт�
     if (!r.ok) return null;
     const data = await r.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    // Find the outermost JSON object
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
-    const m = start>=0 && end>start ? [text.slice(start, end+1)] : null;
-    if (!m) return null;
-    return JSON.parse(m[0]);
-  } catch(e) { return null; }
+    console.log('Gemini raw verdict:', text);
+    if (!text) { console.warn('Empty Gemini response'); return null; }
+    // Try to extract JSON - Gemini sometimes wraps in ```json
+    let clean = text.replace(/```json/g,'').replace(/```/g,'').trim();
+    const start = clean.indexOf('{');
+    const end = clean.lastIndexOf('}');
+    if (start < 0 || end <= start) {
+      console.warn('No JSON found in:', clean);
+      // Try to parse verdict from plain text
+      const v = clean.includes('GO') ? 'GO' : clean.includes('SKIP') ? 'SKIP' : clean.includes('WAIT') ? 'WAIT' : null;
+      if (v) return {verdict:v, confidence:75, reason:clean.substring(0,150)};
+      return null;
+    }
+    const parsed = JSON.parse(clean.slice(start, end+1));
+    console.log('Parsed verdict:', parsed);
+    return parsed;
+  } catch(e) { console.error('Verdict parse error:', e); return null; }
 }
 
 // AI analysis for coin card
