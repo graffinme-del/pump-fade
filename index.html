@@ -860,17 +860,30 @@ async function scoreForIdea(sym){
     const atrv=atrCalc(cds15m.length>14?cds15m:cds1h);
 
     if(shortConf>=MIN_CONF&&shortConf>=longConf&&shortConf>=earlyPumpConf){
-      const entry=p15,sl=entry+atrv*1.5,tp1=Math.max(e20n*0.998,entry-atrv*2),tp2=Math.max(e50n*0.998,entry-atrv*4);
+      const entry=p15;
+      // Minimum SL: 2.5%, TP: 5%, R/R >= 2.0
+      const atrSL = Math.max(atrv*1.5, entry*0.025);
+      const sl = entry + atrSL;
+      const atrTP = Math.max(atrv*3, entry*0.05);
+      const tp1 = entry - atrTP;
+      const tp2 = entry - atrTP*2;
+      const rr = +(atrTP/atrSL).toFixed(2);
       Object.assign(res,{bestDir:'SHORT',bestConf:shortConf,bestSigs:shortSigs,
-        entry,sl,tp1,tp2,rr:sl>entry?+(Math.abs(tp1-entry)/Math.abs(sl-entry)).toFixed(2):0,atrv,
+        entry,sl,tp1,tp2,rr,atrv,
         why:`+${pumpPct.toFixed(1)}% за 8ч, ${dist.toFixed(1)}% от EMA20. ${shortSigs.slice(0,2).join(', ')}.`});
     } else if(earlyPumpConf>=72&&earlyPumpConf>=longConf){
-      const entry=p15,sl=entry*(1-atrv/price*1.5),tp1=entry*(1+atrv/price*2),tp2=entry*(1+atrv/price*4);
+      const entry=p15;
+      const slDist = Math.max(atrv*1.5, entry*0.025);
+      const tpDist = Math.max(atrv*3, entry*0.05);
+      const sl=entry-slDist, tp1=entry+tpDist, tp2=entry+tpDist*2;
       Object.assign(res,{bestDir:'LONG',bestConf:earlyPumpConf,bestSigs:earlyPumpSigs,
         entry,sl,tp1,tp2,rr:+((tp1-entry)/(entry-sl||1)).toFixed(2),atrv,
         why:earlyPumpSigs.join(', '),earlyPump:true});
     } else if(longConf>=MIN_CONF&&longDir){
-      const entry=p15,sl=entry-atrv*1.5,tp1=entry+atrv*2,tp2=entry+atrv*4;
+      const entry=p15;
+      const slDist = Math.max(atrv*1.5, entry*0.025);
+      const tpDist = Math.max(atrv*3, entry*0.05);
+      const sl=entry-slDist, tp1=entry+tpDist, tp2=entry+tpDist*2;
       Object.assign(res,{bestDir:'LONG',bestConf:longConf,bestSigs:longSigs,
         entry,sl,tp1,tp2,rr:+((tp1-entry)/(entry-sl||1)).toFixed(2),atrv,
         why:longSigs.join(', ')});
@@ -881,7 +894,7 @@ async function scoreForIdea(sym){
         Object.assign(res,{bestDir:'ПАМП',bestConf:Math.min(90,50+pumpPct+volRatio*4),
           bestSigs:[`+${pumpPct.toFixed(1)}% за 8ч`,`⚡ +${pumpSpeed.toFixed(1)}%/2ч`,`Vol×${volRatio.toFixed(1)}`],
           why:`Резкий памп +${pumpPct.toFixed(1)}%, Vol×${volRatio.toFixed(1)}`,
-          isPumpSignal:true,entry:price,sl:price*0.97,tp1:0,tp2:0,rr:0,atrv});
+          isPumpSignal:true,entry:price,sl:price*0.975,tp1:price*1.05,tp2:price*1.10,rr:2.0,atrv});
       }
     }
     return res;
@@ -1976,6 +1989,13 @@ setInterval(()=>runIdeas(false),IDEAS_INTERVAL);
 setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
 setInterval(()=>checkPendingWinrates(), 15*60*1000); // WR check every 15 min
 // Initial check on load
+// Clean up winrates with bad TP/SL (<1% range)
+S.winrates = S.winrates.filter(w => {
+  if (w.result !== 'pending') return true;
+  const tpPct = w.entry > 0 ? Math.abs(w.tp - w.entry) / w.entry * 100 : 0;
+  return tpPct >= 1.0; // keep only if TP is at least 1% away
+});
+saveWR();
 setTimeout(()=>checkPendingWinrates(), 10000);
 setInterval(()=>{
   fetch(`${FAPI}/ticker/24hr`).then(r=>r.json()).then(t=>{
