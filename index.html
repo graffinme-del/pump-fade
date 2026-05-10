@@ -220,7 +220,7 @@ button:hover{opacity:.85;}
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
-  <button class="top-btn" id="theme-toggle" onclick="toggleTheme()" title="Переключить тему">☀</button>
+  <!-- theme toggle disabled -->
 </div>
 
 <!-- PUMP ALERT -->
@@ -1387,33 +1387,45 @@ function scheduleWinrateCheck(idea){
 
 // Active WR monitor — every 2 min
 async function checkPendingWinrates(){
-  const pending=S.winrates.filter(w=>w.result==='pending');
-  if(!pending.length)return;
-  const now=Date.now();
-  // Expire after 48h
-  pending.forEach(w=>{if(now-(w.ts||0)>48*3600000){w.result='expired';w.pnl=0;}});
-  const active=S.winrates.filter(w=>w.result==='pending').slice(0,10);
-  for(const rec of active){
-    try{
-      const lp=await fetchPrice(rec.sym);
-      if(!lp)continue;
-      rec.elapsed=Math.floor((now-(rec.ts||0))/60000);
-      if(rec.dir==='SHORT'){
-        if(lp<=rec.tp){rec.result='win';rec.closePrice=lp;rec.pnl=(rec.entry-lp)/rec.entry*100;}
-        else if(lp>=rec.sl){rec.result='loss';rec.closePrice=lp;rec.pnl=(rec.entry-lp)/rec.entry*100;}
-      }else{
-        if(lp>=rec.tp){rec.result='win';rec.closePrice=lp;rec.pnl=(lp-rec.entry)/rec.entry*100;}
-        else if(lp<=rec.sl){rec.result='loss';rec.closePrice=lp;rec.pnl=(lp-rec.entry)/rec.entry*100;}
+  const now = Date.now();
+  // Expire >48h and filter invalid records
+  S.winrates.forEach(w => {
+    if (w.result !== 'pending') return;
+    if (now - (w.ts||0) > 48*3600000) { w.result='expired'; w.pnl=0; return; }
+    // Skip symbols with non-latin chars (can't fetch price)
+    if (/[^ -]/.test(w.sym)) { w.result='expired'; w.pnl=0; }
+  });
+
+  const active = S.winrates.filter(w => w.result === 'pending').slice(0, 10);
+  if (!active.length) { saveWR(); return; }
+
+  // Use Promise.allSettled to avoid blocking on any single failure
+  const results = await Promise.allSettled(
+    active.map(async rec => {
+      const lp = await Promise.race([
+        fetchPrice(rec.sym),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+      ]);
+      if (!lp || lp <= 0) return;
+      rec.elapsed = Math.floor((now - (rec.ts||0)) / 60000);
+      if (rec.dir === 'SHORT') {
+        if (lp <= rec.tp)  { rec.result='win';  rec.closePrice=lp; rec.pnl=(rec.entry-lp)/rec.entry*100; }
+        else if (lp >= rec.sl) { rec.result='loss'; rec.closePrice=lp; rec.pnl=(rec.entry-lp)/rec.entry*100; }
+      } else {
+        if (lp >= rec.tp)  { rec.result='win';  rec.closePrice=lp; rec.pnl=(lp-rec.entry)/rec.entry*100; }
+        else if (lp <= rec.sl) { rec.result='loss'; rec.closePrice=lp; rec.pnl=(lp-rec.entry)/rec.entry*100; }
       }
-      if(rec.result!=='pending'){
-        notify(rec.result==='win'?`✅ TP · ${rec.sym.replace('USDT','')}`:`❌ SL · ${rec.sym.replace('USDT','')}`,
-          `${rec.pnl>=0?'+':''}${rec.pnl.toFixed(2)}% за ${rec.elapsed}м`);
+      if (rec.result !== 'pending') {
+        notify(
+          rec.result==='win' ? `✅ TP · ${rec.sym.replace('USDT','')}` : `❌ SL · ${rec.sym.replace('USDT','')}`,
+          `${rec.pnl>=0?'+':''}${rec.pnl.toFixed(2)}% за ${rec.elapsed}м`
+        );
       }
-    }catch(e){}
-    await new Promise(r=>setTimeout(r,500));
-  }
+    })
+  );
+
   saveWR();
-  if(S.phase===5)showWinrates();
+  if (S.phase === 5) showWinrates();
 }
 
 
