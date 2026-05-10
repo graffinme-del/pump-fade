@@ -715,14 +715,28 @@ async function runIdeas(manual=false){
         const lastTs=S.ideaDedup[r.sym];
         if(lastTs&&now-lastTs<7200000)return; // 2h dedup
         S.ideaDedup[r.sym]=now;
-        newIdeas.push({sym:r.sym,dir:r.bestDir,conf:r.bestConf,
+        const ideaObj = {sym:r.sym,dir:r.bestDir,conf:r.bestConf,
           sigs:r.bestSigs||[],why:r.why||'',
           entry:r.entry,sl:r.sl,tp1:r.tp1,tp2:r.tp2,rr:r.rr,atrv:r.atrv,
           pumpPct:r.pumpPct,pumpSpeed:r.pumpSpeed,dist:r.dist,
           volRatio:r.volRatio,rsiNow:r.rsiNow,atrRatio:r.atrRatio,
           bodyRatio:r.bodyRatio,trend4h:r.trend4h,cvdFalling:r.cvdFalling,
           cvdDiv:r.cvdDiv,isPump:r.isPumpSignal,ts:now,
-          cds1h:r.cds1h,cds15m:r.cds15m});
+          cds1h:r.cds1h,cds15m:r.cds15m,
+          verdict:null, verdictReason:'', verdictConf:0};
+        newIdeas.push(ideaObj);
+        // Async Gemini verdict — doesn't block scan
+        getGeminiVerdict(ideaObj).then(v => {
+          if (!v) return;
+          ideaObj.verdict = v.verdict;
+          ideaObj.verdictReason = v.reason || '';
+          ideaObj.verdictConf = v.confidence || 0;
+          if (v.verdict === 'SKIP') {
+            // Remove from ideas, keep log
+            S.ideas = S.ideas.filter(i => i !== ideaObj);
+          }
+          renderIdeas();
+        }).catch(() => {});
       });
       await new Promise(r=>setTimeout(r,100));
     }
@@ -782,10 +796,19 @@ function renderIdeas(){
         ${idea.trend4h&&idea.trend4h!=='neutral'?`<span style="color:${idea.trend4h==='bull'?'var(--green)':'var(--red)'};">4h:${idea.trend4h==='bull'?'↑':'↓'}</span>`:''}
       </div>
       ${idea.pumpSpeed>3?`<div class="idea-age">⚡ +${idea.pumpSpeed.toFixed(1)}%/2ч</div>`:''}
-      <div style="display:flex;justify-content:space-between;margin-top:2px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;">
         <span class="idea-age">${fmtAge(idea.ts)} назад</span>
+        ${idea.verdict ?
+          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;
+            background:${idea.verdict==='GO'?'var(--green-bg)':idea.verdict==='WAIT'?'var(--amber-bg)':'var(--s3)'};
+            color:${idea.verdict==='GO'?'var(--green)':idea.verdict==='WAIT'?'var(--amber)':'var(--dim)'};">
+            ${idea.verdict==='GO'?'✦ GO':idea.verdict==='WAIT'?'⏳ WAIT':''}
+          </span>` :
+          `<span style="font-size:8px;color:var(--dim);animation:pulse 1s infinite;">✦ AI...</span>`
+        }
         <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--muted)'};">${idea.conf.toFixed(0)}/100</span>
       </div>
+      ${idea.verdict && idea.verdictReason ? `<div style="font-size:8px;color:var(--muted);margin-top:2px;line-height:1.4;">${idea.verdictReason}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -876,6 +899,18 @@ function showCoinCard(idea,analysis){
       <b style="color:${dc};">Почему</b>
       ${idea.why||idea.sigs?.join('. ')||'—'}
     </div>
+    ${idea.verdict ? `<div style="margin-bottom:8px;padding:7px 10px;border-radius:4px;display:flex;align-items:flex-start;gap:8px;
+      background:${idea.verdict==='GO'?'var(--green-bg)':idea.verdict==='WAIT'?'var(--amber-bg)':'var(--s3)'};
+      border:1px solid ${idea.verdict==='GO'?'var(--green-b)':idea.verdict==='WAIT'?'var(--amber-b)':'var(--border)'};
+      color:${idea.verdict==='GO'?'#166534':idea.verdict==='WAIT'?'#92400e':'var(--muted)'};">
+      <span style="font-size:14px;">${idea.verdict==='GO'?'✅':idea.verdict==='WAIT'?'⏳':'⏭'}</span>
+      <div>
+        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">
+          Gemini: ${idea.verdict} ${idea.verdictConf?'('+idea.verdictConf+'%)':''}
+        </div>
+        <div style="font-size:10px;line-height:1.6;">${idea.verdictReason||'—'}</div>
+      </div>
+    </div>` : '<div style="margin-bottom:8px;padding:6px 10px;background:var(--s2);border:1px solid var(--border);border-radius:4px;font-size:9px;color:var(--dim);animation:pulse 1s infinite;">✦ Gemini анализирует сетап...</div>'}
 
     <!-- Levels -->
     ${idea.entry?`<div class="levels-grid">
@@ -1121,12 +1156,12 @@ function showToast(msg){
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);
 }
 
-async function callGemini(prompt,maxTokens=4096){
+async function callGemini(prompt,maxTokens=800){
   const key=getApiKey();if(!key)return null;
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
   const body={
     contents:[{parts:[{text:prompt}]}],
-    generationConfig:{maxOutputTokens:4096,temperature:0.4},
+    generationConfig:{maxOutputTokens:800,temperature:0.4},
     systemInstruction:{parts:[{text:'Ты — AI советник трейдера. Стратегии: Pump Exhaustion Reversion, разворот тренда, перепроданность RSI. Отвечай развёрнуто и полно, на русском. Никогда не обрывай ответ на середине. Говори прямо: входить/не входить, держать/закрывать. Учитывай все таймфреймы.'}]}
   };
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -1151,6 +1186,43 @@ async function callGemini(prompt,maxTokens=4096){
     return text + '\n\n_(ответ обрезан — увеличьте лимит токенов)_';
   }
   return text;
+}
+
+// ═══════════════════════════════════════════════════════
+//  GEMINI VERDICT: GO / SKIP / WAIT
+// ═══════════════════════════════════════════════════════
+async function getGeminiVerdict(idea) {
+  if (!getApiKey()) return null;
+  const a = idea.cds1h && idea.cds15m ? analyzeFull(idea.cds1h, idea.cds15m) : null;
+  const prompt = `Риск-менеджер трейдера. Оцени сетап строго.
+
+${idea.sym} | ${idea.dir} | алго: ${idea.conf.toFixed(0)}/100
+Памп: +${idea.pumpPct.toFixed(1)}% | Скорость: +${idea.pumpSpeed.toFixed(1)}%/2ч | EMA dist: ${idea.dist.toFixed(1)}%
+Vol×${idea.volRatio.toFixed(1)} | RSI: ${idea.rsiNow.toFixed(0)} | CVD: ${idea.cvdFalling?'↓':'↑'}${idea.cvdDiv?' дивергенция':''}
+ATR×${idea.atrRatio.toFixed(2)} | 4h: ${idea.trend4h||'neutral'}
+Сигналы: ${(idea.sigs||[]).join(' | ')}
+${a?'Фаза: '+a.phase+'/3 | Истощение: '+(a.exSigs?.map(s=>s.t).join(', ')||'нет')+' | Слом: '+(a.bkSigs?.map(s=>s.t).join(', ')||'нет'):''}
+
+Ответь ТОЛЬКО JSON без лишнего текста:
+{"verdict":"GO","confidence":85,"reason":"причина 1-2 предложения"}
+verdict: GO=входить, SKIP=пропустить, WAIT=ждать подтверждения`;
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${getApiKey()}`;
+    const r = await fetch(url, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        contents:[{parts:[{text:prompt}]}],
+        generationConfig:{maxOutputTokens:150, temperature:0.1},
+      })
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const m = text.match(/\{[\s\S]*?\}/);
+    if (!m) return null;
+    return JSON.parse(m[0]);
+  } catch(e) { return null; }
 }
 
 // AI analysis for coin card
