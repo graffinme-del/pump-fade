@@ -393,6 +393,10 @@ let MIN_CONF = 65;
 // ═══════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════
+// WR helpers must be before S
+function loadWR(){try{return JSON.parse(localStorage.getItem(WR_KEY)||'[]');}catch{return[];}}
+function saveWR(){try{localStorage.setItem(WR_KEY,JSON.stringify(S.winrates));}catch{}}
+
 const S = {
   sym:'SOLUSDT', cds1h:[], cds15m:[],
   prices:{}, oi:null, fr:null,
@@ -1381,8 +1385,7 @@ function showPhaseContent(phase){
 // ═══════════════════════════════════════════════════════
 //  WINRATES
 // ═══════════════════════════════════════════════════════
-function loadWR(){try{return JSON.parse(localStorage.getItem(WR_KEY)||'[]');}catch{return[];}}
-function saveWR(){try{localStorage.setItem(WR_KEY,JSON.stringify(S.winrates));}catch{}}
+
 
 function scheduleWinrateCheck(idea){
   if(!idea.sym||!idea.entry||!idea.sl||!idea.tp1)return;
@@ -1405,8 +1408,8 @@ async function checkPendingWinrates(){
   S.winrates.forEach(w => {
     if (w.result !== 'pending') return;
     if (now - (w.ts||0) > 48*3600000) { w.result='expired'; w.pnl=0; return; }
-    // Skip symbols with non-latin chars (can't fetch price)
-    if (/[^ -]/.test(w.sym)) { w.result='expired'; w.pnl=0; }
+    // Skip symbols with non-ASCII chars
+    try { encodeURIComponent(w.sym); } catch(e) { w.result='expired'; w.pnl=0; return; }
   });
 
   const active = S.winrates.filter(w => w.result === 'pending').slice(0, 10);
