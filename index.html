@@ -1266,7 +1266,7 @@ async function callGemini(prompt,maxTokens=800){
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
   const body={
     contents:[{parts:[{text:prompt}]}],
-    generationConfig:{maxOutputTokens:1024,temperature:0.2},
+    generationConfig:{maxOutputTokens:2048,temperature:0.2},
     systemInstruction:{parts:[{text:'Отвечай ровно 3 строки без отступлений:\nСИГНАЛ: [подтверждён/опровергнут]\nПРИЧИНА: [одна короткая фраза]\nДЕЙСТВИЕ: [входить/ждать/пропустить]\nТолько это. Русский.'}]}
   };
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -1287,9 +1287,7 @@ async function callGemini(prompt,maxTokens=800){
   const text = candidate?.content?.parts?.[0]?.text || '';
   const finishReason = candidate?.finishReason;
   // If truncated by token limit, add note
-  if (finishReason === 'MAX_TOKENS' && text) {
-    return text + '\n\n_(ответ обрезан — увеличьте лимит токенов)_';
-  }
+  // finishReason check removed - just return text as-is
   return text;
 }
 
