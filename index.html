@@ -1520,7 +1520,13 @@ function showWinrates(){
   const avgW=wins>0?S.winrates.filter(w=>w.result==='win'&&w.pnl!=null).reduce((s,w)=>s+w.pnl,0)/wins:0;
   const avgL=losses>0?S.winrates.filter(w=>w.result==='loss'&&w.pnl!=null).reduce((s,w)=>s+w.pnl,0)/losses:0;
   dz.innerHTML=`<div class="fade">
-    <div class="phase-list-hd">📊 Winrate агента · авто-проверка 4h/8h/24h</div>
+    <div class="phase-list-hd" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>📊 Winrate · проверка каждые 15м</span>
+      <div style="display:flex;gap:4px;">
+        <button onclick="checkPendingWinrates().then(()=>showWinrates())" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;">↻ Проверить</button>
+        <button onclick="if(confirm('Очистить все записи?')){S.winrates=[];saveWR();showWinrates();}" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🗑 Сброс</button>
+      </div>
+    </div>
     <div class="wr-grid4">
       <div class="wr-box"><div class="wr-v" style="color:var(--green);">${wr}%</div><div class="wr-l">Winrate</div></div>
       <div class="wr-box"><div class="wr-v" style="color:var(--green);">${wins}</div><div class="wr-l">TP</div></div>
@@ -1535,15 +1541,27 @@ function showWinrates(){
       <div style="height:100%;width:${wr==='—'?0:wr}%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:3px;"></div>
     </div>`:''}
     ${!S.winrates.length?'<div style="font-size:11px;color:var(--muted);">Нет данных. Нажмите ✦ AI анализ на карточке — агент начнёт отслеживать результат.</div>':''}
-    ${S.winrates.slice(0,30).map(w=>`
-      <div class="wr-row ${w.result}" onclick="loadSym('${w.sym}')">
-        <span style="font-family:var(--mono);font-size:11px;font-weight:700;">${w.sym.replace('USDT','')}</span>
-        <span style="color:var(--muted);">${w.dir}</span>
-        <span style="color:var(--dim);font-size:9px;">@$${fmt(w.entry)}</span>
-        <span style="margin-left:auto;font-size:9px;color:var(--dim);">${w.checkHours?w.checkHours+'ч':'⏳'}</span>
-        ${w.pnl!=null?`<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${w.result==='win'?'var(--green)':'var(--red)'};">${w.pnl>=0?'+':''}${w.pnl.toFixed(2)}%</span>`:''}
-        <span style="font-size:9px;font-weight:700;color:${w.result==='win'?'var(--green)':w.result==='loss'?'var(--red)':'var(--amber)'};">${w.result==='win'?'✓TP':w.result==='loss'?'✗SL':'⏳'}</span>
-      </div>`).join('')}
+    ${S.winrates.slice(0,50).map(w=>{
+      const age=Math.floor((Date.now()-(w.ts||0))/60000);
+      const ageStr=age>60?Math.floor(age/60)+'ч':age+'м';
+      const tpPct=w.entry>0?((w.tp-w.entry)/w.entry*100).toFixed(1):'?';
+      const slPct=w.entry>0?((w.entry-w.sl)/w.entry*100).toFixed(1):'?';
+      return `<div class="wr-row ${w.result}" onclick="loadSym('${w.sym}')" style="cursor:pointer;">
+        <div style="display:flex;align-items:center;gap:6px;width:100%;">
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;min-width:60px;">${w.sym.replace('USDT','')}</span>
+          <span style="font-size:9px;padding:1px 4px;border-radius:2px;font-weight:700;
+            background:${w.dir==='LONG'?'var(--green-bg)':'var(--red-bg)'};
+            color:${w.dir==='LONG'?'var(--green)':'var(--red)'};">${w.dir==='LONG'?'▲':'▼'} ${w.dir}</span>
+          <span style="color:var(--dim);font-size:9px;">$${fmt(w.entry)}</span>
+          <span style="color:var(--dim);font-size:8px;">TP+${tpPct}% SL-${slPct}%</span>
+          <span style="margin-left:auto;font-size:8px;color:var(--dim);">${ageStr}</span>
+          ${w.pnl!=null?`<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${w.result==='win'?'var(--green)':'var(--red)'};">${w.pnl>=0?'+':''}${w.pnl.toFixed(2)}%</span>`:''}
+          <span style="font-size:9px;font-weight:700;min-width:28px;text-align:right;color:${w.result==='win'?'var(--green)':w.result==='loss'?'var(--red)':w.result==='expired'?'var(--dim)':'var(--amber)'};">
+            ${w.result==='win'?'✓TP':w.result==='loss'?'✗SL':w.result==='expired'?'exp':'⏳'}
+          </span>
+        </div>
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
