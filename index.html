@@ -220,7 +220,7 @@ button:hover{opacity:.85;}
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
-  <button class="top-btn" onclick="resetToDefaults()">⊞</button>
+  <button class="top-btn" id="theme-toggle" onclick="toggleTheme()" title="Переключить тему">☀</button>
 </div>
 
 <!-- PUMP ALERT -->
@@ -1369,25 +1369,48 @@ function saveWR(){try{localStorage.setItem(WR_KEY,JSON.stringify(S.winrates));}c
 function scheduleWinrateCheck(idea){
   if(!idea.sym||!idea.entry||!idea.sl||!idea.tp1)return;
   if(S.winrates.find(w=>w.sym===idea.sym&&Math.abs((w.ts||0)-(idea.ts||0))<60000))return;
-  S.winrates.unshift({sym:idea.sym,dir:idea.dir||'?',entry:idea.entry,tp:idea.tp1,sl:idea.sl,ts:idea.ts||Date.now(),result:'pending',pnl:null,closePrice:null,checkHours:null,conf:idea.conf,pumpPct:idea.pumpPct});
+  S.winrates.unshift({
+    sym:idea.sym, dir:idea.dir||'?', entry:idea.entry,
+    tp:idea.tp1, sl:idea.sl, ts:idea.ts||Date.now(),
+    result:'pending', pnl:null, closePrice:null, elapsed:0,
+    conf:idea.conf, pumpPct:idea.pumpPct
+  });
+  if(S.winrates.length>100)S.winrates=S.winrates.slice(0,100);
   saveWR();
-  [4,8,24].forEach(h=>setTimeout(async()=>{
-    try{
-      const lp=await fetchPrice(idea.sym);if(!lp)return;
-      const rec=S.winrates.find(w=>w.sym===idea.sym&&Math.abs((w.ts||0)-(idea.ts||0))<60000);
-      if(!rec||rec.result!=='pending')return;
-      if(idea.dir==='SHORT'){if(lp<=idea.tp1)rec.result='win';else if(lp>=idea.sl)rec.result='loss';}
-      else{if(lp>=idea.tp1)rec.result='win';else if(lp<=idea.sl)rec.result='loss';}
-      if(rec.result!=='pending'){
-        rec.checkHours=h;rec.closePrice=lp;
-        rec.pnl=idea.dir==='SHORT'?(idea.entry-lp)/idea.entry*100:(lp-idea.entry)/idea.entry*100;
-        saveWR();
-        notify(rec.result==='win'?`✅ TP · ${idea.sym.replace('USDT','')}`:`❌ SL · ${idea.sym.replace('USDT','')}`,`${rec.pnl>=0?'+':''}${rec.pnl.toFixed(2)}% за ${h}ч`);
-        if(S.phase===5)showWinrates();
-      }
-    }catch{}
-  },h*3600000));
+  if(S.phase===5)showWinrates();
 }
+
+// Active WR monitor — every 2 min
+async function checkPendingWinrates(){
+  const pending=S.winrates.filter(w=>w.result==='pending');
+  if(!pending.length)return;
+  const now=Date.now();
+  // Expire after 48h
+  pending.forEach(w=>{if(now-(w.ts||0)>48*3600000){w.result='expired';w.pnl=0;}});
+  const active=S.winrates.filter(w=>w.result==='pending').slice(0,10);
+  for(const rec of active){
+    try{
+      const lp=await fetchPrice(rec.sym);
+      if(!lp)continue;
+      rec.elapsed=Math.floor((now-(rec.ts||0))/60000);
+      if(rec.dir==='SHORT'){
+        if(lp<=rec.tp){rec.result='win';rec.closePrice=lp;rec.pnl=(rec.entry-lp)/rec.entry*100;}
+        else if(lp>=rec.sl){rec.result='loss';rec.closePrice=lp;rec.pnl=(rec.entry-lp)/rec.entry*100;}
+      }else{
+        if(lp>=rec.tp){rec.result='win';rec.closePrice=lp;rec.pnl=(lp-rec.entry)/rec.entry*100;}
+        else if(lp<=rec.sl){rec.result='loss';rec.closePrice=lp;rec.pnl=(lp-rec.entry)/rec.entry*100;}
+      }
+      if(rec.result!=='pending'){
+        notify(rec.result==='win'?`✅ TP · ${rec.sym.replace('USDT','')}`:`❌ SL · ${rec.sym.replace('USDT','')}`,
+          `${rec.pnl>=0?'+':''}${rec.pnl.toFixed(2)}% за ${rec.elapsed}м`);
+      }
+    }catch(e){}
+    await new Promise(r=>setTimeout(r,500));
+  }
+  saveWR();
+  if(S.phase===5)showWinrates();
+}
+
 
 async function fetchPrice(sym){try{const r=await fetch(`${FAPI}/ticker/price?symbol=${sym}`);const j=await r.json();return+j.price;}catch{return null;}}
 
@@ -1765,8 +1788,37 @@ function notify(title,body){
 }
 
 function resetToDefaults(){
-  // Just reset layout, not ideas
   renderIdeas();
+}
+
+let _darkTheme = false;
+function toggleTheme(){
+  _darkTheme = !_darkTheme;
+  const root = document.documentElement;
+  const btn = document.getElementById('theme-toggle');
+  if(_darkTheme){
+    root.style.setProperty('--bg','#0f1117');
+    root.style.setProperty('--s1','#16181f');
+    root.style.setProperty('--s2','#1c1f28');
+    root.style.setProperty('--s3','#252830');
+    root.style.setProperty('--border','#2d3142');
+    root.style.setProperty('--text','#f8fafc');
+    root.style.setProperty('--text2','#cbd5e1');
+    root.style.setProperty('--muted','#64748b');
+    root.style.setProperty('--dim','#334155');
+    if(btn){btn.textContent='🌙';btn.style.color='#f59e0b';}
+  } else {
+    root.style.removeProperty('--bg');
+    root.style.removeProperty('--s1');
+    root.style.removeProperty('--s2');
+    root.style.removeProperty('--s3');
+    root.style.removeProperty('--border');
+    root.style.removeProperty('--text');
+    root.style.removeProperty('--text2');
+    root.style.removeProperty('--muted');
+    root.style.removeProperty('--dim');
+    if(btn){btn.textContent='☀';btn.style.color='';}
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1909,6 +1961,9 @@ setInterval(()=>{
 },REFRESH_INTERVAL);
 setInterval(()=>runIdeas(false),IDEAS_INTERVAL);
 setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
+setInterval(()=>checkPendingWinrates(), 15*60*1000); // WR check every 15 min
+// Initial check on load
+setTimeout(()=>checkPendingWinrates(), 10000);
 setInterval(()=>{
   fetch(`${FAPI}/ticker/24hr`).then(r=>r.json()).then(t=>{
     if(!Array.isArray(t))return;
