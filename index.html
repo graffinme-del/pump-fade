@@ -1167,7 +1167,7 @@ ${idea.entry?`Entry: $${fmt(idea.entry)} | SL: $${fmt(idea.sl)} | TP: $${fmt(ide
 3) Рекомендация: ВХОДИТЬ / ЖДАТЬ / ПРОПУСТИТЬ`;
   try{
     updateGeminiBtn('working');
-    const reply=await callGemini(prompt,1000);
+    const reply=await callGemini(prompt,2048);
     if(box&&reply){
       box.style.display='block';
       box.innerHTML=`<b style="font-size:9px;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">✦ Gemini · ${new Date().toLocaleTimeString()}</b>${reply.replace(/\n/g,'<br>')}`;
@@ -1219,7 +1219,7 @@ async function sendChat(userMsg){
     updateGeminiBtn('working');
     const hist=chatHistory.slice(-4).map(m=>`${m.role}: ${m.content.substring(0,100)}`).join('\n');
     const fullPrompt=buildContext()+extra+(hist?'\n\n[История]\n'+hist:'')+'\n\n---\nВопрос: '+msg;
-    const reply=await callGemini(fullPrompt,1000);
+    const reply=await callGemini(fullPrompt,2048);
     document.getElementById(tid)?.remove();
     if(!reply){appendMsg('ai','⚠️ Gemini не ответил. Попробуйте снова.');return;}
     appendMsg('ai',reply);
