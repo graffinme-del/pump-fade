@@ -1518,62 +1518,50 @@ async function callGemini(prompt,maxTokens=800){
 async function getGeminiVerdict(idea) {
   if (!getApiKey()) return null;
   const a = idea.cds1h && idea.cds15m ? analyzeFull(idea.cds1h, idea.cds15m) : null;
-  // Keep prompt in English to avoid CJK/Cyrillic token inflation
-  const prompt = `Trading risk manager. Evaluate this setup.
-
-${idea.sym} | ${idea.dir} | confidence: ${idea.conf.toFixed(0)}/100
-Pump: +${idea.pumpPct.toFixed(1)}% | Speed: +${idea.pumpSpeed.toFixed(1)}%/2h | EMA dist: ${idea.dist.toFixed(1)}%
-Vol x${idea.volRatio.toFixed(1)} | RSI: ${idea.rsiNow.toFixed(0)} | CVD: ${idea.cvdFalling?'falling':'rising'}${idea.cvdDiv?' + divergence':''}
-ATR x${idea.atrRatio.toFixed(2)} | 4h trend: ${idea.trend4h||'neutral'}
+  // Same full context as AI analysis button
+  const prompt = `${idea.sym} | ${idea.dir} | ${idea.conf?.toFixed(0)||0}/100
+Pump: +${idea.pumpPct?.toFixed(1)||0}% | EMA: ${idea.dist?.toFixed(1)||0}% | RSI: ${idea.rsiNow?.toFixed(0)||50} | Vol x${idea.volRatio?.toFixed(1)||1} | CVD: ${idea.cvdFalling?'falling':'rising'}${idea.cvdDiv?' + divergence':''}
+ATR x${idea.atrRatio?.toFixed(2)||1} | 4h: ${idea.trend4h||'neutral'}
 Signals: ${(idea.sigs||[]).join(' | ')}
-${a?'Phase: '+a.phase+'/3 | Exhaustion: '+(a.exSigs?.map(s=>s.t).join(', ')||'none')+' | Breakdown: '+(a.bkSigs?.map(s=>s.t).join(', ')||'none'):''}
+${a?'Phase: '+a.phase+'/3 | Ready: '+(a.readyToShort?'YES':'NO')+' | Exhaustion: '+(a.exSigs?.map(s=>s.t).join(', ')||'none')+' | Breakdown: '+(a.bkSigs?.map(s=>s.t).join(', ')||'none'):''}
+${idea.entry?'Entry: $'+fmt(idea.entry)+' | SL: $'+fmt(idea.sl)+' | TP: $'+fmt(idea.tp1):''}
+Candle patterns: ${(idea.allPatterns||[]).map(p=>p.name+' '+p.tf).join(', ')||'none'}
 
-Reply ONLY with this JSON (no markdown, no explanation):
-{"verdict":"GO","confidence":80,"reason":"short reason in Russian"}
-verdict must be GO, SKIP, or WAIT.`;
+Reply ONLY with JSON (no markdown):
+{"verdict":"GO","confidence":80,"reason":"1 sentence in Russian"}
+GO=enter now, SKIP=pass, WAIT=need confirmation`;
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${getApiKey()}`;
-    console.log('Calling Gemini verdict for', idea.sym, 'model:', GEMINI_MODEL);
     const r = await fetch(url, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         contents:[{parts:[{text:prompt}]}],
-        generationConfig:{maxOutputTokens:300, temperature:0.1},
+        generationConfig:{maxOutputTokens:200, temperature:0.1},
+        systemInstruction:{parts:[{text:'You are a strict trading risk manager. Reply ONLY with valid JSON. No markdown, no explanation outside JSON.'}]}
       })
     });
-    if (!r.ok) { const err = await r.json().catch(()=>({})); console.error('Verdict HTTP error:', r.status, err?.error?.message); return null; }
+    if (!r.ok) return null;
     const data = await r.json();
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    console.log('Verdict raw response:', raw.substring(0, 100));
     if (!raw) return null;
-    // Remove ALL markdown code fences and get full text
     const clean = raw.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
-    // Find JSON - search entire cleaned text
-    const start = clean.indexOf('{');
-    const end = clean.lastIndexOf('}');
-    if (start >= 0 && end > start) {
+    const start = clean.indexOf('{'), end2 = clean.lastIndexOf('}');
+    if (start >= 0 && end2 > start) {
       try {
-        const parsed = JSON.parse(clean.slice(start, end+1));
+        const parsed = JSON.parse(clean.slice(start, end2+1));
         if (parsed.verdict) return parsed;
       } catch(e2) {}
     }
-    // Fallback: detect verdict keyword in raw text
+    // Fallback
     const upper = raw.toUpperCase();
-    const verdict = upper.includes('"GO"') || upper.includes("VERDICT: GO") ? 'GO'
-      : upper.includes('"SKIP"') || upper.includes("VERDICT: SKIP") ? 'SKIP'
-      : upper.includes('"WAIT"') || upper.includes("VERDICT: WAIT") ? 'WAIT'
-      : null;
-    if (verdict) {
-      // Extract reason - any sentence after the verdict
-      const reason = clean.replace(/[{}"\n]/g,' ').replace(/verdict[^,]+,/i,'').replace(/confidence[^,]+,/i,'').replace(/reason\s*:\s*/i,'').trim().substring(0,200);
-      return {verdict, confidence:70, reason};
-    }
+    const verdict = upper.includes('"GO"')?'GO':upper.includes('"SKIP"')?'SKIP':upper.includes('"WAIT"')?'WAIT':null;
+    if (verdict) return {verdict, confidence:70, reason: clean.replace(/[{}"\n]/g,' ').trim().substring(0,150)};
     return null;
-  } catch(e) { console.error('getGeminiVerdict error:', e.message); return null; }
+  } catch(e) { return null; }
 }
 
-// AI analysis for coin card
+
 async function askAIAboutIdea(idx){
   const idea=S.ideas[idx];if(!idea)return;
   // Result goes to right chat panel only
