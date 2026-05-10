@@ -570,158 +570,221 @@ async function scoreForIdea(sym){
     const[j1h,j15m,j4h,j5m]=await Promise.all([r1h.json(),r15m.json(),r4h.json(),r5m.json()]);
     if(!Array.isArray(j1h)||j1h.length<30)return null;
     const parse=arr=>arr.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
-    const cds5m=Array.isArray(j5m)?parse(j5m):[];
-    const cds1h=parse(j1h),cds15m=Array.isArray(j15m)?parse(j15m):[],cds4h=Array.isArray(j4h)?parse(j4h):[];
-    const c1h=cds1h.map(c=>c.close),v1h=cds1h.map(c=>c.volume),n1h=cds1h.length-1;
-    const e20=ema(c1h,20),e50=ema(c1h,50),ve20=ema(v1h,20);
-    const price=c1h[n1h],e20n=e20[n1h];
+    const cds1h=parse(j1h);
+    const cds15m=Array.isArray(j15m)&&j15m.length>10?parse(j15m):[];
+    const cds4h=Array.isArray(j4h)&&j4h.length>10?parse(j4h):[];
+    const cds5m=Array.isArray(j5m)&&j5m.length>10?parse(j5m):[];
+
+    const c1h=cds1h.map(c=>c.close);
+    const v1h=cds1h.map(c=>c.volume);
+    const n1h=cds1h.length-1;
+    const price=c1h[n1h];
+
+    // EMAs 1h
+    const e20_1h=ema(c1h,20); const e20n=e20_1h[n1h]||price;
+    const e50_1h=ema(c1h,50); const e50n=e50_1h[n1h]||price;
+    const e200_1h=ema(c1h,200);
+
+    // Price metrics 1h
+    const dist=(price-e20n)/e20n*100;
     const pumpLow=Math.min(...cds1h.slice(-8).map(c=>c.low));
     const pumpPct=pumpLow>0?(price-pumpLow)/pumpLow*100:0;
-    const p2=Math.min(...cds1h.slice(-2).map(c=>c.low));
-    const pumpSpeed=p2>0?(price-p2)/p2*100:0;
-    const dist=e20n?(price-e20n)/e20n*100:0;
-    const atrNow=atrCalc(cds1h),atrHist=cds1h.length>20?atrCalc(cds1h.slice(0,-1)):atrNow;
+    const pumpSpeed=cds1h.length>2?(price-cds1h[n1h-2].close)/cds1h[n1h-2].close*100:0;
+    const atrNow=atrCalc(cds1h);
+    const atrHist=atrCalc(cds1h.slice(0,-1));
     const atrRatio=atrHist>0?atrNow/atrHist:1;
-    const lastC=cds1h[n1h],bodyRatio=Math.abs(lastC.close-lastC.open)/(lastC.high-lastC.low||0.0001);
+    const ve20=ema(v1h,20);
     const volRatio=(ve20[n1h]||1)>0?v1h[n1h]/(ve20[n1h]||1):1;
-    const rsiArr=rsi(c1h),rsiNow=rsiArr[n1h];
+    const lastC=cds1h[n1h];
+    const bodyRatio=Math.abs(lastC.close-lastC.open)/(lastC.high-lastC.low||0.0001);
+    const rsiArr=rsi(c1h); const rsiNow=rsiArr[n1h];
     const{h}=macd(c1h);
     const hTurning=h[n1h]!=null&&h[n1h-1]!=null&&h[n1h]<h[n1h-1]&&h[n1h-1]>0;
-    // CVD
+    const hTurningUp=h[n1h]!=null&&h[n1h-1]!=null&&h[n1h]>h[n1h-1]&&h[n1h-1]<0;
+
+    // CVD 15m
     let cvdFalling=false,cvdDiv=false;
-    if(cds15m.length>20){
-      const cvd15=cvdFromCandles(cds15m);cvdFalling=cvd15[cvd15.length-1]<cvd15[Math.max(0,cvd15.length-6)];
-      const c15=cds15m.map(c=>c.close),n15=cds15m.length-1;
-      cvdDiv=c15[n15]>c15[n15-4]&&cvd15[cvd15.length-1]<cvd15[Math.max(0,n15-4)];
+    if(cds15m.length>10){
+      const cvd15=cvdFromCandles(cds15m);
+      const cn=cvd15.length-1;
+      cvdFalling=cvd15[cn]<cvd15[Math.max(0,cn-6)];
+      const c15=cds15m.map(c=>c.close);
+      cvdDiv=c15[c15.length-1]>c15[Math.max(0,c15.length-5)]&&cvd15[cn]<cvd15[Math.max(0,cn-4)];
     }
-    // 4h trend
+
+    // 4h orientation
     let trend4h='neutral';
-    if(cds4h.length>=50){
-      const c4=cds4h.map(c=>c.close),e50_4=ema(c4,50),e200_4=ema(c4,200);
-      const p4=c4[c4.length-1],e50n4=e50_4[e50_4.length-1],e200n4=e200_4[e200_4.length-1];
-      if(e50n4&&e200n4)trend4h=p4>e50n4&&e50n4>e200n4?'bull':p4<e50n4&&e50n4<e200n4?'bear':'neutral';
+    if(cds4h.length>=22){
+      const c4=cds4h.map(c=>c.close),n4=c4.length-1;
+      const e20_4=ema(c4,20),e50_4=ema(c4,50);
+      if(e20_4[n4]&&e50_4[n4]){
+        if(c4[n4]>e20_4[n4]&&e20_4[n4]>e50_4[n4])trend4h='bull';
+        else if(c4[n4]<e20_4[n4]&&e20_4[n4]<e50_4[n4])trend4h='bear';
+      }
     }
-    // Score SHORT
+
+    // 15m data
+    const c15=cds15m.length>0?cds15m.map(c=>c.close):c1h;
+    const n15=c15.length-1;
+    const p15=c15[n15];
+    const e20_15=ema(c15,20); const e20_15n=e20_15[n15]||p15;
+    const e50_15=ema(c15,50); const e50_15n=e50_15[n15]||p15;
+    const rsi15=cds15m.length>14?rsi(c15):rsiArr;
+    const rsiNow15=rsi15[rsi15.length-1];
+
+    // ── SHORT: Pump Exhaustion ──────────────────────────────
     const isSharpPump=pumpPct>=PUMP_THRESH&&dist>=8;
-    const exCount=(rsiNow>70?1:0)+(hTurning?1:0)+(cvdDiv?1:0)+(atrRatio>1.5?1:0);
+    const exCount=(rsiNow>70?1:0)+(hTurning?1:0)+(cvdDiv?1:0)+(atrRatio>1.5?1:0)+(cvdFalling?1:0);
     let shortConf=0,shortSigs=[];
-    // SHORT requires pump + at least 1 exhaustion signal
     if(isSharpPump&&exCount>=1){
-      shortConf=Math.min(94,40+pumpPct*0.8+dist*0.6+exCount*8+(cvdFalling?5:0));
-      if(pumpSpeed>5){shortConf+=8;shortSigs.push(`⚡ Скорость +${pumpSpeed.toFixed(1)}%/2ч`);}
+      shortConf=Math.min(94,38+pumpPct*1.2+dist*0.8+exCount*7);
       if(rsiNow>70)shortSigs.push(`RSI ${rsiNow.toFixed(0)} — перекупленность`);
       if(hTurning)shortSigs.push('MACD разворачивается ↓');
       if(cvdDiv)shortSigs.push('CVD дивергенция');
-      if(cvdFalling)shortSigs.push('CVD ↓ на 15m');
+      if(cvdFalling)shortSigs.push('CVD ↓ — покупки иссякают');
+      if(pumpSpeed>5)shortSigs.push(`⚡ +${pumpSpeed.toFixed(1)}%/2ч`);
     }
-    // Score LONG
-    const e20_15m_arr=cds15m.length>20?ema(cds15m.map(c=>c.close),20):[];
-    const p15=cds15m.length>0?cds15m[cds15m.length-1].close:price;
-    const e20_15n=e20_15m_arr.length>0?e20_15m_arr[e20_15m_arr.length-1]:null;
-    const crossedUp=e20_15n&&p15>e20_15n&&cds15m.length>1&&cds15m[cds15m.length-2].close<(e20_15m_arr[e20_15m_arr.length-2]||e20_15n);
-    const rsi15=cds15m.length>20?rsi(cds15m.map(c=>c.close)):[];
-    const rsiNow15=rsi15.length?rsi15[rsi15.length-1]:50;
-    // ── EARLY PUMP (5m) — из early_pump_scanner.py ──
-    let earlyPumpConf=0,earlyPumpSigs=[];
-    if(cds5m.length>=30){
-      const last5=cds5m[cds5m.length-1];
-      const body5=last5.open>0?(last5.close-last5.open)/last5.open*100:0;
-      const vols5=cds5m.slice(-48).map(c=>c.volume);
-      const med5=[...vols5].sort((a,b)=>a-b)[Math.floor(vols5.length/2)]||1;
-      const vr5=last5.volume/med5;
-      const barRange5=last5.high-last5.low||0.0001;
-      const taker5=Math.abs(last5.close-last5.open)/barRange5;
-      const c5=cds5m.map(c=>c.close);
-      const rsi5arr=rsi(c5); const rsi5now=rsi5arr[rsi5arr.length-1];
-      const e20_5=ema(c5,20); const emaPct5=e20_5[e20_5.length-1]>0?(c5[c5.length-1]-e20_5[e20_5.length-1])/e20_5[e20_5.length-1]*100:0;
-      let cvd5=0; const cvdArr5=cds5m.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cvd5+=b/r*c.volume;return cvd5;});
-      const cvdDelta5=cvdArr5[cvdArr5.length-1]-cvdArr5[Math.max(0,cvdArr5.length-7)];
-      if(body5>=0.35&&body5<=3.0&&vr5>=2.0&&vr5<=28&&rsi5now<80&&rsi5now>40){
-        let q=0;
-        if(vr5>=2&&vr5<=4)q+=25;else if(vr5<=10)q+=20;else q+=12;
-        if(body5>=0.5&&body5<=2.0)q+=18;else if(body5<0.5)q+=8;else q+=12;
-        if(taker5>=0.6)q+=15;else if(taker5>=0.4)q+=8;
-        if(cvdDelta5>0)q+=12;
-        if(rsi5now>=50&&rsi5now<=65)q+=10;else if(rsi5now<=75)q+=6;
-        if(emaPct5>0&&emaPct5<3)q+=10;else if(emaPct5>=3)q+=4;
-        if(cvdDelta5>0&&vr5>=3)q+=10;
-        q=Math.min(100,q);
-        if(q>=72){
-          earlyPumpConf=q;
-          earlyPumpSigs=[`🚀 Старт пампа: тело +${body5.toFixed(2)}%`,`Vol×${vr5.toFixed(1)}/мед`,`taker ${taker5.toFixed(2)}`,`CVD ${cvdDelta5>0?'↑':'↓'}`];
+
+    // ── LONG сетапы ────────────────────────────────────────
+    let longConf=0,longDir=null,longSigs=[];
+
+    // 1. EMA стек 1h выровнен (h1_context.py: close>EMA20>EMA50)
+    if(!longDir){
+      const nowBull=price>e20n&&e20n>e50n;
+      const prevBull=c1h[n1h-1]>e20_1h[n1h-1]&&e20_1h[n1h-1]>e50_1h[n1h-1];
+      // Либо только что выровнялся, либо стоит в тренде с подтверждением
+      if(nowBull&&volRatio>1.2&&!cvdFalling&&rsiNow>45&&rsiNow<72){
+        const fresh=!prevBull?15:0; // бонус если только что выровнялся
+        longConf=Math.min(86,44+fresh+(trend4h==='bull'?12:trend4h==='bear'?-10:0)+volRatio*3+(hTurningUp?8:0));
+        if(longConf>=MIN_CONF){
+          longSigs=[`📈 EMA стек ↑ на 1h (close>EMA20>EMA50)`,
+            trend4h==='bull'?'4h тренд бычий':fresh?'Только что выровнялся':'',
+            !cvdFalling?'CVD ↑':''].filter(Boolean);
+          longDir='LONG';
         }
       }
     }
 
-    let longConf=0,longDir=null,longSigs=[];
-
-    // LONG: EMA20 crossover on 15m (works in any 4h trend)
-    if(crossedUp&&rsiNow15>45&&rsiNow15<75&&!cvdFalling){
-      longConf=Math.min(88,46+(trend4h==='bull'?12:0)+(bodyRatio>0.6?8:0)+(!cvdFalling?5:0)+(rsiNow15<60?4:0));
-      longSigs=['📈 EMA20 пересечена ↑ на 15m',!cvdFalling?'CVD ↑ — покупки активны':'',trend4h==='bull'?'4h тренд восходящий':'15m разворот вверх'].filter(Boolean);
-      longDir='LONG';
+    // 2. EMA20 пересечена снизу вверх на 15m (последние 3 свечи)
+    if(!longDir&&cds15m.length>20){
+      const recentBelowEma=cds15m.slice(-5,-2).some(c=>c.close<(e20_15[cds15m.length-4]||e20_15n));
+      const nowAboveEma=p15>e20_15n;
+      if(recentBelowEma&&nowAboveEma&&rsiNow15>40&&rsiNow15<72&&!cvdFalling){
+        longConf=Math.min(84,46+(trend4h==='bull'?12:0)+volRatio*2+(hTurningUp?6:0));
+        if(longConf>=MIN_CONF){
+          longSigs=[`📈 EMA20 пробита ↑ на 15m`,
+            trend4h==='bull'?'4h бычий':'',
+            !cvdFalling?'CVD ↑':''].filter(Boolean);
+          longDir='LONG';
+        }
+      }
     }
 
-    // LONG: Новый тренд — EMA20>EMA50 стек выровнен на 1h
-    if(!longDir){
-      const e20_1h_arr=ema(c1h,20),e50_1h_arr=ema(c1h,50);
-      const n=c1h.length-1;
-      const nowBull=c1h[n]>e20_1h_arr[n]&&e20_1h_arr[n]>e50_1h_arr[n];
-      const wasBull=c1h[n-1]>e20_1h_arr[n-1]&&e20_1h_arr[n-1]>e50_1h_arr[n-1];
-      if(nowBull&&!wasBull&&volRatio>1.3){
-        longConf=Math.min(82,54+(trend4h==='bull'?10:0)+volRatio*2);
-        longSigs=['🔄 EMA стек выровнен вверх на 1h',`Vol×${volRatio.toFixed(1)} подтверждает`];
+    // 3. Разворот ATR+ROC (reversal_tf_pair.py)
+    if(!longDir&&cds1h.length>20){
+      const atrPctVal=atrNow/price*100;
+      const roc12=n1h>=12&&c1h[n1h-12]>0?(price-c1h[n1h-12])/c1h[n1h-12]*100:0;
+      // Перепад вниз + ATR высокий + разворот MACD
+      if(atrPctVal>=0.22&&roc12<=-1.8&&rsiNow<45&&hTurningUp){
+        const lastBar=cds1h[n1h];
+        const wickBot=(Math.min(lastBar.open,lastBar.close)-lastBar.low)/(lastBar.high-lastBar.low||0.001);
+        if(wickBot>=0.3||lastBar.close>lastBar.open){
+          longConf=Math.min(82,50+Math.abs(roc12)*1.5+(hTurningUp?10:0)+(rsiNow<35?8:0));
+          if(longConf>=MIN_CONF){
+            longSigs=[`↩ Разворот: ATR ${atrPctVal.toFixed(2)}%, ROC ${roc12.toFixed(1)}%`,
+              `RSI ${rsiNow.toFixed(0)} перепродан`,`MACD ↑`];
+            longDir='LONG';
+          }
+        }
+      }
+    }
+
+    // 4. Volume Breakout вверх (любой тренд)
+    if(!longDir&&volRatio>2.5&&bodyRatio>0.65&&lastC.close>lastC.open&&rsiNow>50&&rsiNow<75){
+      longConf=Math.min(82,44+volRatio*4+(trend4h==='bull'?10:0));
+      if(longConf>=MIN_CONF){
+        longSigs=[`🚀 Volume Breakout ×${volRatio.toFixed(1)}`,`Body ${(bodyRatio*100).toFixed(0)}%`,trend4h==='bull'?'4h бычий':''].filter(Boolean);
         longDir='LONG';
       }
     }
 
-    // LONG: Разворот на ATR+ROC (перепродан + разворот)
-    if(!longDir){
-      const atrCtx=atrCalc(cds1h,14),priceRef=c1h[c1h.length-1];
-      const atrPctVal=priceRef>0?atrCtx/priceRef*100:0;
-      const rocVal=c1h.length>12&&c1h[c1h.length-13]>0?(c1h[c1h.length-1]-c1h[c1h.length-13])/c1h[c1h.length-13]*100:0;
-      if(atrPctVal>=0.22&&rocVal<=-1.8&&rsiNow<40&&!cvdFalling){
-        longConf=Math.min(80,50+Math.abs(rocVal)*2+(hTurning?10:0));
-        longSigs=[`↩ Разворот: ATR ${atrPctVal.toFixed(2)}%, ROC ${rocVal.toFixed(1)}%`,`RSI ${rsiNow.toFixed(0)} — перепроданность`];
+    // 5. RSI перепроданность (1h<30, 15m<35)
+    if(!longDir&&rsiNow<32&&rsiNow15<38){
+      longConf=Math.min(80,46+(hTurningUp?10:0)+(rsiNow<25?8:0)+(!cvdFalling?5:0));
+      if(longConf>=MIN_CONF){
+        longSigs=[`📉 RSI 1h: ${rsiNow.toFixed(0)}, 15m: ${rsiNow15.toFixed(0)} перепроданность`,hTurningUp?'MACD ↑':''].filter(Boolean);
         longDir='LONG';
       }
     }
 
-    // LONG: Volume breakout (любой тренд)
-    if(!longDir&&volRatio>2.5&&bodyRatio>0.65&&rsiNow>50&&rsiNow<72){
-      longConf=Math.min(82,46+volRatio*3+(trend4h==='bull'?8:0));
-      longSigs=[`🚀 Volume Breakout ×${volRatio.toFixed(1)}`,`Body ${(bodyRatio*100).toFixed(0)}%`];longDir='LONG';
+    // ── Ранний памп 5m (early_pump_scanner.py) ─────────────
+    let earlyPumpConf=0,earlyPumpSigs=[];
+    if(cds5m.length>=30){
+      const last5=cds5m[cds5m.length-1];
+      const body5=last5.open>0?(last5.close-last5.open)/last5.open*100:0;
+      const vols5=cds5m.slice(-48,cds5m.length-1).map(c=>c.volume);
+      const med5=[...vols5].sort((a,b)=>a-b)[Math.floor(vols5.length/2)]||1;
+      const vr5=last5.volume/med5;
+      const barR5=last5.high-last5.low||0.0001;
+      const taker5=Math.abs(last5.close-last5.open)/barR5;
+      const c5=cds5m.map(c=>c.close);
+      const rsi5=rsi(c5); const rsi5n=rsi5[rsi5.length-1];
+      const e20_5=ema(c5,20); const emaPct5=e20_5[e20_5.length-1]>0?(c5[c5.length-1]-e20_5[e20_5.length-1])/e20_5[e20_5.length-1]*100:0;
+      let cvd5=0;
+      const cvdArr5=cds5m.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cvd5+=b/r*c.volume;return cvd5;});
+      const cvdD5=cvdArr5[cvdArr5.length-1]-cvdArr5[Math.max(0,cvdArr5.length-7)];
+      if(body5>=0.35&&body5<=3.0&&vr5>=2.0&&vr5<=28&&rsi5n<80&&rsi5n>35){
+        let q=0;
+        q+=vr5>=2&&vr5<=4?25:vr5<=10?20:12;
+        q+=body5>=0.5&&body5<=2.0?18:body5<0.5?8:12;
+        q+=taker5>=0.6?15:taker5>=0.4?8:0;
+        q+=cvdD5>0?12:0;
+        q+=rsi5n>=50&&rsi5n<=65?10:rsi5n<=75?6:0;
+        q+=emaPct5>0&&emaPct5<3?10:emaPct5>=3?4:0;
+        q+=cvdD5>0&&vr5>=3?10:0;
+        q=Math.min(100,q);
+        if(q>=72){
+          earlyPumpConf=q;
+          earlyPumpSigs=[`🚀 Старт пампа 5m: +${body5.toFixed(2)}%`,`Vol×${vr5.toFixed(1)}/мед`,`taker ${taker5.toFixed(2)}`,cvdD5>0?'CVD ↑':'CVD ↓'];
+        }
+      }
     }
 
-    // LONG: RSI oversold
-    if(!longDir&&rsiNow<30&&rsiNow15<35){
-      longConf=Math.min(78,45+(hTurning?6:0)+(!cvdFalling?5:0)+(rsiNow15<30?6:0));
-      longSigs=[`📉 RSI 1h: ${rsiNow.toFixed(0)}, 15m: ${rsiNow15.toFixed(0)} — перепроданность`];longDir='LONG';
-    }
-    // Early pump from 5m scan
-    if(earlyPumpConf>=72&&!res.bestDir){
-      Object.assign(res,{bestDir:'LONG',bestConf:earlyPumpConf,bestSigs:earlyPumpSigs,
-        entry:p15,sl:p15*(1-atrv/p15*1.5||0.02),tp1:p15*(1+(atrv/p15*2||0.03)),tp2:p15*(1+(atrv/p15*4||0.05)),
-        rr:1.3,atrv,why:`Старт пампа 5m: тело +${cds5m.length?((cds5m[cds5m.length-1].close-cds5m[cds5m.length-1].open)/cds5m[cds5m.length-1].open*100).toFixed(2):0}%, качество ${earlyPumpConf}/100`,
-        earlyPump:true});
-    }
-    // New pump (1h)
-    const isNewPump=pumpPct>=PUMP_THRESH&&pumpSpeed>=5&&volRatio>=1.5;
-    const res={sym,cds1h,cds15m,price,pumpPct,pumpSpeed,dist,atrRatio,volRatio,rsiNow,bodyRatio,trend4h,shortConf,shortSigs,longConf,longDir,longSigs,isSharpPump,isNewPump,cvdFalling,cvdDiv};
+    // ── Выбор лучшего сигнала ──────────────────────────────
+    const res={sym,cds1h,cds15m,price,pumpPct,pumpSpeed,dist,atrRatio,volRatio,
+      rsiNow,bodyRatio,trend4h,shortConf,shortSigs,longConf,longDir,longSigs,
+      earlyPumpConf,isSharpPump,cvdFalling,cvdDiv};
     const atrv=atrCalc(cds15m.length>14?cds15m:cds1h);
-    if(shortConf>=MIN_CONF&&shortConf>longConf){
-      const entry=p15,sl=entry+atrv*1.5,tp1=Math.max(e20[n1h]||0,entry-atrv*2),tp2=Math.max(e50[n1h]||0,entry-atrv*4);
-      Object.assign(res,{bestDir:'SHORT',bestConf:shortConf,bestSigs:shortSigs,entry,sl,tp1,tp2,rr:sl>entry?Math.abs(tp1-entry)/Math.abs(sl-entry):0,atrv,why:`+${pumpPct.toFixed(1)}% за 8ч, ${dist.toFixed(1)}% от EMA20. ${shortSigs.slice(0,2).join(', ')}.`});
-    } else if(longConf>=MIN_CONF&&longConf>=shortConf&&longDir){
+
+    if(shortConf>=MIN_CONF&&shortConf>=longConf&&shortConf>=earlyPumpConf){
+      const entry=p15,sl=entry+atrv*1.5,tp1=Math.max(e20n*0.998,entry-atrv*2),tp2=Math.max(e50n*0.998,entry-atrv*4);
+      Object.assign(res,{bestDir:'SHORT',bestConf:shortConf,bestSigs:shortSigs,
+        entry,sl,tp1,tp2,rr:sl>entry?+(Math.abs(tp1-entry)/Math.abs(sl-entry)).toFixed(2):0,atrv,
+        why:`+${pumpPct.toFixed(1)}% за 8ч, ${dist.toFixed(1)}% от EMA20. ${shortSigs.slice(0,2).join(', ')}.`});
+    } else if(earlyPumpConf>=72&&earlyPumpConf>=longConf){
+      const entry=p15,sl=entry*(1-atrv/price*1.5),tp1=entry*(1+atrv/price*2),tp2=entry*(1+atrv/price*4);
+      Object.assign(res,{bestDir:'LONG',bestConf:earlyPumpConf,bestSigs:earlyPumpSigs,
+        entry,sl,tp1,tp2,rr:+((tp1-entry)/(entry-sl||1)).toFixed(2),atrv,
+        why:earlyPumpSigs.join(', '),earlyPump:true});
+    } else if(longConf>=MIN_CONF&&longDir){
       const entry=p15,sl=entry-atrv*1.5,tp1=entry+atrv*2,tp2=entry+atrv*4;
-      Object.assign(res,{bestDir:'LONG',bestConf:longConf,bestSigs:longSigs,entry,sl,tp1,tp2,rr:Math.abs(tp1-entry)/Math.abs(sl-entry),atrv,why:`${longSigs.slice(0,2).join(', ')}. 4h: ${trend4h}.`});
-    }
-    if(isNewPump&&!res.bestDir){
-      Object.assign(res,{bestDir:'ПАМП',bestConf:Math.min(95,50+pumpPct+volRatio*5),bestSigs:[`+${pumpPct.toFixed(1)}% за 8h`,`⚡ +${pumpSpeed.toFixed(1)}%/2ч`,`Vol×${volRatio.toFixed(1)}`],why:`Резкий памп +${pumpPct.toFixed(1)}%, скорость +${pumpSpeed.toFixed(1)}%, Vol×${volRatio.toFixed(1)}.`,isPumpSignal:true,entry:price,sl:price*(1-atrv/price*2),tp1:0,tp2:0,rr:0,atrv});
+      Object.assign(res,{bestDir:'LONG',bestConf:longConf,bestSigs:longSigs,
+        entry,sl,tp1,tp2,rr:+((tp1-entry)/(entry-sl||1)).toFixed(2),atrv,
+        why:longSigs.join(', ')});
+    } else {
+      // Зарождающийся памп (наблюдение)
+      const isNewPump=pumpPct>=PUMP_THRESH&&pumpSpeed>=5&&volRatio>=1.5;
+      if(isNewPump){
+        Object.assign(res,{bestDir:'ПАМП',bestConf:Math.min(90,50+pumpPct+volRatio*4),
+          bestSigs:[`+${pumpPct.toFixed(1)}% за 8ч`,`⚡ +${pumpSpeed.toFixed(1)}%/2ч`,`Vol×${volRatio.toFixed(1)}`],
+          why:`Резкий памп +${pumpPct.toFixed(1)}%, Vol×${volRatio.toFixed(1)}`,
+          isPumpSignal:true,entry:price,sl:price*0.97,tp1:0,tp2:0,rr:0,atrv});
+      }
     }
     return res;
-  }catch(e){return null;}
+  }catch(e){console.error('scoreForIdea error:',sym,e);return null;}
 }
+
 
 // ═══════════════════════════════════════════════════════
 //  SCAN (200 coins)
@@ -1260,24 +1323,32 @@ verdict: GO=входить, SKIP=пропустить, WAIT=ждать подт�
     });
     if (!r.ok) return null;
     const data = await r.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    console.log('Gemini raw verdict:', text);
-    if (!text) { console.warn('Empty Gemini response'); return null; }
-    // Try to extract JSON - Gemini sometimes wraps in ```json
-    let clean = text.replace(/```json/g,'').replace(/```/g,'').trim();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!raw) return null;
+    // Remove ALL markdown code fences and get full text
+    const clean = raw.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+    // Find JSON - search entire cleaned text
     const start = clean.indexOf('{');
     const end = clean.lastIndexOf('}');
-    if (start < 0 || end <= start) {
-      console.warn('No JSON found in:', clean);
-      // Try to parse verdict from plain text
-      const v = clean.includes('GO') ? 'GO' : clean.includes('SKIP') ? 'SKIP' : clean.includes('WAIT') ? 'WAIT' : null;
-      if (v) return {verdict:v, confidence:75, reason:clean.substring(0,150)};
-      return null;
+    if (start >= 0 && end > start) {
+      try {
+        const parsed = JSON.parse(clean.slice(start, end+1));
+        if (parsed.verdict) return parsed;
+      } catch(e2) {}
     }
-    const parsed = JSON.parse(clean.slice(start, end+1));
-    console.log('Parsed verdict:', parsed);
-    return parsed;
-  } catch(e) { console.error('Verdict parse error:', e); return null; }
+    // Fallback: detect verdict keyword in raw text
+    const upper = raw.toUpperCase();
+    const verdict = upper.includes('"GO"') || upper.includes("VERDICT: GO") ? 'GO'
+      : upper.includes('"SKIP"') || upper.includes("VERDICT: SKIP") ? 'SKIP'
+      : upper.includes('"WAIT"') || upper.includes("VERDICT: WAIT") ? 'WAIT'
+      : null;
+    if (verdict) {
+      // Extract reason - any sentence after the verdict
+      const reason = clean.replace(/[{}"\n]/g,' ').replace(/verdict[^,]+,/i,'').replace(/confidence[^,]+,/i,'').replace(/reason\s*:\s*/i,'').trim().substring(0,200);
+      return {verdict, confidence:70, reason};
+    }
+    return null;
+  } catch(e) { return null; }
 }
 
 // AI analysis for coin card
