@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 14:00</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 14:21</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <!-- theme toggle disabled -->
 </div>
@@ -1173,7 +1173,7 @@ function renderIdeas(){
           getApiKey() ? `<span style="font-size:8px;color:var(--dim);animation:pulse 1s infinite;">✦</span>` :
           `<span style="font-size:8px;color:var(--dim);">—</span>`
         }
-        <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--muted)'};">${idea.conf.toFixed(0)}/100</span>
+        <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--muted)'};">${(idea.conf||0).toFixed(0)}/100</span>
       </div>
       ${idea.verdictReason ? `<div style="font-size:8px;color:var(--muted);margin-top:2px;line-height:1.4;border-top:1px solid var(--border);padding-top:2px;">${idea.verdictReason}</div>` : ''}
     </div>`;
@@ -1280,7 +1280,7 @@ function showCoinCard(idea,analysis){
     <div class="coin-card-hd">
       <span class="coin-sym-big">${idea.sym}</span>
       <span class="coin-dir-badge" style="background:${dbg};color:${dc};border:1px solid ${dbl};">${dl}</span>
-      <span class="coin-conf">${idea.conf.toFixed(0)}/100</span>
+      <span class="coin-conf">${(idea.conf||0).toFixed(0)}/100</span>
     </div>
 
     <!-- Why -->
@@ -1325,11 +1325,11 @@ function showCoinCard(idea,analysis){
 
     <!-- Stats -->
     <div class="stats-row">
-      <div class="stat-item"><div class="sl">Памп 8h</div><div class="sv" style="color:${idea.pumpPct>=PUMP_THRESH?'var(--red)':'var(--text)'};">+${idea.pumpPct.toFixed(1)}%</div></div>
-      <div class="stat-item"><div class="sl">Скорость</div><div class="sv" style="color:${idea.pumpSpeed>5?'var(--orange)':'var(--muted)'};">+${idea.pumpSpeed.toFixed(1)}%</div></div>
-      <div class="stat-item"><div class="sl">Vol/avg</div><div class="sv" style="color:${idea.volRatio>2?'var(--amber)':'var(--muted)'};">×${idea.volRatio.toFixed(1)}</div></div>
-      <div class="stat-item"><div class="sl">RSI</div><div class="sv" style="color:${idea.rsiNow>70?'var(--red)':idea.rsiNow<30?'var(--green)':'var(--muted)'};">${idea.rsiNow.toFixed(0)}</div></div>
-      <div class="stat-item"><div class="sl">ATR ratio</div><div class="sv" style="color:${idea.atrRatio>1.5?'var(--red)':'var(--muted)'};">×${idea.atrRatio.toFixed(2)}</div></div>
+      <div class="stat-item"><div class="sl">Памп 8h</div><div class="sv" style="color:${(idea.pumpPct||0)>=PUMP_THRESH?'var(--red)':'var(--text)'};">+${(idea.pumpPct||0).toFixed(1)}%</div></div>
+      <div class="stat-item"><div class="sl">Скорость</div><div class="sv" style="color:${(idea.pumpSpeed||0)>5?'var(--orange)':'var(--muted)'};">+${(idea.pumpSpeed||0).toFixed(1)}%</div></div>
+      <div class="stat-item"><div class="sl">Vol/avg</div><div class="sv" style="color:${(idea.volRatio||0)>2?'var(--amber)':'var(--muted)'};">×${(idea.volRatio||0).toFixed(1)}</div></div>
+      <div class="stat-item"><div class="sl">RSI</div><div class="sv" style="color:${(idea.rsiNow||50)>70?'var(--red)':(idea.rsiNow||50)<30?'var(--green)':'var(--muted)'};">${(idea.rsiNow||50).toFixed(0)}</div></div>
+      <div class="stat-item"><div class="sl">ATR ratio</div><div class="sv" style="color:${(idea.atrRatio||1)>1.5?'var(--red)':'var(--muted)'};">×${(idea.atrRatio||1).toFixed(2)}</div></div>
       <div class="stat-item"><div class="sl">CVD</div><div class="sv" style="color:${idea.cvdDiv?'var(--red)':idea.cvdFalling?'var(--amber)':'var(--green)'};">${idea.cvdDiv?'div':idea.cvdFalling?'↓':'↑'}</div></div>
     </div>
 
@@ -1669,8 +1669,8 @@ async function getGeminiVerdict(idea) {
   const a = idea.cds1h && idea.cds15m ? analyzeFull(idea.cds1h, idea.cds15m) : null;
   // Same full context as AI analysis button
   const prompt = `${idea.sym} | ${idea.dir} | ${idea.conf?.toFixed(0)||0}/100
-Pump: +${idea.pumpPct?.toFixed(1)||0}% | EMA: ${idea.dist?.toFixed(1)||0}% | RSI: ${idea.rsiNow?.toFixed(0)||50} | Vol x${idea.volRatio?.toFixed(1)||1} | CVD: ${idea.cvdFalling?'falling':'rising'}${idea.cvdDiv?' + divergence':''}
-ATR x${idea.atrRatio?.toFixed(2)||1} | 4h: ${idea.trend4h||'neutral'}
+Pump: +${(idea.pumpPct||0).toFixed(1)}% | EMA: ${(idea.dist||0).toFixed(1)}% | RSI: ${idea.rsiNow?.toFixed(0)||50} | Vol x${idea.volRatio?.toFixed(1)||1} | CVD: ${idea.cvdFalling?'falling':'rising'}${idea.cvdDiv?' + divergence':''}
+ATR x${(idea.atrRatio||1).toFixed(2)} | 4h: ${idea.trend4h||'neutral'}
 Signals: ${(idea.sigs||[]).join(' | ')}
 ${a?'Phase: '+a.phase+'/3 | Ready: '+(a.readyToShort?'YES':'NO')+' | Exhaustion: '+(a.exSigs?.map(s=>s.t).join(', ')||'none')+' | Breakdown: '+(a.bkSigs?.map(s=>s.t).join(', ')||'none'):''}
 ${idea.entry?'Entry: $'+fmt(idea.entry)+' | SL: $'+fmt(idea.sl)+' | TP: $'+fmt(idea.tp1):''}
@@ -1729,7 +1729,7 @@ async function askAIAboutIdea(sym){
     const a=S.analysis;
     const detailPrompt=`${idea.sym} | ${idea.dir} | вердикт: ${idea.verdict}
 Причина вердикта: ${idea.verdictReason}
-Данные: +${idea.pumpPct?.toFixed(1)||0}% памп | EMA ${idea.dist?.toFixed(1)||0}% | RSI ${idea.rsiNow?.toFixed(0)||50} | Vol×${idea.volRatio?.toFixed(1)||1} | CVD:${idea.cvdFalling?'↓':'↑'} | 4h:${idea.trend4h||'?'}
+Данные: +${(idea.pumpPct||0).toFixed(1)}% памп | EMA ${(idea.dist||0).toFixed(1)}% | RSI ${idea.rsiNow?.toFixed(0)||50} | Vol×${idea.volRatio?.toFixed(1)||1} | CVD:${idea.cvdFalling?'↓':'↑'} | 4h:${idea.trend4h||'?'}
 ${a?'Фаза '+a.phase+'/3. '+( a.exSigs?.map(s=>s.t).join(', ')||''):''}
 ${idea.entry?'Entry $'+fmt(idea.entry)+' · SL $'+fmt(idea.sl)+' · TP $'+fmt(idea.tp1)+' · R/R '+idea.rr:''}
 
@@ -1743,11 +1743,11 @@ ${idea.entry?'Entry $'+fmt(idea.entry)+' · SL $'+fmt(idea.sl)+' · TP $'+fmt(id
     return;
   }
   const a=S.analysis;
-  const prompt=`Данные монеты:\n${idea.sym} | ${idea.dir} | conf:${idea.conf.toFixed(0)}/100
-Памп: +${idea.pumpPct?.toFixed(1)||0}% | Скорость: +${idea.pumpSpeed?.toFixed(1)||0}%/2ч | EMA20: ${idea.dist?.toFixed(1)||0}%
-Vol×${idea.volRatio?.toFixed(1)||1} | RSI: ${idea.rsiNow?.toFixed(0)||50} | CVD: ${idea.cvdFalling?'↓':'↑'}${idea.cvdDiv?' +div':''} | ATR×${idea.atrRatio?.toFixed(2)||1} | 4h: ${idea.trend4h||'neutral'}
+  const prompt=`Данные монеты:\n${idea.sym} | ${idea.dir} | conf:${(idea.conf||0).toFixed(0)}/100
+Памп: +${(idea.pumpPct||0).toFixed(1)}% | Скорость: +${idea.pumpSpeed?.toFixed(1)||0}%/2ч | EMA20: ${(idea.dist||0).toFixed(1)}%
+Vol×${idea.volRatio?.toFixed(1)||1} | RSI: ${idea.rsiNow?.toFixed(0)||50} | CVD: ${idea.cvdFalling?'↓':'↑'}${idea.cvdDiv?' +div':''} | ATR×${(idea.atrRatio||1).toFixed(2)} | 4h: ${idea.trend4h||'neutral'}
 ${a?`Фаза: ${a.phase}/3 | Вход: ${a.readyToShort?'ДА':'НЕТ'} | Истощение: ${a.exSigs?.map(s=>s.t).join(',')||'нет'} | Слом: ${a.bkSigs?.map(s=>s.t).join(',')||'нет'}`:''}
-${idea.entry?`Entry:$${fmt(idea.entry)} SL:$${fmt(idea.sl)} TP:$${fmt(idea.tp1)} RR:${idea.rr?.toFixed(1)||'?'}`:''}
+${idea.entry?`Entry:$${fmt(idea.entry)} SL:$${fmt(idea.sl)} TP:$${fmt(idea.tp1)} RR:${(idea.rr||0).toFixed(1)||'?'}`:''}
 Сигналы: ${idea.sigs?.join(', ')||'—'}
 
 Ответь БЕЗ markdown, БЕЗ звёздочек, только текст:
