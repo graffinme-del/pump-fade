@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 14:48</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 15:08</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
@@ -388,7 +388,7 @@ button:hover{opacity:.85;}
 // ═══════════════════════════════════════════════════════
 const FAPI   = 'https://fapi.binance.com/fapi/v1';
 const BINANCE = FAPI; // same — futures API has no CORS issues
-const GEMINI_MODEL = 'gemini-2.5-flash-preview-04-17';
+const GEMINI_MODEL = 'gemini-2.0-flash-lite';
 const REFRESH_INTERVAL = 30000;
 const IDEAS_INTERVAL   = 3 * 60000;
 const VOL_INTERVAL     = 60000;
@@ -1031,8 +1031,35 @@ async function runIdeas(manual=false){
           cds1h:r.cds1h,cds15m:r.cds15m,
           verdict:null, verdictReason:'', verdictConf:0};
         newIdeas.push(ideaObj);
-        // Immediately track in winrate — no Gemini, just Entry/SL/TP
-        if (ideaObj.entry && ideaObj.sl && ideaObj.tp1) scheduleWinrateCheck(ideaObj);
+        // Async Gemini verdict — staggered to avoid rate limits
+        if (getApiKey()) {
+          const verdictDelay = (newIdeas.length - 1) * 3000;
+          setTimeout(() => {
+            getGeminiVerdict(ideaObj).then(v => {
+              if (!v) { ideaObj.verdictChecked = true; renderIdeas(); return; }
+              const inList = S.ideas.find(i => i.sym === ideaObj.sym && Math.abs((i.ts||0)-(ideaObj.ts||0))<5000);
+              const target = inList || ideaObj;
+              target.verdict = v.verdict;
+              target.verdictReason = (v.reason||'').trim();
+              target.verdictConf = parseInt(v.confidence)||0;
+              target.verdictChecked = true;
+              if (v.verdict === 'SKIP') {
+                S.ideas = S.ideas.filter(i => i.sym !== ideaObj.sym);
+              } else if (v.verdict === 'WAIT') {
+                addToWatch(target);
+              } else if (v.verdict === 'GO') {
+                playAlert();
+                notify('✦ GO · ' + target.sym.replace('USDT',''), target.verdictReason);
+                if (target.entry && target.sl && target.tp1) scheduleWinrateCheck(target);
+              }
+              renderIdeas();
+            }).catch(() => { ideaObj.verdictChecked = true; renderIdeas(); });
+          }, verdictDelay);
+        } else {
+          // No Gemini key — track winrate directly
+          ideaObj.verdictChecked = true;
+          if (ideaObj.entry && ideaObj.sl && ideaObj.tp1) scheduleWinrateCheck(ideaObj);
+        }
       });
       await new Promise(r=>setTimeout(r,100));
     }
@@ -1609,29 +1636,30 @@ function getApiKey(){return localStorage.getItem('gemini_api_key')||'';}
 
 async function checkGeminiModels(){
   const key = getApiKey();
-  if(!key){ alert('Сначала введи API ключ'); return; }
+  if(!key){ alert('Сначала введи API ключ (кнопка 🔑 AI)'); return; }
+  const current = localStorage.getItem('gemini_model_override') || 'не выбрана';
   try {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
     const j = await r.json();
-    if(j.error){ alert('Ошибка: ' + j.error.message); return; }
+    if(j.error){ alert('Ошибка API: ' + j.error.message); return; }
     const models = (j.models||[])
       .filter(m=>m.supportedGenerationMethods?.includes('generateContent'))
       .map(m=>m.name.replace('models/',''));
-    if(!models.length){ alert('Нет доступных моделей для generateContent'); return; }
+    if(!models.length){ alert('Нет доступных моделей'); return; }
     const choice = prompt(
-      'Доступные модели:\n' + models.join('\n') + '\n\nВведи название модели:',
-      models[0]
+      'Текущая модель: ' + current + '\n\nДоступные модели:\n' + models.join('\n') + '\n\nВведи название:',
+      current !== 'не выбрана' ? current : models[0]
     );
-    if(choice){
+    if(choice && choice.trim()){
       localStorage.setItem('gemini_model_override', choice.trim());
-      _workingModel = choice.trim();
-      alert('Модель установлена: ' + choice.trim());
       updateGeminiBtn(true);
+      showToast('✅ Модель: ' + choice.trim());
     }
   } catch(e) {
     alert('Ошибка: ' + e.message);
   }
 }
+
 
 function promptApiKey(){
   const key=prompt('Google Gemini API ключ\n\nПолучите бесплатно: aistudio.google.com → Get API Key\n(После пополнения баланса лимиты снимаются)',getApiKey());
@@ -1662,32 +1690,14 @@ function showToast(msg){
 // Auto-detect working Gemini model
 let _workingModel = null;
 const GEMINI_MODELS_TRY = [
-  'gemini-2.5-flash-preview-04-17',
   'gemini-2.0-flash-lite',
+  'gemini-2.0-flash',
   'gemini-1.5-flash',
-  'gemini-1.5-flash-8b',
+  'gemini-2.5-flash',
 ];
 
 async function getWorkingModel(key) {
-  // Check manual override first
-  const override = localStorage.getItem('gemini_model_override');
-  if (override) { _workingModel = override; return override; }
-  if (_workingModel) return _workingModel;
-  // Try to get list of available models
-  try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-    const j = await r.json();
-    const models = (j.models||[])
-      .filter(m=>m.supportedGenerationMethods?.includes('generateContent'))
-      .map(m=>m.name.replace('models/',''));
-    if(models.length){
-      _workingModel = models[0];
-      console.log('Gemini available models:', models);
-      console.log('Using:', _workingModel);
-      return _workingModel;
-    }
-  } catch(e){}
-  return 'gemini-1.5-flash';
+  return localStorage.getItem('gemini_model_override') || 'gemini-2.0-flash-lite';
 }
 
 async function callGemini(prompt,maxTokens=800){
