@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 18:26</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 20:35</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
@@ -393,6 +393,7 @@ const REFRESH_INTERVAL = 30000;
 const IDEAS_INTERVAL   = 3 * 60000;
 const VOL_INTERVAL     = 60000;
 const WR_KEY = 'pf_wr_v2';
+const WR_HISTORY_KEY = 'pf_wr_history_v1';
 const ACTIVE_KEY = 'pf_active_v1';
 let PUMP_THRESH = 15;
 let MIN_CONF = 65;
@@ -401,6 +402,19 @@ let MIN_CONF = 65;
 //  STATE
 // ═══════════════════════════════════════════════════════
 // WR helpers must be before S
+function loadWRHistory(){
+  try{return JSON.parse(localStorage.getItem(WR_HISTORY_KEY)||'[]');}catch{return[];}
+}
+function saveWRHistory(records){
+  try{
+    var hist=loadWRHistory();
+    hist=hist.concat(records);
+    // Keep max 2000 records in history
+    if(hist.length>2000)hist=hist.slice(-2000);
+    localStorage.setItem(WR_HISTORY_KEY,JSON.stringify(hist));
+  }catch(e){console.warn('WR history save failed:',e);}
+}
+
 function loadWR(){
   try{
     var d=JSON.parse(localStorage.getItem(WR_KEY)||'[]');
@@ -1543,12 +1557,17 @@ function checkMidnightReset(){
   var today=msk.toISOString().slice(0,10);
   if(localStorage.getItem('wr_reset_date')===today)return;
   localStorage.setItem('wr_reset_date',today);
-  S.winrates.forEach(function(w){
-    if(w.result==='pending'){w.result='expired';w.closedAt=Date.now();w.pnl=w.pnl||0;}
+  // Archive all records before clearing
+  var toArchive=S.winrates.map(function(w){
+    var r=Object.assign({},w);
+    if(r.result==='pending'){r.result='expired';r.closedAt=Date.now();r.pnl=r.pnl||0;}
+    return r;
   });
+  saveWRHistory(toArchive);
+  S.winrates=[];
   saveWR();
   if(S.phase===5)showWinrates();
-  showToast('🕛 00:00 МСК — WR сброшен');
+  showToast('🕛 00:00 МСК — WR сброшен, '+toArchive.length+' записей в истории');
 }
 
 async function checkPendingWinrates(){
@@ -1609,28 +1628,47 @@ function showWRInfo(){
   var pend=S.winrates.filter(function(w){return w.result==='pending';});
   var win=S.winrates.filter(function(w){return w.result==='win';});
   var loss=S.winrates.filter(function(w){return w.result==='loss';});
-  alert('Всего: '+S.winrates.length+'\nPending: '+pend.length+' | Win: '+win.length+' | Loss: '+loss.length+'\n\n'+
-    pend.slice(0,10).map(function(w){return w.sym+' '+w.dir+' entry:'+(w.entry||0).toFixed(4)+' ('+Math.floor((Date.now()-(w.recordedAt||w.ts||0))/60000)+'м)';}).join('\n'));
+  var hist=loadWRHistory();
+  alert('Сегодня — Всего: '+S.winrates.length+'\nPending: '+pend.length+' | Win: '+win.length+' | Loss: '+loss.length+
+    '\n\nВ истории: '+hist.length+' записей'+
+    '\n\nPending монеты:\n'+
+    pend.slice(0,10).map(function(w){return w.sym+' '+w.dir+' $'+(w.entry||0).toFixed(4)+' TP:$'+(w.tp||0).toFixed(4)+' SL:$'+(w.sl||0).toFixed(4);}).join('\n'));
 }
 
 function showWinrates(){
   var dz=document.getElementById('dynamic-zone');if(!dz)return;
-  var wins=S.winrates.filter(function(w){return w.result==='win';});
-  var losses=S.winrates.filter(function(w){return w.result==='loss';});
-  var pend=S.winrates.filter(function(w){return w.result==='pending';});
+
+  // Merge history based on selected tab
+  var now2=Date.now();
+  var histData=[];
+  if(_wrTab!=='today'){
+    var hist=loadWRHistory();
+    var cutoff=_wrTab==='week'?now2-7*86400000:_wrTab==='month'?now2-30*86400000:0;
+    histData=hist.filter(function(w){return (w.signalTime||w.ts||0)>=cutoff;});
+  }
+  var allData=S.winrates.concat(histData);
+  var wins=allData.filter(function(w){return w.result==='win';});
+  var losses=allData.filter(function(w){return w.result==='loss';});
+  var pend=allData.filter(function(w){return w.result==='pending';});
   var total=wins.length+losses.length;
   var wr=total>0?(wins.length/total*100).toFixed(0):'—';
   var avgW=wins.length>0?wins.reduce(function(s,w){return s+(w.pnl||0);},0)/wins.length:0;
   var avgL=losses.length>0?losses.reduce(function(s,w){return s+(w.pnl||0);},0)/losses.length:0;
-  var maxPnlAll=S.winrates.reduce(function(m,w){return Math.max(m,w.maxPnl||0);},0);
-  var sorted=[].concat(S.winrates).sort(function(a,b){
+  var maxPnlAll=allData.reduce(function(m,w){return Math.max(m,w.maxPnl||0);},0);
+  var sorted=[].concat(allData).sort(function(a,b){
     if(a.result==='pending'&&b.result!=='pending')return -1;
     if(a.result!=='pending'&&b.result==='pending')return 1;
     return (b.signalTime||b.ts||0)-(a.signalTime||a.ts||0);
   });
+  var _wrTab=window._wrTab||'today';
   dz.innerHTML='<div class="fade" style="font-size:12px;">'
     +'<div class="phase-list-hd" style="display:flex;justify-content:space-between;align-items:center;">'
-    +'<span>📊 Winrate · сброс 00:00 МСК</span>'
+    +'<div style="display:flex;gap:4px;">'
+    +'<button onclick="window._wrTab=\'today\';showWinrates();" style="font-size:8px;padding:2px 7px;border-radius:3px;cursor:pointer;font-family:inherit;'+((_wrTab==='today')?'background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);':'background:var(--s3);border:1px solid var(--border);color:var(--muted);')+'">Сегодня</button>'
+    +'<button onclick="window._wrTab=\'week\';showWinrates();" style="font-size:8px;padding:2px 7px;border-radius:3px;cursor:pointer;font-family:inherit;'+((_wrTab==='week')?'background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);':'background:var(--s3);border:1px solid var(--border);color:var(--muted);')+'">Неделя</button>'
+    +'<button onclick="window._wrTab=\'month\';showWinrates();" style="font-size:8px;padding:2px 7px;border-radius:3px;cursor:pointer;font-family:inherit;'+((_wrTab==='month')?'background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);':'background:var(--s3);border:1px solid var(--border);color:var(--muted);')+'">Месяц</button>'
+    +'<button onclick="window._wrTab=\'all\';showWinrates();" style="font-size:8px;padding:2px 7px;border-radius:3px;cursor:pointer;font-family:inherit;'+((_wrTab==='all')?'background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);':'background:var(--s3);border:1px solid var(--border);color:var(--muted);')+'">Всё время</button>'
+    +'</div>'
     +'<div style="display:flex;gap:4px;">'
     +'<button onclick="checkPendingWinrates().then(function(){showWinrates();})" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;">↻ Проверить</button>'
     +'<button onclick="clearWinrates()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🗑 Сброс</button>'
