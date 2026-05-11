@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 21:19</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 21:36</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
@@ -393,6 +393,7 @@ const REFRESH_INTERVAL = 30000;
 const IDEAS_INTERVAL   = 3 * 60000;
 const VOL_INTERVAL     = 60000;
 const WR_KEY = 'pf_wr_v2';
+const WR_HISTORY_KEY = 'pf_wr_history_v1';
 const ACTIVE_KEY = 'pf_active_v1';
 let PUMP_THRESH = 15;
 let MIN_CONF = 65;
@@ -401,6 +402,17 @@ let MIN_CONF = 65;
 //  STATE
 // ═══════════════════════════════════════════════════════
 // WR helpers must be before S
+function loadWRHistory(){
+  try{return JSON.parse(localStorage.getItem(WR_HISTORY_KEY)||'[]');}catch{return[];}
+}
+function saveWRHistory(records){
+  try{
+    var hist=loadWRHistory();
+    hist=hist.concat(records);
+    if(hist.length>2000)hist=hist.slice(-2000);
+    localStorage.setItem(WR_HISTORY_KEY,JSON.stringify(hist));
+  }catch(e){}
+}
 function loadWR(){
   try{
     var d=JSON.parse(localStorage.getItem(WR_KEY)||'[]');
@@ -1551,12 +1563,16 @@ function checkMidnightReset(){
   var today=msk.toISOString().slice(0,10);
   if(localStorage.getItem('wr_reset_date')===today)return;
   localStorage.setItem('wr_reset_date',today);
-  S.winrates.forEach(function(w){
-    if(w.result==='pending'){w.result='expired';w.closedAt=Date.now();w.pnl=w.pnl||0;}
+  var toArchive=S.winrates.map(function(w){
+    var r=Object.assign({},w);
+    if(r.result==='pending'){r.result='expired';r.closedAt=Date.now();r.pnl=r.pnl||0;}
+    return r;
   });
+  saveWRHistory(toArchive);
+  S.winrates=[];
   saveWR();
   if(S.phase===5)showWinrates();
-  showToast('🕛 00:00 МСК — WR сброшен');
+  showToast('🕛 00:00 МСК — WR сброшен, '+toArchive.length+' записей в истории');
 }
 
 async function checkPendingWinrates(){
@@ -1617,32 +1633,57 @@ function showWRInfo(){
   var pend=S.winrates.filter(function(w){return w.result==='pending';});
   var win=S.winrates.filter(function(w){return w.result==='win';});
   var loss=S.winrates.filter(function(w){return w.result==='loss';});
+  var hist=loadWRHistory();
+  alert('Сегодня: '+S.winrates.length+' записей\nPending: '+pend.length+' | Win: '+win.length+' | Loss: '+loss.length+'\n\nВ истории: '+hist.length+' записей\n\nPending:\n'+pend.slice(0,8).map(function(w){return w.sym+' '+w.dir+' $'+(w.entry||0).toFixed(4)+' TP:$'+(w.tp||0).toFixed(4)+' SL:$'+(w.sl||0).toFixed(4);}).join('\n'));
+}
+function _showWRInfoOld(){
+  var pend=S.winrates.filter(function(w){return w.result==='pending';});
+  var win=S.winrates.filter(function(w){return w.result==='win';});
+  var loss=S.winrates.filter(function(w){return w.result==='loss';});
   alert('Всего: '+S.winrates.length+'\nPending: '+pend.length+' | Win: '+win.length+' | Loss: '+loss.length+'\n\n'+
     pend.slice(0,10).map(function(w){return w.sym+' '+w.dir+' entry:'+(w.entry||0).toFixed(4)+' ('+Math.floor((Date.now()-(w.recordedAt||w.ts||0))/60000)+'м)';}).join('\n'));
 }
 
 function showWinrates(){
   var dz=document.getElementById('dynamic-zone');if(!dz)return;
-  var wins=S.winrates.filter(function(w){return w.result==='win';});
-  var losses=S.winrates.filter(function(w){return w.result==='loss';});
-  var pend=S.winrates.filter(function(w){return w.result==='pending';});
+  if(!window._wrTab)window._wrTab='today';
+  var _wrTab=window._wrTab;
+  var now2=Date.now();
+
+  // Merge history
+  var histData=[];
+  if(_wrTab!=='today'){
+    var hist=loadWRHistory();
+    var cutoff=_wrTab==='week'?now2-7*86400000:_wrTab==='month'?now2-30*86400000:0;
+    histData=hist.filter(function(w){return(w.signalTime||w.ts||0)>=cutoff;});
+  }
+  var allData=S.winrates.concat(histData);
+  var wins=allData.filter(function(w){return w.result==='win';});
+  var losses=allData.filter(function(w){return w.result==='loss';});
+  var pend=allData.filter(function(w){return w.result==='pending';});
   var total=wins.length+losses.length;
   var wr=total>0?(wins.length/total*100).toFixed(0):'—';
   var avgW=wins.length>0?wins.reduce(function(s,w){return s+(w.pnl||0);},0)/wins.length:0;
   var avgL=losses.length>0?losses.reduce(function(s,w){return s+(w.pnl||0);},0)/losses.length:0;
-  var maxPnlAll=S.winrates.reduce(function(m,w){return Math.max(m,w.maxPnl||0);},0);
-  var sorted=[].concat(S.winrates).sort(function(a,b){
+  var maxPnlAll=allData.reduce(function(m,w){return Math.max(m,w.maxPnl||0);},0);
+  var sorted=[].concat(allData).sort(function(a,b){
     if(a.result==='pending'&&b.result!=='pending')return -1;
     if(a.result!=='pending'&&b.result==='pending')return 1;
-    return (b.signalTime||b.ts||0)-(a.signalTime||a.ts||0);
+    return(b.signalTime||b.ts||0)-(a.signalTime||a.ts||0);
   });
+
+  function tabBtn(tab,label){
+    var active=_wrTab===tab;
+    return '<button onclick="window._wrTab=\''+tab+'\';showWinrates();" style="font-size:8px;padding:2px 7px;border-radius:3px;cursor:pointer;font-family:inherit;'+(active?'background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);':'background:var(--s3);border:1px solid var(--border);color:var(--muted);')+'">'+label+'</button>';
+  }
+
   dz.innerHTML='<div class="fade" style="font-size:12px;">'
-    +'<div class="phase-list-hd" style="display:flex;justify-content:space-between;align-items:center;">'
-    +'<span>📊 Winrate · сброс 00:00 МСК</span>'
-    +'<div style="display:flex;gap:4px;">'
-    +'<button onclick="checkPendingWinrates().then(function(){showWinrates();})" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;">↻ Проверить</button>'
-    +'<button onclick="clearWinrates()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🗑 Сброс</button>'
-    +'<button onclick="showWRInfo()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🔍 Инфо</button>'
+    +'<div class="phase-list-hd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">'
+    +'<div style="display:flex;gap:3px;">'+tabBtn('today','Сегодня')+tabBtn('week','Неделя')+tabBtn('month','Месяц')+tabBtn('all','Всё время')+'</div>'
+    +'<div style="display:flex;gap:3px;">'
+    +'<button onclick="checkPendingWinrates().then(function(){showWinrates();})" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;">↻</button>'
+    +'<button onclick="clearWinrates()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🗑</button>'
+    +'<button onclick="showWRInfo()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🔍</button>'
     +'</div></div>'
     +'<div class="wr-grid4" style="margin-bottom:6px;">'
     +'<div class="wr-box"><div class="wr-v" style="color:'+(parseFloat(wr)>=50?'var(--green)':'var(--red)')+';">'+wr+'%</div><div class="wr-l">Winrate</div></div>'
@@ -1651,12 +1692,12 @@ function showWinrates(){
     +'<div class="wr-box"><div class="wr-v" style="color:var(--amber);">'+pend.length+'</div><div class="wr-l">⏳ Ожидают</div></div>'
     +'</div>'
     +(total>0
-      ?'<div style="display:flex;gap:12px;font-size:9px;color:var(--muted);margin-bottom:8px;">'
+      ?'<div style="display:flex;gap:12px;font-size:9px;color:var(--muted);margin-bottom:6px;">'
        +'<span>Ср. прибыль: <b style="color:var(--green);">+'+avgW.toFixed(2)+'%</b></span>'
        +'<span>Ср. убыток: <b style="color:var(--red);">'+avgL.toFixed(2)+'%</b></span>'
        +'<span>Макс PnL: <b style="color:var(--blue);">+'+maxPnlAll.toFixed(2)+'%</b></span>'
        +'</div>'
-       +'<div style="height:4px;background:var(--s3);border-radius:2px;margin-bottom:10px;">'
+       +'<div style="height:4px;background:var(--s3);border-radius:2px;margin-bottom:8px;">'
        +'<div style="height:100%;width:'+(wr==='—'?0:wr)+'%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:2px;"></div></div>'
       :'')
     +(sorted.length===0
@@ -1666,8 +1707,8 @@ function showWinrates(){
        +'<th style="text-align:left;padding:4px 3px;">Монета</th>'
        +'<th style="text-align:left;padding:4px 3px;">Напр.</th>'
        +'<th style="text-align:right;padding:4px 3px;">Entry</th>'
-       +'<th style="text-align:right;padding:4px 3px;">TP</th>'
-       +'<th style="text-align:right;padding:4px 3px;">SL</th>'
+       +'<th style="text-align:right;padding:4px 3px;">TP $</th>'
+       +'<th style="text-align:right;padding:4px 3px;">SL $</th>'
        +'<th style="text-align:right;padding:4px 3px;">PnL</th>'
        +'<th style="text-align:right;padding:4px 3px;">Макс</th>'
        +'<th style="text-align:right;padding:4px 3px;">Сигнал</th>'
@@ -1679,6 +1720,8 @@ function showWinrates(){
          var rowBg=isWin?'var(--green-bg)':w.result==='loss'?'var(--red-bg)':w.result==='expired'?'var(--s2)':'transparent';
          var dirC=w.dir==='LONG'?'var(--green)':'var(--red)';
          var pnlC=(w.pnl||0)>=0?'var(--green)':'var(--red)';
+         var tpPct=w.entry>0?Math.abs((w.tp-w.entry)/w.entry*100).toFixed(1):'?';
+         var slPct=w.entry>0?Math.abs((w.sl-w.entry)/w.entry*100).toFixed(1):'?';
          var elapsed=w.elapsed&&!isPend?fmtElapsed(w.elapsed):'';
          var statusHtml=isPend?'<span style="color:var(--amber);">⏳</span>'
            :isWin?'<span style="color:var(--green);font-weight:700;">✅ TP</span>'
@@ -1688,17 +1731,17 @@ function showWinrates(){
            +'<td style="padding:5px 3px;font-family:var(--mono);font-weight:700;">'+w.sym.replace('USDT','')+'</td>'
            +'<td style="padding:5px 3px;"><span style="font-size:9px;font-weight:700;color:'+dirC+';">'+(w.dir==='LONG'?'▲ L':'▼ S')+'</span></td>'
            +'<td style="padding:5px 3px;text-align:right;color:var(--text2);">$'+fmt(w.entry)+'</td>'
-           +'<td style="padding:5px 3px;text-align:right;color:var(--green);">+'+(w.tpPct||0).toFixed(1)+'%</td>'
-           +'<td style="padding:5px 3px;text-align:right;color:var(--red);">-'+(w.slPct||0).toFixed(1)+'%</td>'
+           +'<td style="padding:5px 3px;text-align:right;"><span style="color:var(--green);">$'+fmt(w.tp)+'</span><span style="color:var(--dim);font-size:8px;"> +'+tpPct+'%</span></td>'
+           +'<td style="padding:5px 3px;text-align:right;"><span style="color:var(--red);">$'+fmt(w.sl)+'</span><span style="color:var(--dim);font-size:8px;"> -'+slPct+'%</span></td>'
            +'<td style="padding:5px 3px;text-align:right;font-family:var(--mono);font-weight:700;color:'+pnlC+';">'+(w.pnl!=null?(w.pnl>=0?'+':'')+w.pnl.toFixed(2)+'%':'—')+'</td>'
            +'<td style="padding:5px 3px;text-align:right;color:var(--blue);">'+(w.maxPnl!=null?(w.maxPnl>=0?'+':'')+w.maxPnl.toFixed(2)+'%':'—')+'</td>'
            +'<td style="padding:5px 3px;text-align:right;color:var(--dim);white-space:nowrap;">'+fmtSignalTime(w.signalTime||w.ts)+(elapsed?' · '+elapsed:'')+'</td>'
            +'<td style="padding:5px 3px;text-align:right;">'+statusHtml+'</td>'
            +'</tr>';
-       }).join('')
-       +'</tbody></table>')
+       }).join('')+'</tbody></table>')
     +'</div>';
 }
+
 
 // ═══════════════════════════════════════════════════════
 //  GEMINI AI
