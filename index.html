@@ -2158,17 +2158,13 @@ async function copyForChatGPT(sym){
 }
 
 async function openActiveCard(sym){
-  // Cancel any in-progress open
   S._openingCard = sym;
   const rec = S.activeTrack.find(t=>t.sym===sym);
-  // Always fetch fresh candles so analyzeFull works
   const [c1h, c15m] = await Promise.all([
     fetchCds(sym,'1h',120),
     fetchCds(sym,'15m',80),
   ]);
-  // If another card was requested while we were fetching — abort
-  if(S._openingCard !== sym) return;
-  // Try existing idea first, otherwise build from rec
+  if(S._openingCard !== sym) return; // другая монета запрошена пока грузились
   let idea = S.ideas.find(i=>i.sym===sym);
   if(!idea){
     idea = {sym, dir:rec?.dir||'?', entry:rec?.entry||0, sl:rec?.sl||0,
@@ -2179,11 +2175,10 @@ async function openActiveCard(sym){
   } else {
     idea = {...idea, cds1h:c1h, cds15m:c15m};
   }
-  // Store candles in state and show card
-  S.sym=sym;
-  S.cds1h=c1h; S.cds15m=c15m;
+  S.sym=sym; S.cds1h=c1h; S.cds15m=c15m;
   S.cvdData=cvdFromCandles(c15m.slice(-80));
   S.analysis=analyzeFull(c1h,c15m);
+  S.phase=0;
   const sname=sym.replace('USDT','');
   ['sym-label','ctf1h','ctf15m'].forEach(id=>{
     const el=document.getElementById(id);
@@ -2191,11 +2186,11 @@ async function openActiveCard(sym){
   });
   redrawCharts();
   fetchFutures(sym);
-  S.activeCardSym = sym;
-  // Переключаем phase на 0 чтобы showPhaseContent не перетирал карточку
-  S.phase = 0;
-  document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));
+  // Рендерим карточку и через 200мс перерендериваем — на случай если что-то перетёрло
   showCoinCard(idea, S.analysis||{});
+  setTimeout(()=>{
+    if(S._openingCard===sym) showCoinCard(idea, S.analysis||{});
+  }, 250);
 }
 
 function renderActiveTab(list){
