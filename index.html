@@ -257,6 +257,10 @@ button:hover{opacity:.85;}
           style="flex:1;padding:5px 4px;font-size:9px;font-weight:700;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);font-family:inherit;">
           👁 Наблюдение <span id="tab-watch-count" style="font-size:8px;"></span>
         </button>
+        <button id="tab-active" onclick="setIdeasTab('active')"
+          style="flex:1;padding:5px 4px;font-size:9px;font-weight:700;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);font-family:inherit;">
+          ⚡ В работе <span id="tab-active-count" style="font-size:8px;color:var(--blue);"></span>
+        </button>
       </div>
     </div>
     <div id="ideas-list" style="flex:1;overflow-y:auto;padding:5px;">
@@ -387,6 +391,7 @@ const REFRESH_INTERVAL = 30000;
 const IDEAS_INTERVAL   = 3 * 60000;
 const VOL_INTERVAL     = 60000;
 const WR_KEY = 'pf_wr_v2';
+const ACTIVE_KEY = 'pf_active_v1';
 let PUMP_THRESH = 15;
 let MIN_CONF = 65;
 
@@ -395,6 +400,8 @@ let MIN_CONF = 65;
 // ═══════════════════════════════════════════════════════
 // WR helpers must be before S
 function loadWR(){try{return JSON.parse(localStorage.getItem(WR_KEY)||'[]');}catch{return[];}}
+function loadActive(){try{return JSON.parse(localStorage.getItem(ACTIVE_KEY)||'[]');}catch{return[];}}
+function saveActive(){try{localStorage.setItem(ACTIVE_KEY,JSON.stringify(S.activeTrack));}catch{}}
 function saveWR(){try{localStorage.setItem(WR_KEY,JSON.stringify(S.winrates));}catch{}}
 
 const S = {
@@ -406,6 +413,7 @@ const S = {
   cvdData:[],
   positions:[],
   winrates: loadWR(),
+  activeTrack: loadActive(), // [{sym, dir, entry, sl, tp1, rr, addedAt, lastPrice, alerts:[]}]
   scanning:false, phase:3,
   activeIdea:null,
   nextRefresh: Date.now()+REFRESH_INTERVAL,
@@ -1054,6 +1062,11 @@ function setIdeasTab(tab) {
     wchBtn.style.borderBottom = tab==='watch'?'2px solid var(--amber)':'2px solid transparent';
     wchBtn.style.color = tab==='watch'?'var(--amber)':'var(--muted)';
   }
+  const actBtn = document.getElementById('tab-active');
+  if (actBtn) {
+    actBtn.style.borderBottom = tab==='active'?'2px solid var(--blue)':'2px solid transparent';
+    actBtn.style.color = tab==='active'?'var(--blue)':'var(--muted)';
+  }
   renderIdeas();
 }
 
@@ -1067,6 +1080,11 @@ function updateTabCounts() {
     wc.textContent = n || '';
     wc.style.color = n>0?'var(--amber)':'';
   }
+  const ac = document.getElementById('tab-active-count');
+  if (ac) {
+    const n = S.activeTrack.length;
+    ac.textContent = n || '';
+  }
 }
 
 function renderIdeas(){
@@ -1076,6 +1094,12 @@ function renderIdeas(){
   const cnt=document.getElementById('ideas-count');
   if(cnt)cnt.textContent=filtered.length?`${filtered.length}`:'';
   updateTabCounts();
+
+  // ACTIVE TAB
+  if (ideasTab === 'active') {
+    renderActiveTab(list);
+    return;
+  }
 
   // WATCH TAB
   if (ideasTab === 'watch') {
@@ -1351,6 +1375,12 @@ function showCoinCard(idea,analysis){
       <button class="btn-ai" onclick="askAIAboutIdea(${S.ideas.indexOf(idea)})">
         ✦ AI анализ
       </button>
+      <button onclick="toggleActive(${JSON.stringify(idea.sym)})" style="
+        flex:1;padding:5px 0;font-size:10px;font-weight:700;border-radius:4px;cursor:pointer;font-family:inherit;
+        background:${isActiveTrack(idea.sym)?'var(--blue-bg)':'var(--s2)'};
+        border:1px solid ${isActiveTrack(idea.sym)?'var(--blue-b)':'var(--border)'};
+        color:${isActiveTrack(idea.sym)?'var(--blue)':'var(--muted)'};
+      ">${isActiveTrack(idea.sym)?'⚡ В работе ✓':'📌 В работе'}</button>
     </div>
   </div>`;
 }
@@ -1923,6 +1953,144 @@ function toggleTheme(){
 }
 
 // ═══════════════════════════════════════════════════════
+//  ACTIVE TRACK — монеты "В работе" (выбраны пользователем)
+// ═══════════════════════════════════════════════════════
+
+function isActiveTrack(sym){ return S.activeTrack.some(t=>t.sym===sym); }
+
+function toggleActive(sym){
+  if(isActiveTrack(sym)){
+    S.activeTrack = S.activeTrack.filter(t=>t.sym!==sym);
+    saveActive();
+    showToast('Удалено из «В работе»');
+  } else {
+    const idea = S.ideas.find(i=>i.sym===sym);
+    const rec = {
+      sym, dir: idea?.dir||'?',
+      entry: idea?.entry||S.prices[sym]?.price||0,
+      sl: idea?.sl||0, tp1: idea?.tp1||0, rr: idea?.rr||0,
+      addedAt: Date.now(), lastPrice: 0,
+      alerts: [], pnlPct: 0,
+      pumpPct: idea?.pumpPct||0, rsiNow: idea?.rsiNow||0,
+    };
+    S.activeTrack.unshift(rec);
+    saveActive();
+    showToast('⚡ Добавлено в «В работе»');
+    scheduleWinrateCheck(idea||rec);
+  }
+  updateTabCounts();
+  if(ideasTab==='active') renderIdeas();
+  // refresh coin card button state
+  const idea2 = S.ideas.find(i=>i.sym===sym);
+  if(idea2 && S.activeIdea===S.ideas.indexOf(idea2)){
+    const a=analyzeFull(idea2.cds1h||[],idea2.cds15m||[]);
+    showCoinCard(idea2,a);
+  }
+}
+
+function removeActiveTrack(sym){
+  S.activeTrack = S.activeTrack.filter(t=>t.sym!==sym);
+  saveActive();
+  updateTabCounts();
+  if(ideasTab==='active') renderIdeas();
+}
+
+async function runActiveMonitor(){
+  if(!S.activeTrack.length) return;
+  const now = Date.now();
+  await Promise.allSettled(S.activeTrack.map(async rec => {
+    try {
+      const lp = await fetchPrice(rec.sym);
+      if(!lp||lp<=0) return;
+      const prevPrice = rec.lastPrice||lp;
+      rec.lastPrice = lp;
+      rec.lastCheck = now;
+      // PnL from entry
+      if(rec.entry>0){
+        rec.pnlPct = rec.dir==='SHORT'
+          ? (rec.entry-lp)/rec.entry*100
+          : (lp-rec.entry)/rec.entry*100;
+      }
+      // Change since last check
+      const chgPct = (lp-prevPrice)/prevPrice*100;
+      rec.chgPct = chgPct;
+      // === REVERSAL WARNINGS ===
+      const newAlerts = [];
+      // 1. Price approaching SL (within 0.5%)
+      if(rec.sl>0){
+        const distToSL = rec.dir==='SHORT'
+          ? (lp-rec.sl)/lp*100
+          : (rec.sl-lp)/lp*100;
+        if(distToSL>0 && distToSL<0.8){
+          newAlerts.push({type:'danger', msg:`⛔ SL близко! ${distToSL.toFixed(2)}% до стопа`});
+          notify(`⛔ ${rec.sym.replace('USDT','')} — SL близко!`, `${distToSL.toFixed(2)}% до стопа`);
+        }
+      }
+      // 2. Price near TP (within 0.5%)
+      if(rec.tp1>0){
+        const distToTP = rec.dir==='SHORT'
+          ? (rec.tp1-lp)/lp*100
+          : (lp-rec.tp1)/lp*100;
+        if(distToTP>0 && distToTP<0.8){
+          newAlerts.push({type:'success', msg:`🎯 TP близко! ${distToTP.toFixed(2)}% до цели`});
+        }
+      }
+      // 3. Sharp reversal move (>1% against position)
+      if(Math.abs(chgPct)>1.0){
+        const isAgainst = rec.dir==='SHORT' ? chgPct>0 : chgPct<0;
+        if(isAgainst){
+          newAlerts.push({type:'warn', msg:`⚠️ Движение против позиции: ${chgPct>0?'+':''}${chgPct.toFixed(2)}%`});
+          notify(`⚠️ ${rec.sym.replace('USDT','')} — разворот?`, `${chgPct>0?'+':''}${chgPct.toFixed(2)}% за последний интервал`);
+        }
+      }
+      // 4. Strong momentum with position (good news)
+      if(Math.abs(chgPct)>0.8){
+        const isFor = rec.dir==='SHORT' ? chgPct<0 : chgPct>0;
+        if(isFor) newAlerts.push({type:'ok', msg:`✅ Сильное движение в сторону позиции: ${chgPct>0?'+':''}${chgPct.toFixed(2)}%`});
+      }
+      if(newAlerts.length) rec.alerts = [...newAlerts, ...(rec.alerts||[])].slice(0,5);
+    } catch(e){}
+  }));
+  saveActive();
+  if(ideasTab==='active') renderIdeas();
+}
+
+function renderActiveTab(list){
+  if(!S.activeTrack.length){
+    list.innerHTML='<div style="padding:16px;text-align:center;font-size:11px;color:var(--muted);">Нет монет в работе.<br><span style="font-size:9px;color:var(--dim);">Нажмите 📌 В работе на карточке монеты.</span></div>';
+    return;
+  }
+  list.innerHTML = S.activeTrack.map(rec => {
+    const pnlColor = rec.pnlPct>0?'var(--green)':rec.pnlPct<0?'var(--red)':'var(--muted)';
+    const bc = rec.dir==='LONG'?'var(--green)':rec.dir==='SHORT'?'var(--red)':'var(--amber)';
+    const latestAlert = rec.alerts?.[0];
+    const alertColor = latestAlert?.type==='danger'?'var(--red)':latestAlert?.type==='warn'?'var(--amber)':latestAlert?.type==='success'?'var(--green)':'var(--muted)';
+    const tpPct = rec.entry>0&&rec.tp1>0 ? Math.abs((rec.tp1-rec.entry)/rec.entry*100).toFixed(1) : '?';
+    const slPct = rec.entry>0&&rec.sl>0 ? Math.abs((rec.sl-rec.entry)/rec.entry*100).toFixed(1) : '?';
+    return `<div class="idea-card" style="border-left:3px solid ${bc};position:relative;" onclick="loadSym('${rec.sym}')">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-family:var(--mono);font-size:13px;font-weight:800;color:${bc};">${rec.sym.replace('USDT','')}</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <span style="font-size:8px;padding:1px 5px;border-radius:2px;font-weight:700;background:${rec.dir==='LONG'?'var(--green-bg)':'var(--red-bg)'};color:${bc};border:1px solid ${rec.dir==='LONG'?'var(--green-b)':'var(--red-b)'};">${rec.dir==='LONG'?'▲':'▼'} ${rec.dir}</span>
+          <button onclick="event.stopPropagation();removeActiveTrack('${rec.sym}')" style="font-size:9px;padding:1px 6px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">✕</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin:4px 0;font-size:9px;color:var(--muted);">
+        ${rec.entry>0?`<span>Entry <b style="color:var(--text2);">$${fmt(rec.entry)}</b></span>`:''}
+        ${rec.sl>0?`<span>SL <b style="color:var(--red);">-${slPct}%</b></span>`:''}
+        ${rec.tp1>0?`<span>TP <b style="color:var(--green);">+${tpPct}%</b></span>`:''}
+        ${rec.rr>0?`<span>R/R <b>${rec.rr.toFixed(1)}</b></span>`:''}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${latestAlert?'4px':'0'};">
+        <span style="font-size:9px;color:var(--dim);">Цена: <b style="color:var(--text2);">${rec.lastPrice?'$'+fmt(rec.lastPrice):'—'}</b></span>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${pnlColor};">${rec.pnlPct!=null&&rec.entry>0?(rec.pnlPct>=0?'+':'')+rec.pnlPct.toFixed(2)+'%':'—'}</span>
+      </div>
+      ${latestAlert?`<div style="font-size:9px;padding:3px 6px;border-radius:3px;background:var(--s2);border-left:2px solid ${alertColor};color:${alertColor};margin-top:2px;">${latestAlert.msg}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
 //  WATCH LIST — монеты на перепроверке (WAIT от Gemini)
 // ═══════════════════════════════════════════════════════
 const WATCH_LIST = {}; // {sym: {idea, addedAt, checks, maxChecks}}
@@ -2065,6 +2233,8 @@ setInterval(()=>{
 setInterval(()=>runIdeas(false),IDEAS_INTERVAL);
 setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
 setInterval(()=>checkPendingWinrates(), 60*60*1000); // WR check every 1h
+setInterval(()=>runActiveMonitor(), 60*1000); // Active track monitor every 1 min
+setTimeout(()=>runActiveMonitor(), 5000); // Initial active monitor check
 // Initial check on load
 // Clean up winrates with bad TP/SL (<1% range)
 S.winrates = S.winrates.filter(w => {
