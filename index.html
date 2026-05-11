@@ -386,7 +386,7 @@ button:hover{opacity:.85;}
 // ═══════════════════════════════════════════════════════
 const FAPI   = 'https://fapi.binance.com/fapi/v1';
 const BINANCE = FAPI; // same — futures API has no CORS issues
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-1.5-flash-latest';
 const REFRESH_INTERVAL = 30000;
 const IDEAS_INTERVAL   = 3 * 60000;
 const VOL_INTERVAL     = 60000;
@@ -741,194 +741,176 @@ async function scoreForIdea(sym){
     const patScore = pat1h.score * 0.6 + pat15m.score * 0.4;
     const allPatterns = [...pat1h.patterns.map(p=>({...p,tf:'1h'})), ...pat15m.patterns.map(p=>({...p,tf:'15m'}))];
 
-    // ── SHORT сетапы ─────────────────────────────────────────
-    const exCount=(rsiNow>70?1:0)+(hTurning?1:0)+(cvdDiv?1:0)+(atrRatio>1.5?1:0)+(cvdFalling?1:0);
-    const patBonus=Math.max(-15,Math.min(20,patScore));
-    let shortConf=0,shortSigs=[];
-
-    // 1. Pump Exhaustion — памп >15% + истощение
-    const isSharpPump=pumpPct>=PUMP_THRESH&&dist>=8;
-    if(isSharpPump&&exCount>=1){
-      shortConf=Math.min(96,38+pumpPct*1.2+dist*0.8+exCount*7+patBonus);
-      shortSigs.push(`▼ Pump Exhaustion: +${pumpPct.toFixed(1)}%, EMA ${dist.toFixed(1)}%`);
-      if(rsiNow>70)shortSigs.push(`RSI ${rsiNow.toFixed(0)} перекупленность`);
-      if(hTurning)shortSigs.push('MACD ↓ разворот');
-      if(cvdDiv)shortSigs.push('CVD дивергенция');
-      if(cvdFalling)shortSigs.push('CVD ↓');
-      allPatterns.filter(p=>p.dir==='bear').forEach(p=>shortSigs.push(`🕯 ${p.name} (${p.tf})`));
-    }
-
-    // 2. Разворот тренда в шорт — EMA стек выровнялся вниз на 1h
-    if(!shortConf){
-      const nowBear=price<e20n&&e20n<e50n;
-      const prevBear=c1h[n1h-1]<e20_1h[n1h-1]&&e20_1h[n1h-1]<e50_1h[n1h-1];
-      if(nowBear&&!prevBear&&volRatio>1.2&&cvdFalling){
-        shortConf=Math.min(88,52+(trend4h==='bear'?12:0)+volRatio*3+patBonus);
-        shortSigs.push('📉 Разворот тренда: EMA стек ↓ на 1h');
-        shortSigs.push(`EMA20<EMA50, Vol×${volRatio.toFixed(1)}`);
-        if(trend4h==='bear')shortSigs.push('4h тренд медвежий ✓');
-        allPatterns.filter(p=>p.dir==='bear').forEach(p=>shortSigs.push(`🕯 ${p.name}`));
-      }
-    }
-
-    // 3. Пробой EMA20 вниз на 1h после роста
-    if(!shortConf){
-      const prevAbove=cds1h.slice(-5,-1).filter(c=>c.close>( e20_1h[n1h-2]||0)).length>=3;
-      const nowBelow=price<e20n;
-      if(prevAbove&&nowBelow&&volRatio>1.3&&rsiNow<60){
-        shortConf=Math.min(84,48+(trend4h==='bear'?10:0)+volRatio*2+(cvdFalling?8:0)+patBonus);
-        shortSigs.push('📉 Пробой EMA20 ↓ на 1h');
-        shortSigs.push(`Vol×${volRatio.toFixed(1)} подтверждает, RSI ${rsiNow.toFixed(0)}`);
-        if(cvdFalling)shortSigs.push('CVD ↓ подтверждает');
-      }
-    }
-
-    // 4. RSI перекупленность + MACD разворот (без пампа)
-    if(!shortConf&&rsiNow>72&&hTurning&&cvdFalling){
-      shortConf=Math.min(80,45+(rsiNow-72)*2+(cvdDiv?10:0)+(trend4h==='bear'?8:0)+patBonus);
-      shortSigs.push(`RSI ${rsiNow.toFixed(0)} перекупленность + MACD ↓`);
-      if(cvdDiv)shortSigs.push('CVD дивергенция');
-      if(trend4h==='bear')shortSigs.push('4h медвежий');
-    }
-
-    // 5. ATR+ROC разворот вниз (reversal_tf_pair.py)
-    if(!shortConf&&cds4h.length>=14){
-      const atrCtx=atrCalc(cds4h,14)/cds4h[cds4h.length-1].close*100;
-      const roc6=n1h>=6&&c1h[n1h-6]>0?(price-c1h[n1h-6])/c1h[n1h-6]*100:0;
-      if(atrCtx>=0.35&&roc6>=2.2&&cvdFalling){
-        // Check for rejection candle on 15m
-        const last15=cds15m[cds15m.length-1];
-        const barR15=last15.high-last15.low||0.0001;
-        const wickTop15=(last15.high-Math.max(last15.open,last15.close))/barR15;
-        const bearish15=last15.close<last15.open||(wickTop15>=0.4&&(last15.close-last15.low)/barR15<=0.55);
-        if(bearish15){
-          shortConf=Math.min(85,55+atrCtx*5+(roc6-2.2)*3+patBonus);
-          shortSigs.push(`↩ Разворот: 4h ATR ${atrCtx.toFixed(2)}%, ROC +${roc6.toFixed(1)}%`);
-          shortSigs.push('15m отказ на вершине');
-          if(cvdFalling)shortSigs.push('CVD ↓');
-        }
-      }
-    }
-
-    // 6. Начало шорта из флета — пробой поддержки с объёмом
-    if(!shortConf&&volRatio>2.0&&bodyRatio>0.6&&lastC.close<lastC.open&&rsiNow<55&&rsiNow>35){
-      const breakBelow=price<e20n&&price<e50n;
-      if(breakBelow&&cvdFalling){
-        shortConf=Math.min(78,44+volRatio*4+(trend4h==='bear'?8:0)+patBonus);
-        shortSigs.push(`📉 Пробой поддержки с объёмом ×${volRatio.toFixed(1)}`);
-        shortSigs.push(`Body ${(bodyRatio*100).toFixed(0)}%, RSI ${rsiNow.toFixed(0)}`);
-        allPatterns.filter(p=>p.dir==='bear').forEach(p=>shortSigs.push(`🕯 ${p.name}`));
-      }
-    }
-
-    // ── LONG сетапы ────────────────────────────────────────
-    let longConf=0,longDir=null,longSigs=[];
-
-    // patScore для лонга: отрицательный patScore = бычьи паттерны
+    // ── Общие константы ──────────────────────────────────────
+    const patBonus = Math.max(-15, Math.min(20, patScore));
     const longPatBonus = Math.max(-15, Math.min(20, -patScore));
+    const trendBanned = atrRatio > 1.8 || pumpPct > 12 || Math.abs(dist) > 7;
+    const isSharpPump = pumpPct >= PUMP_THRESH && dist >= 8;
 
-    // 1. EMA стек 1h выровнен (h1_context.py: close>EMA20>EMA50)
-    if(!longDir){
-      const nowBull=price>e20n&&e20n>e50n;
-      const prevBull=c1h[n1h-1]>e20_1h[n1h-1]&&e20_1h[n1h-1]>e50_1h[n1h-1];
-      if(nowBull&&volRatio>1.2&&!cvdFalling&&rsiNow>45&&rsiNow<72){
-        const fresh=!prevBull?15:0;
-        longConf=Math.min(88,44+fresh+(trend4h==='bull'?12:trend4h==='bear'?-10:0)+volRatio*3+(hTurningUp?8:0)+longPatBonus);
-        if(longConf>=MIN_CONF){
-          longSigs=[`📈 EMA стек ↑ на 1h (close>EMA20>EMA50)`,
-            trend4h==='bull'?'4h тренд бычий':fresh?'Только что выровнялся':'',
-            !cvdFalling?'CVD ↑':''].filter(Boolean);
-          longDir='LONG';
+    const ema20_slope = cds15m.length > 5
+      ? (e20_15n - (e20_15[cds15m.length-4] || e20_15n)) / (e20_15[cds15m.length-4] || e20_15n) * 100
+      : 0;
+    const last3_15 = cds15m.slice(-3);
+    const confirmBull = last3_15.filter(c => c.close > e20_15n).length >= 2;
+    const confirmBear = last3_15.filter(c => c.close < e20_15n).length >= 2;
+
+    // ── SHORT кандидаты (все равноценны) ─────────────────────
+    const exCount = (rsiNow>70?1:0)+(hTurning?1:0)+(cvdDiv?1:0)+(atrRatio>1.5?1:0)+(cvdFalling?1:0);
+    const shortCandidates = [];
+
+    // S1. Pump Exhaustion
+    if (isSharpPump && exCount >= 1) {
+      const c = Math.min(96, 38 + pumpPct*1.2 + dist*0.8 + exCount*7 + patBonus);
+      const s = [`▼ Pump Exhaustion: +${pumpPct.toFixed(1)}%, EMA ${dist.toFixed(1)}%`];
+      if (rsiNow>70) s.push(`RSI ${rsiNow.toFixed(0)} перекупленность`);
+      if (hTurning) s.push('MACD ↓ разворот');
+      if (cvdDiv)   s.push('CVD дивергенция');
+      if (cvdFalling) s.push('CVD ↓');
+      allPatterns.filter(p=>p.dir==='bear').forEach(p=>s.push(`🕯 ${p.name} (${p.tf})`));
+      shortCandidates.push({conf:c, sigs:s});
+    }
+
+    // S2. Начало тренда вниз
+    if (!trendBanned) {
+      const trendFilterShort = price < e50n;
+      const triggerShort = confirmBear && ema20_slope < -0.02;
+      if (trendFilterShort && triggerShort && volRatio > 1.1 && cvdFalling) {
+        const c = Math.min(90, 56 + (trend4h==='bear'?12:0) + volRatio*3 + (hTurning?8:0) + patBonus);
+        const s = ['📉 Начало тренда ↓ (цена<EMA50, пробой EMA20)', `EMA20 наклон: ${ema20_slope.toFixed(3)}%, Vol×${volRatio.toFixed(1)}`];
+        if (trend4h==='bear') s.push('4h тренд медвежий ✓');
+        if (hTurning) s.push('MACD ↓');
+        if (cvdFalling) s.push('CVD ↓');
+        allPatterns.filter(p=>p.dir==='bear').forEach(p=>s.push(`🕯 ${p.name}`));
+        shortCandidates.push({conf:c, sigs:s});
+      }
+    }
+
+    // S3. Пробой EMA20 ↓ на 1h
+    {
+      const prevAbove = cds1h.slice(-5,-1).filter(c=>c.close>(e20_1h[n1h-2]||0)).length >= 3;
+      const nowBelow = price < e20n;
+      if (prevAbove && nowBelow && volRatio > 1.3 && rsiNow < 60) {
+        const c = Math.min(84, 50 + (trend4h==='bear'?10:0) + volRatio*2 + (cvdFalling?8:0) + patBonus);
+        const s = ['📉 Пробой EMA20 ↓ на 1h', `Vol×${volRatio.toFixed(1)}, RSI ${rsiNow.toFixed(0)}`];
+        if (cvdFalling) s.push('CVD ↓');
+        shortCandidates.push({conf:c, sigs:s});
+      }
+    }
+
+    // S4. RSI перекупленность + MACD
+    if (rsiNow > 72 && hTurning && cvdFalling) {
+      const c = Math.min(80, 47 + (rsiNow-72)*2 + (cvdDiv?10:0) + (trend4h==='bear'?8:0) + patBonus);
+      const s = [`RSI ${rsiNow.toFixed(0)} перекупленность + MACD ↓`];
+      if (cvdDiv) s.push('CVD дивергенция');
+      if (trend4h==='bear') s.push('4h медвежий');
+      shortCandidates.push({conf:c, sigs:s});
+    }
+
+    // S5. ATR+ROC разворот вниз
+    if (cds4h.length >= 14) {
+      const atrCtx = atrCalc(cds4h,14) / cds4h[cds4h.length-1].close * 100;
+      const roc6 = n1h>=6 && c1h[n1h-6]>0 ? (price-c1h[n1h-6])/c1h[n1h-6]*100 : 0;
+      if (atrCtx >= 0.35 && roc6 >= 2.2 && cvdFalling) {
+        const last15 = cds15m[cds15m.length-1];
+        const barR15 = last15.high - last15.low || 0.0001;
+        const wickTop15 = (last15.high - Math.max(last15.open,last15.close)) / barR15;
+        const bearish15 = last15.close < last15.open || (wickTop15>=0.4 && (last15.close-last15.low)/barR15<=0.55);
+        if (bearish15) {
+          const c = Math.min(85, 55 + atrCtx*5 + (roc6-2.2)*3 + patBonus);
+          const s = [`↩ Разворот: 4h ATR ${atrCtx.toFixed(2)}%, ROC +${roc6.toFixed(1)}%`, '15m отказ на вершине'];
+          if (cvdFalling) s.push('CVD ↓');
+          shortCandidates.push({conf:c, sigs:s});
         }
       }
     }
 
-    // 2. EMA20 пересечена снизу вверх на 15m (последние 3 свечи)
-    if(!longDir&&cds15m.length>20){
-      const recentBelowEma=cds15m.slice(-5,-2).some(c=>c.close<(e20_15[cds15m.length-4]||e20_15n));
-      const nowAboveEma=p15>e20_15n;
-      if(recentBelowEma&&nowAboveEma&&rsiNow15>40&&rsiNow15<72&&!cvdFalling){
-        longConf=Math.min(84,46+(trend4h==='bull'?12:0)+volRatio*2+(hTurningUp?6:0));
-        if(longConf>=MIN_CONF){
-          longSigs=[`📈 EMA20 пробита ↑ на 15m`,
-            trend4h==='bull'?'4h бычий':'',
-            !cvdFalling?'CVD ↑':''].filter(Boolean);
-          longDir='LONG';
+    // S6. Пробой поддержки с объёмом
+    if (volRatio > 2.0 && bodyRatio > 0.6 && lastC.close < lastC.open && rsiNow < 55 && rsiNow > 35) {
+      const breakBelow = price < e20n && price < e50n;
+      if (breakBelow && cvdFalling) {
+        const c = Math.min(78, 46 + volRatio*4 + (trend4h==='bear'?8:0) + patBonus);
+        const s = [`📉 Пробой поддержки ×${volRatio.toFixed(1)}`, `Body ${(bodyRatio*100).toFixed(0)}%, RSI ${rsiNow.toFixed(0)}`];
+        allPatterns.filter(p=>p.dir==='bear').forEach(p=>s.push(`🕯 ${p.name}`));
+        shortCandidates.push({conf:c, sigs:s});
+      }
+    }
+
+    const bestShort = shortCandidates.reduce((b,c)=>c.conf>b.conf?c:b, {conf:0,sigs:[]});
+    let shortConf = bestShort.conf, shortSigs = bestShort.sigs;
+
+    // ── LONG кандидаты (все равноценны) ──────────────────────
+    const longCandidates = [];
+    let longConf = 0, longDir = null, longSigs = [];
+
+    // L1. Начало тренда вверх
+    if (!trendBanned) {
+      const trendFilterLong = price > e50n;
+      const triggerLong = confirmBull && ema20_slope > 0.02;
+      if (trendFilterLong && triggerLong && volRatio > 1.1 && !cvdFalling) {
+        const c = Math.min(90, 56 + (trend4h==='bull'?12:trend4h==='bear'?-8:0) + volRatio*3 + (hTurningUp?8:0) + longPatBonus);
+        if (c >= MIN_CONF) {
+          const s = ['📈 Начало тренда ↑ (цена>EMA50, пробой EMA20)', `EMA20 наклон: +${ema20_slope.toFixed(3)}%, Vol×${volRatio.toFixed(1)}`];
+          if (trend4h==='bull') s.push('4h тренд бычий ✓');
+          if (hTurningUp) s.push('MACD ↑');
+          if (!cvdFalling) s.push('CVD ↑');
+          longCandidates.push({conf:c, sigs:s});
         }
       }
     }
 
-    // 3. Разворот ATR+ROC (reversal_tf_pair.py)
-    if(!longDir&&cds1h.length>20){
-      const atrPctVal=atrNow/price*100;
-      const roc12=n1h>=12&&c1h[n1h-12]>0?(price-c1h[n1h-12])/c1h[n1h-12]*100:0;
-      // Перепад вниз + ATR высокий + разворот MACD
-      if(atrPctVal>=0.22&&roc12<=-1.8&&rsiNow<45&&hTurningUp){
-        const lastBar=cds1h[n1h];
-        const wickBot=(Math.min(lastBar.open,lastBar.close)-lastBar.low)/(lastBar.high-lastBar.low||0.001);
-        if(wickBot>=0.3||lastBar.close>lastBar.open){
-          longConf=Math.min(82,50+Math.abs(roc12)*1.5+(hTurningUp?10:0)+(rsiNow<35?8:0));
-          if(longConf>=MIN_CONF){
-            longSigs=[`↩ Разворот: ATR ${atrPctVal.toFixed(2)}%, ROC ${roc12.toFixed(1)}%`,
-              `RSI ${rsiNow.toFixed(0)} перепродан`,`MACD ↑`];
-            longDir='LONG';
+    // L2. EMA стек 1h выровнен вверх
+    {
+      const nowBull = price > e20n && e20n > e50n;
+      const prevBull = c1h[n1h-1] > e20_1h[n1h-1] && e20_1h[n1h-1] > e50_1h[n1h-1];
+      if (nowBull && volRatio > 1.1 && rsiNow > 45 && rsiNow < 75) {
+        const fresh = !prevBull ? 15 : 0;
+        const c = Math.min(90, 52 + fresh + (trend4h==='bull'?12:trend4h==='bear'?-8:0) + volRatio*3 + (hTurningUp?8:0) + longPatBonus);
+        if (c >= MIN_CONF) {
+          const s = ['📈 EMA стек ↑ на 1h', fresh?'Только что выровнялся':trend4h==='bull'?'4h бычий':'', !cvdFalling?'CVD ↑':''].filter(Boolean);
+          longCandidates.push({conf:c, sigs:s});
+        }
+      }
+    }
+
+    // L3. Разворот ATR+ROC вверх
+    if (cds1h.length > 20) {
+      const atrPctVal = atrNow / price * 100;
+      const roc12 = n1h>=12 && c1h[n1h-12]>0 ? (price-c1h[n1h-12])/c1h[n1h-12]*100 : 0;
+      if (atrPctVal >= 0.22 && roc12 <= -1.8 && rsiNow < 45 && hTurningUp) {
+        const lastBar = cds1h[n1h];
+        const wickBot = (Math.min(lastBar.open,lastBar.close) - lastBar.low) / (lastBar.high - lastBar.low || 0.001);
+        if (wickBot >= 0.3 || lastBar.close > lastBar.open) {
+          const c = Math.min(84, 56 + Math.abs(roc12)*1.5 + (hTurningUp?10:0) + (rsiNow<35?8:0));
+          if (c >= MIN_CONF) {
+            longCandidates.push({conf:c, sigs:[`↩ Разворот: ATR ${atrPctVal.toFixed(2)}%, ROC ${roc12.toFixed(1)}%`, `RSI ${rsiNow.toFixed(0)} перепродан`, 'MACD ↑']});
           }
         }
       }
     }
 
-    // 4. Volume Breakout вверх (любой тренд)
-    if(!longDir&&volRatio>2.5&&bodyRatio>0.65&&lastC.close>lastC.open&&rsiNow>50&&rsiNow<75){
-      longConf=Math.min(82,44+volRatio*4+(trend4h==='bull'?10:0));
-      if(longConf>=MIN_CONF){
-        longSigs=[`🚀 Volume Breakout ×${volRatio.toFixed(1)}`,`Body ${(bodyRatio*100).toFixed(0)}%`,trend4h==='bull'?'4h бычий':''].filter(Boolean);
-        longDir='LONG';
+    // L4. Volume Breakout вверх
+    if (volRatio > 2.5 && bodyRatio > 0.65 && lastC.close > lastC.open && rsiNow > 50 && rsiNow < 75) {
+      const c = Math.min(84, 52 + volRatio*4 + (trend4h==='bull'?10:0));
+      if (c >= MIN_CONF) {
+        const s = [`🚀 Volume Breakout ×${volRatio.toFixed(1)}`, `Body ${(bodyRatio*100).toFixed(0)}%`, trend4h==='bull'?'4h бычий':''].filter(Boolean);
+        longCandidates.push({conf:c, sigs:s});
       }
     }
 
-    // 5. RSI перепроданность (1h<30, 15m<35)
-    if(!longDir&&rsiNow<32&&rsiNow15<38){
-      longConf=Math.min(80,46+(hTurningUp?10:0)+(rsiNow<25?8:0)+(!cvdFalling?5:0));
-      if(longConf>=MIN_CONF){
-        longSigs=[`📉 RSI 1h: ${rsiNow.toFixed(0)}, 15m: ${rsiNow15.toFixed(0)} перепроданность`,hTurningUp?'MACD ↑':''].filter(Boolean);
-        longDir='LONG';
+    // L5. RSI перепроданность
+    if (rsiNow < 32 && rsiNow15 < 38) {
+      const c = Math.min(82, 54 + (hTurningUp?10:0) + (rsiNow<25?8:0) + (!cvdFalling?5:0));
+      if (c >= MIN_CONF) {
+        const s = [`📉 RSI перепроданность: 1h ${rsiNow.toFixed(0)}, 15m ${rsiNow15.toFixed(0)}`, hTurningUp?'MACD ↑':''].filter(Boolean);
+        longCandidates.push({conf:c, sigs:s});
       }
     }
 
-    // ── Ранний памп 5m (early_pump_scanner.py) ─────────────
-    let earlyPumpConf=0,earlyPumpSigs=[];
-    if(cds5m.length>=30){
-      const last5=cds5m[cds5m.length-1];
-      const body5=last5.open>0?(last5.close-last5.open)/last5.open*100:0;
-      const vols5=cds5m.slice(-48,cds5m.length-1).map(c=>c.volume);
-      const med5=[...vols5].sort((a,b)=>a-b)[Math.floor(vols5.length/2)]||1;
-      const vr5=last5.volume/med5;
-      const barR5=last5.high-last5.low||0.0001;
-      const taker5=Math.abs(last5.close-last5.open)/barR5;
-      const c5=cds5m.map(c=>c.close);
-      const rsi5=rsi(c5); const rsi5n=rsi5[rsi5.length-1];
-      const e20_5=ema(c5,20); const emaPct5=e20_5[e20_5.length-1]>0?(c5[c5.length-1]-e20_5[e20_5.length-1])/e20_5[e20_5.length-1]*100:0;
-      let cvd5=0;
-      const cvdArr5=cds5m.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cvd5+=b/r*c.volume;return cvd5;});
-      const cvdD5=cvdArr5[cvdArr5.length-1]-cvdArr5[Math.max(0,cvdArr5.length-7)];
-      if(body5>=0.35&&body5<=3.0&&vr5>=2.0&&vr5<=28&&rsi5n<80&&rsi5n>35){
-        let q=0;
-        q+=vr5>=2&&vr5<=4?25:vr5<=10?20:12;
-        q+=body5>=0.5&&body5<=2.0?18:body5<0.5?8:12;
-        q+=taker5>=0.6?15:taker5>=0.4?8:0;
-        q+=cvdD5>0?12:0;
-        q+=rsi5n>=50&&rsi5n<=65?10:rsi5n<=75?6:0;
-        q+=emaPct5>0&&emaPct5<3?10:emaPct5>=3?4:0;
-        q+=cvdD5>0&&vr5>=3?10:0;
-        q=Math.min(100,q);
-        if(q>=72){
-          earlyPumpConf=q;
-          earlyPumpSigs=[`🚀 Старт пампа 5m: +${body5.toFixed(2)}%`,`Vol×${vr5.toFixed(1)}/мед`,`taker ${taker5.toFixed(2)}`,cvdD5>0?'CVD ↑':'CVD ↓'];
-        }
-      }
-    }
+    const bestLong = longCandidates.reduce((b,c)=>c.conf>b.conf?c:b, {conf:0,sigs:[]});
+    longConf = bestLong.conf; longSigs = bestLong.sigs;
+    if (longConf >= MIN_CONF) longDir = 'LONG';
 
-    // ── Выбор лучшего сигнала ──────────────────────────────
+        // ── Выбор лучшего сигнала ──────────────────────────────
     const res={sym,cds1h,cds15m,price,pumpPct,pumpSpeed,dist,atrRatio,volRatio,
       rsiNow,bodyRatio,trend4h,shortConf,shortSigs,longConf,longDir,longSigs,
       earlyPumpConf,isSharpPump,cvdFalling,cvdDiv,allPatterns,patScore};
