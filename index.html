@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 17:10</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 17:54</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
@@ -401,7 +401,14 @@ let MIN_CONF = 65;
 //  STATE
 // ═══════════════════════════════════════════════════════
 // WR helpers must be before S
-function loadWR(){try{return JSON.parse(localStorage.getItem(WR_KEY)||'[]');}catch{return[];}}
+function loadWR(){
+  try{
+    var d=JSON.parse(localStorage.getItem(WR_KEY)||'[]');
+    var resolved=d.filter(function(w){return w.result!=='pending';});
+    var pending=d.filter(function(w){return w.result==='pending';}).slice(0,20);
+    return resolved.concat(pending);
+  }catch{return[];}
+}
 function loadActive(){try{return JSON.parse(localStorage.getItem(ACTIVE_KEY)||'[]');}catch{return[];}}
 function saveActive(){try{localStorage.setItem(ACTIVE_KEY,JSON.stringify(S.activeTrack));}catch{}}
 function saveWR(){try{localStorage.setItem(WR_KEY,JSON.stringify(S.winrates));}catch{}}
@@ -1512,64 +1519,108 @@ function showPhaseContent(phase){
 
 function scheduleWinrateCheck(idea){
   if(!idea.sym||!idea.entry||!idea.sl||!idea.tp1)return;
-  if(S.winrates.find(w=>w.sym===idea.sym&&w.result==='pending'&&(Date.now()-(w.ts||0))<1800000))return;
+  var _rn=Date.now();
+  if(S.winrates.find(function(w){return w.sym===idea.sym&&w.result==='pending'&&(_rn-(w.recordedAt||0))<1800000;}))return;
+  var tpPct=idea.entry>0?Math.abs((idea.tp1-idea.entry)/idea.entry*100):0;
+  var slPct=idea.entry>0?Math.abs((idea.sl-idea.entry)/idea.entry*100):0;
   S.winrates.unshift({
     sym:idea.sym, dir:idea.dir||'?', entry:idea.entry,
-    tp:idea.tp1, sl:idea.sl, ts:idea.ts||Date.now(),
-    result:'pending', pnl:null, closePrice:null, elapsed:0,
-    conf:idea.conf, pumpPct:idea.pumpPct
+    tp:idea.tp1, sl:idea.sl,
+    tpPct:tpPct, slPct:slPct,
+    ts:idea.ts||_rn, recordedAt:_rn,
+    signalTime:_rn,
+    result:'pending', pnl:null, maxPnl:null, closePrice:null,
+    closedAt:null, elapsed:0,
+    conf:idea.conf||0, pumpPct:idea.pumpPct||0
   });
-  if(S.winrates.length>100)S.winrates=S.winrates.slice(0,100);
+  if(S.winrates.length>50)S.winrates=S.winrates.slice(0,50);
   saveWR();
   if(S.phase===5)showWinrates();
 }
 
-// Active WR monitor — every 2 min
-async function checkPendingWinrates(){
-  const now = Date.now();
-  // Expire >48h and filter invalid records
-  S.winrates.forEach(w => {
-    if (w.result !== 'pending') return;
-    if (now - (w.ts||0) > 48*3600000) { w.result='expired'; w.pnl=0; return; }
-    // Skip symbols with non-ASCII chars
-    try { encodeURIComponent(w.sym); } catch(e) { w.result='expired'; w.pnl=0; return; }
+// Moscow midnight reset — 00:00 MSK = 21:00 UTC
+function checkMidnightReset(){
+  var now=new Date();
+  // MSK = UTC+3
+  var msk=new Date(now.getTime()+3*3600000);
+  var h=msk.getUTCHours(), m=msk.getUTCMinutes();
+  // Run between 00:00 and 00:05 MSK
+  if(h!==0||m>5)return;
+  var today=msk.toISOString().slice(0,10);
+  if(localStorage.getItem('wr_reset_date')===today)return;
+  localStorage.setItem('wr_reset_date',today);
+  // Expire all pending with current PnL snapshot, keep resolved
+  S.winrates.forEach(function(w){
+    if(w.result==='pending'){
+      w.result='expired';
+      w.closedAt=Date.now();
+      // pnl stays as last known (may be null = 0)
+      w.pnl=w.pnl||0;
+    }
   });
+  saveWR();
+  if(S.phase===5)showWinrates();
+  showToast('🕛 00:00 МСК — WR сброшен');
+}
 
-  const active = S.winrates.filter(w => w.result === 'pending');
-  if (!active.length) { saveWR(); return; }
-
-  // Use Promise.allSettled to avoid blocking on any single failure
-  console.log(`WR check: ${active.length} pending records`);
-  const results = await Promise.allSettled(
-    active.map(async rec => {
-      const lp = await Promise.race([
+async function checkPendingWinrates(){
+  checkMidnightReset();
+  var now=Date.now();
+  var active=S.winrates.filter(function(w){return w.result==='pending';});
+  if(!active.length){saveWR();return;}
+  console.log('WR check: '+active.length+' pending');
+  await Promise.allSettled(active.map(async function(rec){
+    try{
+      var lp=await Promise.race([
         fetchPrice(rec.sym),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+        new Promise(function(_,reject){setTimeout(function(){reject(new Error('timeout'));},5000);})
       ]);
-      if (!lp || lp <= 0) return;
-      rec.elapsed = Math.floor((now - (rec.ts||0)) / 60000);
-      if (rec.dir === 'SHORT') {
-        if (lp <= rec.tp)  { rec.result='win';  rec.closePrice=lp; rec.pnl=(rec.entry-lp)/rec.entry*100; }
-        else if (lp >= rec.sl) { rec.result='loss'; rec.closePrice=lp; rec.pnl=(rec.entry-lp)/rec.entry*100; }
-      } else {
-        if (lp >= rec.tp)  { rec.result='win';  rec.closePrice=lp; rec.pnl=(lp-rec.entry)/rec.entry*100; }
-        else if (lp <= rec.sl) { rec.result='loss'; rec.closePrice=lp; rec.pnl=(lp-rec.entry)/rec.entry*100; }
+      if(!lp||lp<=0)return;
+      rec.elapsed=Math.floor((now-(rec.signalTime||rec.ts||0))/60000);
+      // Track current PnL
+      var curPnl=rec.dir==='SHORT'
+        ?(rec.entry-lp)/rec.entry*100
+        :(lp-rec.entry)/rec.entry*100;
+      // Track max PnL
+      if(rec.maxPnl===null||rec.maxPnl===undefined||curPnl>rec.maxPnl)rec.maxPnl=curPnl;
+      // Check TP/SL
+      var hit=null;
+      if(rec.dir==='SHORT'){
+        if(lp<=rec.tp)hit='win';
+        else if(lp>=rec.sl)hit='loss';
+      }else{
+        if(lp>=rec.tp)hit='win';
+        else if(lp<=rec.sl)hit='loss';
       }
-      if (rec.result !== 'pending') {
+      if(hit){
+        rec.result=hit;
+        rec.closePrice=lp;
+        rec.pnl=curPnl;
+        rec.closedAt=now;
         notify(
-          rec.result==='win' ? `✅ TP · ${rec.sym.replace('USDT','')}` : `❌ SL · ${rec.sym.replace('USDT','')}`,
-          `${rec.pnl>=0?'+':''}${rec.pnl.toFixed(2)}% за ${rec.elapsed}м`
+          hit==='win'?'✅ TP · '+rec.sym.replace('USDT',''):'❌ SL · '+rec.sym.replace('USDT',''),
+          (curPnl>=0?'+':'')+curPnl.toFixed(2)+'% за '+fmtElapsed(rec.elapsed)
         );
       }
-    })
-  );
-
+    }catch(e){}
+  }));
   saveWR();
-  if (S.phase === 5) showWinrates();
-  // ✅ FIX: Update nav badge with pending count regardless of active tab
-  const pendCount = S.winrates.filter(w => w.result === 'pending').length;
-  const wrNav = document.querySelector('[onclick="switchPhase(5)"]');
-  if (wrNav) wrNav.title = pendCount > 0 ? `Winrate · ${pendCount} в ожидании` : 'Winrate';
+  if(S.phase===5)showWinrates();
+}
+
+function fmtElapsed(min){
+  if(!min)return '—';
+  if(min<60)return min+'м';
+  var h=Math.floor(min/60),m=min%60;
+  return h+'ч'+(m?(' '+m+'м'):'');
+}
+
+function fmtSignalTime(ts){
+  if(!ts)return '—';
+  var d=new Date(ts);
+  var day=d.getDate(),mon=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'][d.getMonth()];
+  var hh=String(d.getHours()).padStart(2,'0'),mm=String(d.getMinutes()).padStart(2,'0');
+  return day+' '+mon+' '+hh+':'+mm;
 }
 
 
@@ -1592,61 +1643,101 @@ function showWRInfo(){
     "\n\n"+rows.join("\n"));
 }
 
+
+function wrOpenSym(sym){openSym(sym);}
+function clearWinrates(){if(confirm('Очистить все записи?')){S.winrates=[];saveWR();showWinrates();}}
 function showWinrates(){
-  const dz=document.getElementById('dynamic-zone');if(!dz)return;
-  const wins=S.winrates.filter(w=>w.result==='win').length;
-  const losses=S.winrates.filter(w=>w.result==='loss').length;
-  const pend=S.winrates.filter(w=>w.result==='pending').length;
-  const total=wins+losses;
-  const wr=total>0?(wins/total*100).toFixed(0):'—';
-  const avgW=wins>0?S.winrates.filter(w=>w.result==='win'&&w.pnl!=null).reduce((s,w)=>s+w.pnl,0)/wins:0;
-  const avgL=losses>0?S.winrates.filter(w=>w.result==='loss'&&w.pnl!=null).reduce((s,w)=>s+w.pnl,0)/losses:0;
-  dz.innerHTML=`<div class="fade">
-    <div class="phase-list-hd" style="display:flex;justify-content:space-between;align-items:center;">
-      <span>📊 Winrate · проверка каждые 15м</span>
-      <div style="display:flex;gap:4px;">
-        <button onclick="checkPendingWinrates().then(()=>showWinrates())" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;">↻ Проверить</button>
-        <button onclick="if(confirm('Очистить все записи?')){S.winrates=[];saveWR();showWinrates();}" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🗑 Сброс</button>
-        <button onclick="showWRInfo()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🔍 Инфо</button>
-      </div>
-    </div>
-    <div class="wr-grid4">
-      <div class="wr-box"><div class="wr-v" style="color:var(--green);">${wr}%</div><div class="wr-l">Winrate</div></div>
-      <div class="wr-box"><div class="wr-v" style="color:var(--green);">${wins}</div><div class="wr-l">TP</div></div>
-      <div class="wr-box"><div class="wr-v" style="color:var(--red);">${losses}</div><div class="wr-l">SL</div></div>
-      <div class="wr-box"><div class="wr-v" style="color:var(--amber);">${pend}</div><div class="wr-l">Ожидают</div></div>
-    </div>
-    ${total>0?`<div style="font-size:9px;color:var(--muted);margin-bottom:8px;">
-      Ср. прибыль: <b style="color:var(--green);">+${avgW.toFixed(2)}%</b> &nbsp;·&nbsp;
-      Ср. убыток: <b style="color:var(--red);">${avgL.toFixed(2)}%</b>
-    </div>
-    <div style="height:5px;background:var(--s3);border-radius:3px;margin-bottom:10px;">
-      <div style="height:100%;width:${wr==='—'?0:wr}%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:3px;"></div>
-    </div>`:''}
-    ${!S.winrates.length?'<div style="font-size:11px;color:var(--muted);">Нет данных. Нажмите ✦ AI анализ на карточке — агент начнёт отслеживать результат.</div>':''}
-    ${S.winrates.slice(0,50).map(w=>{
-      const age=Math.floor((Date.now()-(w.ts||0))/60000);
-      const ageStr=age>60?Math.floor(age/60)+'ч':age+'м';
-      const tpPct=w.entry>0?((w.tp-w.entry)/w.entry*100).toFixed(1):'?';
-      const slPct=w.entry>0?((w.entry-w.sl)/w.entry*100).toFixed(1):'?';
-      return `<div class="wr-row ${w.result}" onclick="openSym('${w.sym}')" style="cursor:pointer;">
-        <div style="display:flex;align-items:center;gap:6px;width:100%;">
-          <span style="font-family:var(--mono);font-size:11px;font-weight:700;min-width:60px;">${w.sym.replace('USDT','')}</span>
-          <span style="font-size:9px;padding:1px 4px;border-radius:2px;font-weight:700;
-            background:${w.dir==='LONG'?'var(--green-bg)':'var(--red-bg)'};
-            color:${w.dir==='LONG'?'var(--green)':'var(--red)'};">${w.dir==='LONG'?'▲':'▼'} ${w.dir}</span>
-          <span style="color:var(--dim);font-size:9px;">$${fmt(w.entry)}</span>
-          <span style="color:var(--dim);font-size:8px;">TP+${tpPct}% SL-${slPct}%</span>
-          <span style="margin-left:auto;font-size:8px;color:var(--dim);">${ageStr}</span>
-          ${w.pnl!=null?`<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${w.result==='win'?'var(--green)':'var(--red)'};">${w.pnl>=0?'+':''}${w.pnl.toFixed(2)}%</span>`:''}
-          <span style="font-size:9px;font-weight:700;min-width:28px;text-align:right;color:${w.result==='win'?'var(--green)':w.result==='loss'?'var(--red)':w.result==='expired'?'var(--dim)':'var(--amber)'};">
-            ${w.result==='win'?'✓TP':w.result==='loss'?'✗SL':w.result==='expired'?'exp':'⏳'}
-          </span>
-        </div>
-      </div>`;
-    }).join('')}
-  </div>`;
+  var dz=document.getElementById('dynamic-zone');if(!dz)return;
+  var wins=S.winrates.filter(function(w){return w.result==='win';});
+  var losses=S.winrates.filter(function(w){return w.result==='loss';});
+  var expired=S.winrates.filter(function(w){return w.result==='expired';});
+  var pend=S.winrates.filter(function(w){return w.result==='pending';});
+  var total=wins.length+losses.length;
+  var wr=total>0?(wins.length/total*100).toFixed(0):'—';
+  var avgW=wins.length>0?wins.reduce(function(s,w){return s+(w.pnl||0);},0)/wins.length:0;
+  var avgL=losses.length>0?losses.reduce(function(s,w){return s+(w.pnl||0);},0)/losses.length:0;
+  var maxPnlAll=S.winrates.reduce(function(m,w){return Math.max(m,w.maxPnl||0);},0);
+
+  // Sort: pending first, then by signalTime desc
+  var sorted=[...S.winrates].sort(function(a,b){
+    if(a.result==='pending'&&b.result!=='pending')return -1;
+    if(a.result!=='pending'&&b.result==='pending')return 1;
+    return (b.signalTime||b.ts||0)-(a.signalTime||a.ts||0);
+  });
+
+  dz.innerHTML='<div class="fade" style="font-size:12px;">'
+  +'<div class="phase-list-hd" style="display:flex;justify-content:space-between;align-items:center;">'
+  +'<span>📊 Winrate · сброс в 00:00 МСК</span>'
+  +'<div style="display:flex;gap:4px;">'
+  +'<button onclick="checkPendingWinrates().then(function(){showWinrates();})" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;">↻ Проверить</button>'
+  +'<button onclick="clearWinrates()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🗑 Сброс</button>'
+  +'</div></div>'
+
+  // Stats boxes
+  +'<div class="wr-grid4" style="margin-bottom:6px;">'
+  +'<div class="wr-box"><div class="wr-v" style="color:'+(parseFloat(wr)>=50?'var(--green)':'var(--red)')+';">'+wr+'%</div><div class="wr-l">Winrate</div></div>'
+  +'<div class="wr-box"><div class="wr-v" style="color:var(--green);">'+wins.length+'</div><div class="wr-l">✅ TP</div></div>'
+  +'<div class="wr-box"><div class="wr-v" style="color:var(--red);">'+losses.length+'</div><div class="wr-l">❌ SL</div></div>'
+  +'<div class="wr-box"><div class="wr-v" style="color:var(--amber);">'+pend.length+'</div><div class="wr-l">⏳ Ожидают</div></div>'
+  +'</div>'
+
+  // Avg stats
+  +(total>0
+    ?'<div style="display:flex;gap:12px;font-size:9px;color:var(--muted);margin-bottom:8px;padding:0 2px;">'
+    +'<span>Ср. прибыль: <b style="color:var(--green);">+'+(avgW.toFixed(2))+'%</b></span>'
+    +'<span>Ср. убыток: <b style="color:var(--red);">'+(avgL.toFixed(2))+'%</b></span>'
+    +'<span>Макс. PnL за сигнал: <b style="color:var(--blue);">+'+(maxPnlAll.toFixed(2))+'%</b></span>'
+    +'</div>'
+    +'<div style="height:4px;background:var(--s3);border-radius:2px;margin-bottom:10px;">'
+    +'<div style="height:100%;width:'+(wr==='—'?0:wr)+'%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:2px;"></div>'
+    +'</div>'
+    :'')
+
+  // Table
+  +(sorted.length===0?'<div style="font-size:11px;color:var(--muted);padding:12px 0;">Нет данных. Сигналы GO автоматически попадают сюда.</div>'
+    :'<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+    +'<thead><tr style="border-bottom:1px solid var(--border);color:var(--dim);font-size:8px;text-transform:uppercase;letter-spacing:.5px;">'
+    +'<th style="text-align:left;padding:4px 3px;font-weight:600;">Монета</th>'
+    +'<th style="text-align:left;padding:4px 3px;font-weight:600;">Напр.</th>'
+    +'<th style="text-align:right;padding:4px 3px;font-weight:600;">Entry</th>'
+    +'<th style="text-align:right;padding:4px 3px;font-weight:600;">TP</th>'
+    +'<th style="text-align:right;padding:4px 3px;font-weight:600;">SL</th>'
+    +'<th style="text-align:right;padding:4px 3px;font-weight:600;">PnL</th>'
+    +'<th style="text-align:right;padding:4px 3px;font-weight:600;">Макс</th>'
+    +'<th style="text-align:right;padding:4px 3px;font-weight:600;">Время</th>'
+    +'<th style="text-align:right;padding:4px 3px;font-weight:600;">Итог</th>'
+    +'</tr></thead><tbody>'
+    +sorted.map(function(w){
+      var isPend=w.result==='pending';
+      var isWin=w.result==='win';
+      var isLoss=w.result==='loss';
+      var isExp=w.result==='expired';
+      var rowBg=isWin?'var(--green-bg)':isLoss?'var(--red-bg)':isExp?'var(--s2)':'transparent';
+      var dirColor=w.dir==='LONG'?'var(--green)':'var(--red)';
+      var pnlColor=(w.pnl||0)>=0?'var(--green)':'var(--red)';
+      var maxColor=(w.maxPnl||0)>=0?'var(--blue)':'var(--muted)';
+      var statusHtml=isPend
+        ?'<span style="color:var(--amber);font-weight:700;">⏳</span>'
+        :isWin?'<span style="color:var(--green);font-weight:700;">✅ TP</span>'
+        :isLoss?'<span style="color:var(--red);font-weight:700;">❌ SL</span>'
+        :'<span style="color:var(--dim);">exp</span>';
+      var elapsed=w.result!=='pending'&&w.elapsed?fmtElapsed(w.elapsed):'';
+      return '<tr onclick="wrOpenSym(\''+w.sym+'\')" style="cursor:pointer;border-bottom:1px solid var(--border);background:'+rowBg+';transition:background .1s;">'
+        +'<td style="padding:5px 3px;font-family:var(--mono);font-weight:700;">'+w.sym.replace('USDT','')+'</td>'
+        +'<td style="padding:5px 3px;"><span style="font-size:9px;font-weight:700;color:'+dirColor+';">'+(w.dir==='LONG'?'▲ L':'▼ S')+'</span></td>'
+        +'<td style="padding:5px 3px;text-align:right;color:var(--text2);">$'+fmt(w.entry)+'</td>'
+        +'<td style="padding:5px 3px;text-align:right;color:var(--green);">+'+(w.tpPct||0).toFixed(1)+'%</td>'
+        +'<td style="padding:5px 3px;text-align:right;color:var(--red);">-'+(w.slPct||0).toFixed(1)+'%</td>'
+        +'<td style="padding:5px 3px;text-align:right;font-family:var(--mono);font-weight:700;color:'+pnlColor+';">'+(w.pnl!=null?(w.pnl>=0?'+':'')+w.pnl.toFixed(2)+'%':'—')+'</td>'
+        +'<td style="padding:5px 3px;text-align:right;font-family:var(--mono);color:'+maxColor+';">'+(w.maxPnl!=null?(w.maxPnl>=0?'+':'')+w.maxPnl.toFixed(2)+'%':'—')+'</td>'
+        +'<td style="padding:5px 3px;text-align:right;color:var(--dim);white-space:nowrap;">'+fmtSignalTime(w.signalTime||w.ts)+(elapsed?' · '+elapsed:'')+'</td>'
+        +'<td style="padding:5px 3px;text-align:right;">'+statusHtml+'</td>'
+        +'</tr>';
+    }).join('')
+    +'</tbody></table>')
+  +'</div>';
 }
+
 
 // ═══════════════════════════════════════════════════════
 //  GEMINI AI
@@ -2461,7 +2552,7 @@ setInterval(()=>{
 },REFRESH_INTERVAL);
 setInterval(()=>runIdeas(false),IDEAS_INTERVAL);
 setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
-setInterval(()=>checkPendingWinrates(), 15*60*1000); // WR check every 15 min
+setInterval(function(){checkPendingWinrates();checkMidnightReset();}, 15*60*1000); // WR check every 15 min
 setInterval(()=>runActiveMonitor(), 60*1000); // Active track monitor every 1 min
 setTimeout(()=>runActiveMonitor(), 5000); // Initial active monitor check
 // Initial check on load
