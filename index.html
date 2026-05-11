@@ -219,8 +219,9 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 14:44</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 14:48</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
+  <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
 </div>
 
@@ -1606,6 +1607,32 @@ function showWinrates(){
 // ═══════════════════════════════════════════════════════
 function getApiKey(){return localStorage.getItem('gemini_api_key')||'';}
 
+async function checkGeminiModels(){
+  const key = getApiKey();
+  if(!key){ alert('Сначала введи API ключ'); return; }
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+    const j = await r.json();
+    if(j.error){ alert('Ошибка: ' + j.error.message); return; }
+    const models = (j.models||[])
+      .filter(m=>m.supportedGenerationMethods?.includes('generateContent'))
+      .map(m=>m.name.replace('models/',''));
+    if(!models.length){ alert('Нет доступных моделей для generateContent'); return; }
+    const choice = prompt(
+      'Доступные модели:\n' + models.join('\n') + '\n\nВведи название модели:',
+      models[0]
+    );
+    if(choice){
+      localStorage.setItem('gemini_model_override', choice.trim());
+      _workingModel = choice.trim();
+      alert('Модель установлена: ' + choice.trim());
+      updateGeminiBtn(true);
+    }
+  } catch(e) {
+    alert('Ошибка: ' + e.message);
+  }
+}
+
 function promptApiKey(){
   const key=prompt('Google Gemini API ключ\n\nПолучите бесплатно: aistudio.google.com → Get API Key\n(После пополнения баланса лимиты снимаются)',getApiKey());
   if(key&&key.length>20){
@@ -1642,22 +1669,25 @@ const GEMINI_MODELS_TRY = [
 ];
 
 async function getWorkingModel(key) {
+  // Check manual override first
+  const override = localStorage.getItem('gemini_model_override');
+  if (override) { _workingModel = override; return override; }
   if (_workingModel) return _workingModel;
-  for (const model of GEMINI_MODELS_TRY) {
-    try {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-        {method:'POST', headers:{'Content-Type':'application/json'},
-         body: JSON.stringify({contents:[{parts:[{text:'hi'}]}], generationConfig:{maxOutputTokens:5}})}
-      );
-      if (r.ok || (await r.json())?.candidates) {
-        _workingModel = model;
-        console.log('Gemini working model:', model);
-        return model;
-      }
-    } catch(e) {}
-  }
-  return GEMINI_MODELS_TRY[0]; // fallback
+  // Try to get list of available models
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+    const j = await r.json();
+    const models = (j.models||[])
+      .filter(m=>m.supportedGenerationMethods?.includes('generateContent'))
+      .map(m=>m.name.replace('models/',''));
+    if(models.length){
+      _workingModel = models[0];
+      console.log('Gemini available models:', models);
+      console.log('Using:', _workingModel);
+      return _workingModel;
+    }
+  } catch(e){}
+  return 'gemini-1.5-flash';
 }
 
 async function callGemini(prompt,maxTokens=800){
