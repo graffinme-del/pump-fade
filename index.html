@@ -259,7 +259,7 @@ button:hover{opacity:.85;}
         </button>
         <button id="tab-active" onclick="setIdeasTab('active')"
           style="flex:1;padding:5px 4px;font-size:9px;font-weight:700;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);font-family:inherit;">
-          ⚡ В работу <span id="tab-active-count" style="font-size:8px;color:var(--blue);"></span>
+          ⚡ В работе <span id="tab-active-count" style="font-size:8px;color:var(--blue);"></span>
         </button>
       </div>
     </div>
@@ -1379,7 +1379,7 @@ function showCoinCard(idea,analysis){
         background:${isActiveTrack(idea.sym)?'var(--blue-bg)':'transparent'};
         border-color:${isActiveTrack(idea.sym)?'var(--blue-b)':'var(--border)'};
         color:${isActiveTrack(idea.sym)?'var(--blue)':'var(--muted)'};
-      ">${isActiveTrack(idea.sym)?'⚡ В работу ✓':'📌 В работу'}</button>
+      ">${isActiveTrack(idea.sym)?'⚡ В работе ✓':'📌 В работе'}</button>
     </div>
   </div>`;
 }
@@ -1961,7 +1961,7 @@ function toggleActive(sym){
   if(isActiveTrack(sym)){
     S.activeTrack = S.activeTrack.filter(t=>t.sym!==sym);
     saveActive();
-    showToast('Удалено из «В работу»');
+    showToast('Удалено из «В работе»');
   } else {
     const idea = S.ideas.find(i=>i.sym===sym);
     const rec = {
@@ -1974,7 +1974,7 @@ function toggleActive(sym){
     };
     S.activeTrack.unshift(rec);
     saveActive();
-    showToast('⚡ Добавлено в «В работу»');
+    showToast('⚡ Добавлено в «В работе»');
     scheduleWinrateCheck(idea||rec);
   }
   updateTabCounts();
@@ -2056,21 +2056,40 @@ async function runActiveMonitor(){
 
 async function openActiveCard(sym){
   const rec = S.activeTrack.find(t=>t.sym===sym);
-  // Try to find existing idea with candle data
+  // Always fetch fresh candles so analyzeFull works
+  const [c1h, c15m] = await Promise.all([
+    fetchCds(sym,'1h',120),
+    fetchCds(sym,'15m',80),
+  ]);
+  // Try existing idea first, otherwise build from rec
   let idea = S.ideas.find(i=>i.sym===sym);
   if(!idea){
-    // Build minimal idea from tracked record
     idea = {sym, dir:rec?.dir||'?', entry:rec?.entry||0, sl:rec?.sl||0,
-            tp1:rec?.tp1||0, rr:rec?.rr||0, conf:rec?.conf||0,
-            pumpPct:rec?.pumpPct||0, rsiNow:rec?.rsiNow||0,
-            sigs:[], why:'', ts:rec?.addedAt||Date.now()};
+            tp1:rec?.tp1||0, tp2:rec?.tp1||0, rr:rec?.rr||0, conf:rec?.conf||70,
+            pumpPct:rec?.pumpPct||0, rsiNow:rec?.rsiNow||50,
+            sigs:[], why:'', ts:rec?.addedAt||Date.now(),
+            cds1h:c1h, cds15m:c15m};
+  } else {
+    idea = {...idea, cds1h:c1h, cds15m:c15m};
   }
-  await loadSym(sym, idea);
+  // Store candles in state and show card
+  S.sym=sym;
+  S.cds1h=c1h; S.cds15m=c15m;
+  S.cvdData=cvdFromCandles(c15m.slice(-80));
+  S.analysis=analyzeFull(c1h,c15m);
+  const sname=sym.replace('USDT','');
+  ['sym-label','ctf1h','ctf15m'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.textContent=id==='sym-label'?sname:id==='ctf1h'?`1H · ${sname}`:`15M · ${sname}`;
+  });
+  redrawCharts();
+  fetchFutures(sym);
+  showCoinCard(idea, S.analysis||{});
 }
 
 function renderActiveTab(list){
   if(!S.activeTrack.length){
-    list.innerHTML='<div style="padding:16px;text-align:center;font-size:11px;color:var(--muted);">Нет монет в работе.<br><span style="font-size:9px;color:var(--dim);">Нажмите 📌 В работу на карточке монеты.</span></div>';
+    list.innerHTML='<div style="padding:16px;text-align:center;font-size:11px;color:var(--muted);">Нет монет в работе.<br><span style="font-size:9px;color:var(--dim);">Нажмите 📌 В работе на карточке монеты.</span></div>';
     return;
   }
   list.innerHTML = S.activeTrack.map(rec => {
