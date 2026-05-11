@@ -1600,7 +1600,8 @@ async function callGemini(prompt,maxTokens=800){
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
   const body={
     contents:[{parts:[{text:prompt}]}],
-    generationConfig:{maxOutputTokens:maxTokens,temperature:0.3},
+    generationConfig:{maxOutputTokens:maxTokens,temperature:0.2},
+    systemInstruction:{parts:[{text:'Отвечай строго по формату, без markdown, без заголовков:\nСИГНАЛ: [подтверждён/слабый/опровергнут]\nЧТО ПРОИСХОДИТ: [1-2 предложения по данным монеты]\nРИСКИ: [главный риск одной фразой]\nДЕЙСТВИЕ: [входить / ждать / пропустить]\nТолько русский язык. Не отступай от формата.'}]}
   };
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!r.ok){
@@ -1696,7 +1697,7 @@ async function askAIAboutIdea(sym){
 ${a?'Фаза '+a.phase+'/3. '+( a.exSigs?.map(s=>s.t).join(', ')||''):''}
 ${idea.entry?'Entry $'+fmt(idea.entry)+' · SL $'+fmt(idea.sl)+' · TP $'+fmt(idea.tp1)+' · R/R '+idea.rr:''}
 
-Объясни подробнее почему ${idea.verdict}: что именно подтверждает или опровергает сигнал, на что смотреть при входе, главный риск.`;
+Вердикт: ${idea.verdict}. Данные выше.`;
     if(!getApiKey()){appendMsg('ai','⚠️ Нужен Gemini API ключ.');return;}
     updateGeminiBtn('working');
     try{
@@ -1706,19 +1707,12 @@ ${idea.entry?'Entry $'+fmt(idea.entry)+' · SL $'+fmt(idea.sl)+' · TP $'+fmt(id
     return;
   }
   const a=S.analysis;
-  const prompt=`Монета: ${idea.sym} | ${idea.dir} | уверенность ${idea.conf.toFixed(0)}/100
-Памп 8h: +${idea.pumpPct.toFixed(1)}% | Скорость: +${idea.pumpSpeed.toFixed(1)}%/2ч | EMA20 dist: ${idea.dist.toFixed(1)}%
-Vol×${idea.volRatio.toFixed(1)} | RSI: ${idea.rsiNow.toFixed(0)} | CVD: ${idea.cvdFalling?'↓':'↑'}${idea.cvdDiv?' + дивергенция':''}
-ATR ratio: ×${idea.atrRatio.toFixed(2)} | 4h тренд: ${idea.trend4h||'neutral'}
-${a?`Фаза истощения: ${a.phase}/3 | Готов к входу: ${a.readyToShort?'ДА':'НЕТ'}
-Истощение: ${a.exSigs?.map(s=>s.t).join(', ')||'нет'}
-Слом: ${a.bkSigs?.map(s=>s.t).join(', ')||'нет'}`:''}
-${idea.entry?`Entry: $${fmt(idea.entry)} | SL: $${fmt(idea.sl)} | TP: $${fmt(idea.tp1)} | R/R: ${idea.rr?.toFixed(1)||'—'}`:''}
-
-Ответь конкретно:
-1) Что происходит с монетой
-2) Надёжен ли этот сигнал (учти МТФ)
-3) Рекомендация: ВХОДИТЬ / ЖДАТЬ / ПРОПУСТИТЬ`;
+  const prompt=`${idea.sym} | ${idea.dir} | conf:${idea.conf.toFixed(0)}/100
+Памп: +${idea.pumpPct?.toFixed(1)||0}% | Скорость: +${idea.pumpSpeed?.toFixed(1)||0}%/2ч | EMA20: ${idea.dist?.toFixed(1)||0}%
+Vol×${idea.volRatio?.toFixed(1)||1} | RSI: ${idea.rsiNow?.toFixed(0)||50} | CVD: ${idea.cvdFalling?'↓':'↑'}${idea.cvdDiv?' +div':''} | ATR×${idea.atrRatio?.toFixed(2)||1} | 4h: ${idea.trend4h||'neutral'}
+${a?`Фаза: ${a.phase}/3 | Вход: ${a.readyToShort?'ДА':'НЕТ'} | Истощение: ${a.exSigs?.map(s=>s.t).join(',')||'нет'} | Слом: ${a.bkSigs?.map(s=>s.t).join(',')||'нет'}`:''}
+${idea.entry?`Entry:$${fmt(idea.entry)} SL:$${fmt(idea.sl)} TP:$${fmt(idea.tp1)} RR:${idea.rr?.toFixed(1)||'?'}`:''}
+Сигналы: ${idea.sigs?.join(', ')||'—'}`;
   try{
     updateGeminiBtn('working');
     if (!getApiKey()) {
