@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 15:23</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 17:03</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
@@ -1747,7 +1747,8 @@ Candle patterns: ${(idea.allPatterns||[]).map(p=>p.name+' '+p.tf).join(', ')||'n
 
 Reply ONLY with JSON (no markdown):
 {"verdict":"GO","confidence":80,"reason":"1 sentence in Russian"}
-GO=enter now, SKIP=pass, WAIT=need confirmation`;
+GO=enter now, SKIP=pass, WAIT=need confirmation
+Rules: GO if R/R>=1.5 and trend aligns. WAIT if 1+ confirmation missing. SKIP only if setup is clearly wrong.`;
 
   try {
     const model = localStorage.getItem('gemini_model_override') || 'gemini-2.0-flash-lite';
@@ -1756,8 +1757,8 @@ GO=enter now, SKIP=pass, WAIT=need confirmation`;
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         contents:[{parts:[{text:prompt}]}],
-        generationConfig:{maxOutputTokens:200, temperature:0.1},
-        systemInstruction:{parts:[{text:'You are a strict trading risk manager. Reply ONLY with valid JSON. No markdown, no explanation outside JSON.'}]}
+        generationConfig:{maxOutputTokens:200, temperature:0.4},
+        systemInstruction:{parts:[{text:'You are an aggressive intraday crypto trader. Perfect setups do not exist. Most real trades have mixed signals — that is normal. Your job is to judge if the REWARD outweighs the RISK given current momentum. Lean toward GO when risk/reward is solid. SKIP only if setup is clearly broken. Reply ONLY with valid JSON. No markdown.'}]}
       })
     });
     if (!r.ok) return null;
