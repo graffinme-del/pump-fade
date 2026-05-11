@@ -1144,7 +1144,7 @@ function renderIdeas(){
     const bc=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
     const dc=idea.isPump?'pump':idea.dir==='LONG'?'long':'short';
     const dl=idea.isPump?'🔥 ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT';
-    const sub=idea.sigs&&idea.sigs[0]?idea.sigs[0].substring(0,34):'';
+    const sub=idea.sigs&&idea.sigs[0]?idea.sigs[0].substring(0,34).replace(/</g,'&lt;').replace(/>/g,'&gt;'):'';
     return `<div class="idea-card ${dc} ${isActive?'active':''}" onclick="selectIdea(${i})">
       <div class="idea-hd">
         <span class="idea-sym" style="color:${idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--text)'};" onclick="event.stopPropagation();openSym('${idea.sym}')">${idea.sym.replace('USDT','')}</span>
@@ -1285,7 +1285,7 @@ function showCoinCard(idea,analysis){
     <!-- Why -->
     <div class="why-box" style="background:${dbg};border:1px solid ${dbl};color:${idea.dir==='LONG'?'#166534':idea.isPump?'#92400e':'#991b1b'};">
       <b style="color:${dc};">Почему</b>
-      ${idea.why||idea.sigs?.join('. ')||'—'}
+      ${(idea.why||idea.sigs?.join('. ')||'—').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
     </div>
     ${idea.verdict ? `<div style="margin-bottom:8px;padding:7px 10px;border-radius:4px;display:flex;align-items:flex-start;gap:8px;
       background:${idea.verdict==='GO'?'var(--green-bg)':idea.verdict==='WAIT'?'var(--amber-bg)':'var(--s3)'};
