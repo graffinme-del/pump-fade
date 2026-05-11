@@ -1372,7 +1372,7 @@ function showCoinCard(idea,analysis){
         onclick="window.open('https://www.tradingview.com/chart/?symbol=BINANCE:${idea.sym}','_blank')">
         ${idea.dir==='LONG'?'▲ TradingView ↗':idea.isPump?'👁 Наблюдать на TV':'▼ TradingView ↗'}
       </button>
-      <button class="btn-ai" onclick="askAIAboutIdea(${S.ideas.indexOf(idea)})">
+      <button class="btn-ai" onclick="askAIAboutIdea('${idea.sym}')">
         ✦ AI анализ
       </button>
       <button class="btn-ai" onclick="toggleActive('${idea.sym}')" style="
@@ -1600,8 +1600,7 @@ async function callGemini(prompt,maxTokens=800){
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
   const body={
     contents:[{parts:[{text:prompt}]}],
-    generationConfig:{maxOutputTokens:2048,temperature:0.2},
-    systemInstruction:{parts:[{text:'Отвечай ровно 3 строки без отступлений:\nСИГНАЛ: [подтверждён/опровергнут]\nПРИЧИНА: [одна короткая фраза]\nДЕЙСТВИЕ: [входить/ждать/пропустить]\nТолько это. Русский.'}]}
+    generationConfig:{maxOutputTokens:maxTokens,temperature:0.3},
   };
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!r.ok){
@@ -1680,8 +1679,12 @@ GO=enter now, SKIP=pass, WAIT=need confirmation`;
 }
 
 
-async function askAIAboutIdea(idx){
-  const idea=S.ideas[idx];if(!idea)return;
+async function askAIAboutIdea(sym){
+  // Find by sym — immune to list reorders during scan
+  let idea=S.ideas.find(i=>i.sym===sym);
+  // Fallback to active track if not in ideas list
+  if(!idea){ const rec=S.activeTrack.find(t=>t.sym===sym); if(rec) idea={...rec,sigs:[],why:'',conf:rec.conf||70}; }
+  if(!idea)return;
   const tid='t'+Date.now(); appendThinking(tid);
   // If we already have a verdict, explain it — don't re-evaluate
   if(idea.verdict && idea.verdictReason){
