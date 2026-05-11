@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 14:21</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 14:44</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <!-- theme toggle disabled -->
 </div>
@@ -387,7 +387,7 @@ button:hover{opacity:.85;}
 // ═══════════════════════════════════════════════════════
 const FAPI   = 'https://fapi.binance.com/fapi/v1';
 const BINANCE = FAPI; // same — futures API has no CORS issues
-const GEMINI_MODEL = 'gemini-1.5-flash-002';
+const GEMINI_MODEL = 'gemini-2.5-flash-preview-04-17';
 const REFRESH_INTERVAL = 30000;
 const IDEAS_INTERVAL   = 3 * 60000;
 const VOL_INTERVAL     = 60000;
@@ -1632,9 +1632,38 @@ function showToast(msg){
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);
 }
 
+// Auto-detect working Gemini model
+let _workingModel = null;
+const GEMINI_MODELS_TRY = [
+  'gemini-2.5-flash-preview-04-17',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+];
+
+async function getWorkingModel(key) {
+  if (_workingModel) return _workingModel;
+  for (const model of GEMINI_MODELS_TRY) {
+    try {
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+        {method:'POST', headers:{'Content-Type':'application/json'},
+         body: JSON.stringify({contents:[{parts:[{text:'hi'}]}], generationConfig:{maxOutputTokens:5}})}
+      );
+      if (r.ok || (await r.json())?.candidates) {
+        _workingModel = model;
+        console.log('Gemini working model:', model);
+        return model;
+      }
+    } catch(e) {}
+  }
+  return GEMINI_MODELS_TRY[0]; // fallback
+}
+
 async function callGemini(prompt,maxTokens=800){
   const key=getApiKey();if(!key)return null;
-  const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+  const model = await getWorkingModel(key);
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
   const body={
     contents:[{parts:[{text:prompt}]}],
     generationConfig:{maxOutputTokens:maxTokens,temperature:0.2},
