@@ -93,7 +93,7 @@ button:hover{opacity:.85;}
 .idea-card.pump{border-left:3px solid var(--amber);background:linear-gradient(135deg,#fffbeb,#fff);animation:pump-glow 2s infinite;}
 .idea-card.active{box-shadow:0 2px 10px rgba(0,0,0,.12);}
 .idea-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;}
-.idea-sym{font-family:var(--mono);font-size:12px;font-weight:700;}
+.idea-sym{font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;}
 .idea-dir-badge{font-size:8px;font-weight:700;padding:1px 4px;border-radius:2px;}
 .idea-dir-badge.long{background:var(--green-bg);color:var(--green);border:1px solid var(--green-b);}
 .idea-dir-badge.short{background:var(--red-bg);color:var(--red);border:1px solid var(--red-b);}
@@ -386,7 +386,7 @@ button:hover{opacity:.85;}
 // ═══════════════════════════════════════════════════════
 const FAPI   = 'https://fapi.binance.com/fapi/v1';
 const BINANCE = FAPI; // same — futures API has no CORS issues
-const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_MODEL = 'gemini-2.0-flash';
 const REFRESH_INTERVAL = 30000;
 const IDEAS_INTERVAL   = 3 * 60000;
 const VOL_INTERVAL     = 60000;
@@ -1108,9 +1108,9 @@ function renderIdeas(){
       list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет монет под наблюдением.<br><span style="font-size:9px;color:var(--dim);">Сюда попадают WAIT сигналы.<br>Агент перепроверяет каждые 5м.</span></div>';
       return;
     }
-    list.innerHTML = watchItems.map(w => `<div class="idea-card" onclick="loadSym('${w.idea.sym}')" style="border-left:3px solid var(--amber);">
+    list.innerHTML = watchItems.map(w => `<div class="idea-card" onclick="openSym('${w.idea.sym}')" style="border-left:3px solid var(--amber);">
       <div class="idea-hd">
-        <span class="idea-sym" style="color:var(--amber);">${w.idea.sym.replace('USDT','')}</span>
+        <span class="idea-sym" style="color:var(--amber);" onclick="event.stopPropagation();openSym('${w.idea.sym}')">${w.idea.sym.replace('USDT','')}</span>
         <span class="idea-dir-badge" style="background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-b);">⏳ WAIT</span>
       </div>
       <div style="font-size:9px;color:var(--muted);margin-bottom:2px;">${w.idea.verdictReason||'Ожидаем подтверждения...'}</div>
@@ -1138,7 +1138,7 @@ function renderIdeas(){
     const sub=idea.sigs&&idea.sigs[0]?idea.sigs[0].substring(0,34):'';
     return `<div class="idea-card ${dc} ${isActive?'active':''}" onclick="selectIdea(${i})">
       <div class="idea-hd">
-        <span class="idea-sym" style="color:${idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--text)'};">${idea.sym.replace('USDT','')}</span>
+        <span class="idea-sym" style="color:${idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--text)'};" onclick="event.stopPropagation();openSym('${idea.sym}')">${idea.sym.replace('USDT','')}</span>
         <span class="idea-dir-badge ${dc}">${dl}</span>
       </div>
       ${sub?`<div style="font-size:8px;color:var(--muted);margin-bottom:2px;">${sub}</div>`:''}
@@ -1175,7 +1175,7 @@ function renderVolatility(candidates){
   list.innerHTML=candidates.map((c,i)=>{
     const hot=c.chgPct>15?2:c.chgPct>8?1:0;
     const bc=hot===2?'#dc2626':hot===1?'#f59e0b':'#94a3b8';
-    return `<div class="vol-item" onclick="loadSym('${c.sym}')" style="${hot===2?'background:#fef2f2;border-color:#fee2e2;':hot===1?'background:#fffbeb;border-color:#fef3c7;':''}">
+    return `<div class="vol-item" onclick="openSym('${c.sym}')" style="${hot===2?'background:#fef2f2;border-color:#fee2e2;':hot===1?'background:#fffbeb;border-color:#fef3c7;':''}">
       <span class="vol-rank" style="color:${bc};">${i+1}</span>
       <span class="vol-sym" style="color:${hot===2?'#dc2626':hot===1?'#d97706':'#0f172a'};">${c.sym.replace('USDT','')}</span>
       <div class="vol-bar-wrap"><div class="vol-bar-fill" style="width:${Math.round(c.score/candidates[0].score*100)}%;background:${bc};"></div></div>
@@ -1193,6 +1193,28 @@ async function selectIdea(i){
   renderIdeas();
   const idea=S.ideas[i];if(!idea)return;
   await loadSym(idea.sym,idea);
+}
+
+// Универсальный клик по монете — открывает карточку
+async function openSym(sym){
+  let idea = S.ideas.find(i=>i.sym===sym);
+  const [c1h,c15m] = await Promise.all([
+    idea?.cds1h||fetchCds(sym,'1h',120),
+    idea?.cds15m||fetchCds(sym,'15m',80),
+  ]);
+  if(!idea) idea={sym,dir:'?',entry:0,sl:0,tp1:0,tp2:0,rr:0,conf:0,
+    pumpPct:0,rsiNow:50,sigs:[],why:'',ts:Date.now(),cds1h:c1h,cds15m:c15m};
+  else idea={...idea,cds1h:c1h,cds15m:c15m};
+  S.sym=sym; S.cds1h=c1h; S.cds15m=c15m;
+  S.cvdData=cvdFromCandles(c15m.slice(-80));
+  S.analysis=analyzeFull(c1h,c15m);
+  const sname=sym.replace('USDT','');
+  ['sym-label','ctf1h','ctf15m'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.textContent=id==='sym-label'?sname:id==='ctf1h'?`1H · ${sname}`:`15M · ${sname}`;
+  });
+  redrawCharts(); fetchFutures(sym);
+  showCoinCard(idea,S.analysis||{});
 }
 
 async function loadSym(sym,idea=null){
@@ -1430,7 +1452,7 @@ function showPhaseContent(phase){
       const dc=idea.dir==='LONG'?'var(--green)':'var(--red)';
       const idx=S.ideas.indexOf(idea);
       return `<div class="phase-coin-row" onclick="selectIdea(${idx})">
-        <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${dc};">${idea.sym.replace('USDT','')}</span>
+        <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${dc};cursor:pointer;" onclick="event.stopPropagation();openSym('${idea.sym}')">${idea.sym.replace('USDT','')}</span>
         <span style="font-size:9px;color:${dc};font-weight:700;">${idea.dir==='LONG'?'▲':'▼'} ${idea.dir}</span>
         <span style="font-size:9px;color:var(--muted);">+${idea.pumpPct.toFixed(1)}% · RSI ${idea.rsiNow.toFixed(0)}</span>
         ${phase===4&&a?.readyToShort?`<span style="font-size:9px;font-weight:700;color:var(--red);">📊 Entry $${fmt(a.entry)}</span>`:''}
@@ -1447,7 +1469,7 @@ function showPhaseContent(phase){
 
 function scheduleWinrateCheck(idea){
   if(!idea.sym||!idea.entry||!idea.sl||!idea.tp1)return;
-  if(S.winrates.find(w=>w.sym===idea.sym&&Math.abs((w.ts||0)-(idea.ts||0))<60000))return;
+  if(S.winrates.find(w=>w.sym===idea.sym&&w.result==='pending'&&(Date.now()-(w.ts||0))<7200000))return;
   S.winrates.unshift({
     sym:idea.sym, dir:idea.dir||'?', entry:idea.entry,
     tp:idea.tp1, sl:idea.sl, ts:idea.ts||Date.now(),
@@ -1545,7 +1567,7 @@ function showWinrates(){
       const ageStr=age>60?Math.floor(age/60)+'ч':age+'м';
       const tpPct=w.entry>0?((w.tp-w.entry)/w.entry*100).toFixed(1):'?';
       const slPct=w.entry>0?((w.entry-w.sl)/w.entry*100).toFixed(1):'?';
-      return `<div class="wr-row ${w.result}" onclick="loadSym('${w.sym}')" style="cursor:pointer;">
+      return `<div class="wr-row ${w.result}" onclick="openSym('${w.sym}')" style="cursor:pointer;">
         <div style="display:flex;align-items:center;gap:6px;width:100%;">
           <span style="font-family:var(--mono);font-size:11px;font-weight:700;min-width:60px;">${w.sym.replace('USDT','')}</span>
           <span style="font-size:9px;padding:1px 4px;border-radius:2px;font-weight:700;
