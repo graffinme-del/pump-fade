@@ -1575,6 +1575,23 @@ async function checkPendingWinrates(){
 
 async function fetchPrice(sym){try{const r=await fetch(`${FAPI}/ticker/price?symbol=${sym}`);const j=await r.json();return+j.price;}catch{return null;}}
 
+
+function showWRInfo(){
+  const pend=S.winrates.filter(function(w){return w.result==="pending";});
+  const win=S.winrates.filter(function(w){return w.result==="win";});
+  const loss=S.winrates.filter(function(w){return w.result==="loss";});
+  var rows=pend.slice(0,10).map(function(w){
+    return w.sym+" "+w.dir+
+    " entry:"+(w.entry||0).toFixed(4)+
+    " tp:"+(w.tp||0).toFixed(4)+
+    " sl:"+(w.sl||0).toFixed(4)+
+    " ("+Math.floor((Date.now()-(w.ts||0))/60000)+"м)";
+  });
+  alert("Всего: "+S.winrates.length+
+    "\nPending: "+pend.length+" | Win: "+win.length+" | Loss: "+loss.length+
+    "\n\n"+rows.join("\n"));
+}
+
 function showWinrates(){
   const dz=document.getElementById('dynamic-zone');if(!dz)return;
   const wins=S.winrates.filter(w=>w.result==='win').length;
@@ -1590,7 +1607,7 @@ function showWinrates(){
       <div style="display:flex;gap:4px;">
         <button onclick="checkPendingWinrates().then(()=>showWinrates())" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;">↻ Проверить</button>
         <button onclick="if(confirm('Очистить все записи?')){S.winrates=[];saveWR();showWinrates();}" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🗑 Сброс</button>
-        <button onclick="alert('Всего записей: '+S.winrates.length+'\nPending: '+S.winrates.filter(w=>w.result==='pending').length+'\nWin: '+S.winrates.filter(w=>w.result==='win').length+'\nLoss: '+S.winrates.filter(w=>w.result==='loss').length+'\n\nПервые 5 pending:\n'+S.winrates.filter(w=>w.result==='pending').slice(0,5).map(w=>w.sym+' entry:'+w.entry.toFixed(4)+' tp:'+w.tp.toFixed(4)+' sl:'+w.sl.toFixed(4)).join('\n'))" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🔍 Инфо</button>
+        <button onclick="showWRInfo()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🔍 Инфо</button>
       </div>
     </div>
     <div class="wr-grid4">
