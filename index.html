@@ -386,7 +386,7 @@ button:hover{opacity:.85;}
 // ═══════════════════════════════════════════════════════
 const FAPI   = 'https://fapi.binance.com/fapi/v1';
 const BINANCE = FAPI; // same — futures API has no CORS issues
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-1.5-flash';
 const REFRESH_INTERVAL = 30000;
 const IDEAS_INTERVAL   = 3 * 60000;
 const VOL_INTERVAL     = 60000;
@@ -1598,9 +1598,8 @@ function showToast(msg){
 async function callGemini(prompt,maxTokens=800){
   const key=getApiKey();if(!key)return null;
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
-  const fullPrompt=`Данные для анализа:\n${prompt}\n\nОтветь СТРОГО по формату (без markdown, без звёздочек, только текст):\nСИГНАЛ: подтверждён / слабый / опровергнут\nЧТО ПРОИСХОДИТ: 1-2 предложения\nРИСКИ: главный риск одной фразой\nДЕЙСТВИЕ: входить / ждать / пропустить`;
   const body={
-    contents:[{parts:[{text:fullPrompt}]}],
+    contents:[{parts:[{text:prompt}]}],
     generationConfig:{maxOutputTokens:maxTokens,temperature:0.2},
   };
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -1707,12 +1706,18 @@ ${idea.entry?'Entry $'+fmt(idea.entry)+' · SL $'+fmt(idea.sl)+' · TP $'+fmt(id
     return;
   }
   const a=S.analysis;
-  const prompt=`${idea.sym} | ${idea.dir} | conf:${idea.conf.toFixed(0)}/100
+  const prompt=`Данные монеты:\n${idea.sym} | ${idea.dir} | conf:${idea.conf.toFixed(0)}/100
 Памп: +${idea.pumpPct?.toFixed(1)||0}% | Скорость: +${idea.pumpSpeed?.toFixed(1)||0}%/2ч | EMA20: ${idea.dist?.toFixed(1)||0}%
 Vol×${idea.volRatio?.toFixed(1)||1} | RSI: ${idea.rsiNow?.toFixed(0)||50} | CVD: ${idea.cvdFalling?'↓':'↑'}${idea.cvdDiv?' +div':''} | ATR×${idea.atrRatio?.toFixed(2)||1} | 4h: ${idea.trend4h||'neutral'}
 ${a?`Фаза: ${a.phase}/3 | Вход: ${a.readyToShort?'ДА':'НЕТ'} | Истощение: ${a.exSigs?.map(s=>s.t).join(',')||'нет'} | Слом: ${a.bkSigs?.map(s=>s.t).join(',')||'нет'}`:''}
 ${idea.entry?`Entry:$${fmt(idea.entry)} SL:$${fmt(idea.sl)} TP:$${fmt(idea.tp1)} RR:${idea.rr?.toFixed(1)||'?'}`:''}
-Сигналы: ${idea.sigs?.join(', ')||'—'}`;
+Сигналы: ${idea.sigs?.join(', ')||'—'}
+
+Ответь БЕЗ markdown, БЕЗ звёздочек, только текст:
+СИГНАЛ: подтверждён / слабый / опровергнут
+ЧТО ПРОИСХОДИТ: 1-2 предложения
+РИСКИ: одна фраза
+ДЕЙСТВИЕ: входить / ждать / пропустить`;
   try{
     updateGeminiBtn('working');
     if (!getApiKey()) {
