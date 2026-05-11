@@ -904,7 +904,40 @@ async function scoreForIdea(sym){
     longConf = bestLong.conf; longSigs = bestLong.sigs;
     if (longConf >= MIN_CONF) longDir = 'LONG';
 
-        // ── Выбор лучшего сигнала ──────────────────────────────
+    // ── Ранний памп 5m (early_pump_scanner.py) ─────────────
+    let earlyPumpConf=0,earlyPumpSigs=[];
+    if(cds5m.length>=30){
+      const last5=cds5m[cds5m.length-1];
+      const body5=last5.open>0?(last5.close-last5.open)/last5.open*100:0;
+      const vols5=cds5m.slice(-48,cds5m.length-1).map(c=>c.volume);
+      const med5=[...vols5].sort((a,b)=>a-b)[Math.floor(vols5.length/2)]||1;
+      const vr5=last5.volume/med5;
+      const barR5=last5.high-last5.low||0.0001;
+      const taker5=(last5.close-last5.low)/barR5;
+      const c5=cds5m.map(c=>c.close);
+      const rsi5=rsi(c5); const rsi5n=rsi5[rsi5.length-1];
+      const e20_5=ema(c5,20); const emaPct5=e20_5[e20_5.length-1]>0?(c5[c5.length-1]-e20_5[e20_5.length-1])/e20_5[e20_5.length-1]*100:0;
+      let cvd5=0;
+      const cvdArr5=cds5m.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cvd5+=b/r*c.volume;return cvd5;});
+      const cvdD5=cvdArr5[cvdArr5.length-1]-cvdArr5[Math.max(0,cvdArr5.length-7)];
+      if(body5>=0.35&&body5<=3.0&&vr5>=2.0&&vr5<=28&&rsi5n<80&&rsi5n>35){
+        let q=0;
+        q+=vr5>=2&&vr5<=4?25:vr5<=10?20:12;
+        q+=body5>=0.5&&body5<=2.0?18:body5<0.5?8:12;
+        q+=taker5>=0.6?15:taker5>=0.4?8:0;
+        q+=cvdD5>0?12:0;
+        q+=rsi5n>=50&&rsi5n<=65?10:rsi5n<=75?6:0;
+        q+=emaPct5>0&&emaPct5<3?10:emaPct5>=3?4:0;
+        q+=cvdD5>0&&vr5>=3?10:0;
+        q=Math.min(100,q);
+        if(q>=72){
+          earlyPumpConf=q;
+          earlyPumpSigs=[`🚀 Старт пампа 5m: +${body5.toFixed(2)}%`,`Vol×${vr5.toFixed(1)}/мед`,`taker ${taker5.toFixed(2)}`,cvdD5>0?'CVD ↑':'CVD ↓'];
+        }
+      }
+    }
+
+    // ── Выбор лучшего сигнала ──────────────────────────────
     const res={sym,cds1h,cds15m,price,pumpPct,pumpSpeed,dist,atrRatio,volRatio,
       rsiNow,bodyRatio,trend4h,shortConf,shortSigs,longConf,longDir,longSigs,
       earlyPumpConf,isSharpPump,cvdFalling,cvdDiv,allPatterns,patScore};
