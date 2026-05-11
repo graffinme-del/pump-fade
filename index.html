@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 17:03</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 17:10</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
@@ -1512,7 +1512,7 @@ function showPhaseContent(phase){
 
 function scheduleWinrateCheck(idea){
   if(!idea.sym||!idea.entry||!idea.sl||!idea.tp1)return;
-  if(S.winrates.find(w=>w.sym===idea.sym&&w.result==='pending'&&(Date.now()-(w.ts||0))<7200000))return;
+  if(S.winrates.find(w=>w.sym===idea.sym&&w.result==='pending'&&(Date.now()-(w.ts||0))<1800000))return;
   S.winrates.unshift({
     sym:idea.sym, dir:idea.dir||'?', entry:idea.entry,
     tp:idea.tp1, sl:idea.sl, ts:idea.ts||Date.now(),
@@ -1535,10 +1535,11 @@ async function checkPendingWinrates(){
     try { encodeURIComponent(w.sym); } catch(e) { w.result='expired'; w.pnl=0; return; }
   });
 
-  const active = S.winrates.filter(w => w.result === 'pending').slice(0, 10);
+  const active = S.winrates.filter(w => w.result === 'pending');
   if (!active.length) { saveWR(); return; }
 
   // Use Promise.allSettled to avoid blocking on any single failure
+  console.log(`WR check: ${active.length} pending records`);
   const results = await Promise.allSettled(
     active.map(async rec => {
       const lp = await Promise.race([
@@ -1589,6 +1590,7 @@ function showWinrates(){
       <div style="display:flex;gap:4px;">
         <button onclick="checkPendingWinrates().then(()=>showWinrates())" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;">↻ Проверить</button>
         <button onclick="if(confirm('Очистить все записи?')){S.winrates=[];saveWR();showWinrates();}" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🗑 Сброс</button>
+        <button onclick="alert('Всего записей: '+S.winrates.length+'\nPending: '+S.winrates.filter(w=>w.result==='pending').length+'\nWin: '+S.winrates.filter(w=>w.result==='win').length+'\nLoss: '+S.winrates.filter(w=>w.result==='loss').length+'\n\nПервые 5 pending:\n'+S.winrates.filter(w=>w.result==='pending').slice(0,5).map(w=>w.sym+' entry:'+w.entry.toFixed(4)+' tp:'+w.tp.toFixed(4)+' sl:'+w.sl.toFixed(4)).join('\n'))" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🔍 Инфо</button>
       </div>
     </div>
     <div class="wr-grid4">
@@ -2442,7 +2444,7 @@ setInterval(()=>{
 },REFRESH_INTERVAL);
 setInterval(()=>runIdeas(false),IDEAS_INTERVAL);
 setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
-setInterval(()=>checkPendingWinrates(), 60*60*1000); // WR check every 1h
+setInterval(()=>checkPendingWinrates(), 15*60*1000); // WR check every 15 min
 setInterval(()=>runActiveMonitor(), 60*1000); // Active track monitor every 1 min
 setTimeout(()=>runActiveMonitor(), 5000); // Initial active monitor check
 // Initial check on load
