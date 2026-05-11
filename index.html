@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 15:08</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 15:23</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
@@ -388,7 +388,7 @@ button:hover{opacity:.85;}
 // ═══════════════════════════════════════════════════════
 const FAPI   = 'https://fapi.binance.com/fapi/v1';
 const BINANCE = FAPI; // same — futures API has no CORS issues
-const GEMINI_MODEL = 'gemini-2.0-flash-lite';
+// Model is set by user via 📋 Модели button → localStorage('gemini_model_override')
 const REFRESH_INTERVAL = 30000;
 const IDEAS_INTERVAL   = 3 * 60000;
 const VOL_INTERVAL     = 60000;
@@ -1750,7 +1750,8 @@ Reply ONLY with JSON (no markdown):
 GO=enter now, SKIP=pass, WAIT=need confirmation`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${getApiKey()}`;
+    const model = localStorage.getItem('gemini_model_override') || 'gemini-2.0-flash-lite';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${getApiKey()}`;
     const r = await fetch(url, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
