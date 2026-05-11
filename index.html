@@ -259,7 +259,7 @@ button:hover{opacity:.85;}
         </button>
         <button id="tab-active" onclick="setIdeasTab('active')"
           style="flex:1;padding:5px 4px;font-size:9px;font-weight:700;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);font-family:inherit;">
-          ⚡ В работе <span id="tab-active-count" style="font-size:8px;color:var(--blue);"></span>
+          ⚡ В работу <span id="tab-active-count" style="font-size:8px;color:var(--blue);"></span>
         </button>
       </div>
     </div>
@@ -1375,12 +1375,11 @@ function showCoinCard(idea,analysis){
       <button class="btn-ai" onclick="askAIAboutIdea(${S.ideas.indexOf(idea)})">
         ✦ AI анализ
       </button>
-      <button onclick="toggleActive(${JSON.stringify(idea.sym)})" style="
-        flex:1;padding:5px 0;font-size:10px;font-weight:700;border-radius:4px;cursor:pointer;font-family:inherit;
-        background:${isActiveTrack(idea.sym)?'var(--blue-bg)':'var(--s2)'};
-        border:1px solid ${isActiveTrack(idea.sym)?'var(--blue-b)':'var(--border)'};
+      <button class="btn-ai" onclick="toggleActive('${idea.sym}')" style="
+        background:${isActiveTrack(idea.sym)?'var(--blue-bg)':'transparent'};
+        border-color:${isActiveTrack(idea.sym)?'var(--blue-b)':'var(--border)'};
         color:${isActiveTrack(idea.sym)?'var(--blue)':'var(--muted)'};
-      ">${isActiveTrack(idea.sym)?'⚡ В работе ✓':'📌 В работе'}</button>
+      ">${isActiveTrack(idea.sym)?'⚡ В работу ✓':'📌 В работу'}</button>
     </div>
   </div>`;
 }
@@ -1962,7 +1961,7 @@ function toggleActive(sym){
   if(isActiveTrack(sym)){
     S.activeTrack = S.activeTrack.filter(t=>t.sym!==sym);
     saveActive();
-    showToast('Удалено из «В работе»');
+    showToast('Удалено из «В работу»');
   } else {
     const idea = S.ideas.find(i=>i.sym===sym);
     const rec = {
@@ -1975,7 +1974,7 @@ function toggleActive(sym){
     };
     S.activeTrack.unshift(rec);
     saveActive();
-    showToast('⚡ Добавлено в «В работе»');
+    showToast('⚡ Добавлено в «В работу»');
     scheduleWinrateCheck(idea||rec);
   }
   updateTabCounts();
@@ -2057,7 +2056,7 @@ async function runActiveMonitor(){
 
 function renderActiveTab(list){
   if(!S.activeTrack.length){
-    list.innerHTML='<div style="padding:16px;text-align:center;font-size:11px;color:var(--muted);">Нет монет в работе.<br><span style="font-size:9px;color:var(--dim);">Нажмите 📌 В работе на карточке монеты.</span></div>';
+    list.innerHTML='<div style="padding:16px;text-align:center;font-size:11px;color:var(--muted);">Нет монет в работе.<br><span style="font-size:9px;color:var(--dim);">Нажмите 📌 В работу на карточке монеты.</span></div>';
     return;
   }
   list.innerHTML = S.activeTrack.map(rec => {
