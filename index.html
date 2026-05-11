@@ -2054,6 +2054,20 @@ async function runActiveMonitor(){
   if(ideasTab==='active') renderIdeas();
 }
 
+async function openActiveCard(sym){
+  const rec = S.activeTrack.find(t=>t.sym===sym);
+  // Try to find existing idea with candle data
+  let idea = S.ideas.find(i=>i.sym===sym);
+  if(!idea){
+    // Build minimal idea from tracked record
+    idea = {sym, dir:rec?.dir||'?', entry:rec?.entry||0, sl:rec?.sl||0,
+            tp1:rec?.tp1||0, rr:rec?.rr||0, conf:rec?.conf||0,
+            pumpPct:rec?.pumpPct||0, rsiNow:rec?.rsiNow||0,
+            sigs:[], why:'', ts:rec?.addedAt||Date.now()};
+  }
+  await loadSym(sym, idea);
+}
+
 function renderActiveTab(list){
   if(!S.activeTrack.length){
     list.innerHTML='<div style="padding:16px;text-align:center;font-size:11px;color:var(--muted);">Нет монет в работе.<br><span style="font-size:9px;color:var(--dim);">Нажмите 📌 В работу на карточке монеты.</span></div>';
@@ -2066,7 +2080,7 @@ function renderActiveTab(list){
     const alertColor = latestAlert?.type==='danger'?'var(--red)':latestAlert?.type==='warn'?'var(--amber)':latestAlert?.type==='success'?'var(--green)':'var(--muted)';
     const tpPct = rec.entry>0&&rec.tp1>0 ? Math.abs((rec.tp1-rec.entry)/rec.entry*100).toFixed(1) : '?';
     const slPct = rec.entry>0&&rec.sl>0 ? Math.abs((rec.sl-rec.entry)/rec.entry*100).toFixed(1) : '?';
-    return `<div class="idea-card" style="border-left:3px solid ${bc};position:relative;" onclick="loadSym('${rec.sym}')">
+    return `<div class="idea-card" style="border-left:3px solid ${bc};position:relative;" onclick="openActiveCard('${rec.sym}')">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <span style="font-family:var(--mono);font-size:13px;font-weight:800;color:${bc};">${rec.sym.replace('USDT','')}</span>
         <div style="display:flex;gap:4px;align-items:center;">
