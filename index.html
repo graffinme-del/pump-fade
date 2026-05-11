@@ -1012,41 +1012,8 @@ async function runIdeas(manual=false){
           cds1h:r.cds1h,cds15m:r.cds15m,
           verdict:null, verdictReason:'', verdictConf:0};
         newIdeas.push(ideaObj);
-        // Async Gemini verdict — doesn't block scan
-        // Stagger verdict requests — use newIdeas.length as counter
-        const verdictDelay = (newIdeas.length - 1) * 4000;
-        setTimeout(() => {
-          if (!getApiKey()) { ideaObj.verdictChecked = true; return; }
-          getGeminiVerdict(ideaObj).then(v => {
-            console.log('Verdict received for', ideaObj.sym, ':', v);
-            ideaObj.verdictChecked = true;
-            if (!v) { renderIdeas(); return; }
-            // Find the actual object in S.ideas (reference might differ after merge)
-            const inList = S.ideas.find(i => i.sym === ideaObj.sym && Math.abs((i.ts||0)-(ideaObj.ts||0))<5000);
-            const target = inList || ideaObj;
-            target.verdict = v.verdict;
-            target.verdictReason = (v.reason || '').replace(/verdict\s*:\s*/gi,'').replace(/confidence\s*:\s*/gi,'').trim();
-            target.verdictConf = parseInt(v.confidence) || 0;
-            target.verdictChecked = true;
-            if (v.verdict === 'SKIP') {
-              // Тихо удаляем
-              S.ideas = S.ideas.filter(i => i.sym !== ideaObj.sym);
-            } else if (v.verdict === 'WAIT') {
-              // Перемещаем в наблюдение
-              addToWatch(target);
-            } else if (v.verdict === 'GO') {
-              // Звук сигнала
-              playAlert();
-              notify('✦ GO · ' + target.sym.replace('USDT',''), target.verdictReason);
-            }
-            renderIdeas();
-            // Refresh coin card if this idea is currently displayed
-            if (S.activeIdea !== null && S.ideas[S.activeIdea]?.sym === ideaObj.sym) {
-              const freshA = analyzeFull(ideaObj.cds1h, ideaObj.cds15m);
-              showCoinCard(ideaObj, freshA);
-            }
-          }).catch(() => { ideaObj.verdictChecked = true; renderIdeas(); });
-        }, verdictDelay);
+        // Immediately track in winrate — no Gemini, just Entry/SL/TP
+        if (ideaObj.entry && ideaObj.sl && ideaObj.tp1) scheduleWinrateCheck(ideaObj);
       });
       await new Promise(r=>setTimeout(r,100));
     }
@@ -1062,8 +1029,7 @@ async function runIdeas(manual=false){
       if(pa&&pt){pt.innerHTML=`🔥 ПАМП · <b>${h.sym.replace('USDT','')}</b> +${h.pumpPct.toFixed(1)}% · ⚡+${h.pumpSpeed.toFixed(1)}%/2ч · Vol×${h.volRatio.toFixed(1)} · RSI ${h.rsiNow.toFixed(0)}`;pa.style.display='flex';}
       notify('🔥 Новый памп!',`${h.sym} +${h.pumpPct.toFixed(0)}%`);
     }
-    // Schedule winrate checks
-    newIdeas.forEach(idea=>{if(idea.entry&&idea.tp1&&idea.sl)scheduleWinrateCheck(idea);});
+    // NOTE: winrate tracking moved to GO verdict handler above (only confirmed signals)
     renderIdeas();
   }catch(e){console.warn('Scan failed:',e);}
   S.scanning=false;
@@ -1505,6 +1471,10 @@ async function checkPendingWinrates(){
 
   saveWR();
   if (S.phase === 5) showWinrates();
+  // ✅ FIX: Update nav badge with pending count regardless of active tab
+  const pendCount = S.winrates.filter(w => w.result === 'pending').length;
+  const wrNav = document.querySelector('[onclick="switchPhase(5)"]');
+  if (wrNav) wrNav.title = pendCount > 0 ? `Winrate · ${pendCount} в ожидании` : 'Winrate';
 }
 
 
@@ -1729,8 +1699,6 @@ ${idea.entry?`Entry: $${fmt(idea.entry)} | SL: $${fmt(idea.sl)} | TP: $${fmt(ide
     document.getElementById(tid)?.remove();
     if (!reply) { appendMsg('ai','⚠️ Gemini не ответил. Попробуйте снова.'); return; }
     appendMsg('ai',`[${idea.sym}] ${reply}`);
-    // Track winrate
-    if(idea.entry&&idea.sl&&idea.tp1)scheduleWinrateCheck(idea);
   }catch(e){
     document.getElementById(tid)?.remove();
     appendMsg('ai','❌ Ошибка: '+(e.message||'неизвестная'));
@@ -2035,6 +2003,8 @@ async function runWatchChecks() {
         notify(`✅ GO · ${sym.replace('USDT','')}`, verdict.reason || 'Сигнал подтверждён');
         showToast(`✅ ${sym.replace('USDT','')} → GO!`);
         removeFromWatch(sym, 'confirmed');
+        // ✅ FIX: Track winrate for WAIT→GO signals too
+        if (w.idea.entry && w.idea.sl && w.idea.tp1) scheduleWinrateCheck(w.idea);
         renderIdeas();
 
       } else if (verdict.verdict === 'SKIP') {
@@ -2094,7 +2064,7 @@ setInterval(()=>{
 },REFRESH_INTERVAL);
 setInterval(()=>runIdeas(false),IDEAS_INTERVAL);
 setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
-setInterval(()=>checkPendingWinrates(), 15*60*1000); // WR check every 15 min
+setInterval(()=>checkPendingWinrates(), 60*60*1000); // WR check every 1h
 // Initial check on load
 // Clean up winrates with bad TP/SL (<1% range)
 S.winrates = S.winrates.filter(w => {
