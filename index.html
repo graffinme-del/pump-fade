@@ -386,7 +386,7 @@ button:hover{opacity:.85;}
 // ═══════════════════════════════════════════════════════
 const FAPI   = 'https://fapi.binance.com/fapi/v1';
 const BINANCE = FAPI; // same — futures API has no CORS issues
-const GEMINI_MODEL = 'gemini-1.5-flash-latest';
+const GEMINI_MODEL = 'gemini-1.5-flash-002';
 const REFRESH_INTERVAL = 30000;
 const IDEAS_INTERVAL   = 3 * 60000;
 const VOL_INTERVAL     = 60000;
@@ -1411,6 +1411,9 @@ function showCoinCard(idea,analysis){
         border-color:${isActiveTrack(idea.sym)?'var(--blue-b)':'var(--border)'};
         color:${isActiveTrack(idea.sym)?'var(--blue)':'var(--muted)'};
       ">${isActiveTrack(idea.sym)?'⚡ В работе ✓':'📌 В работе'}</button>
+      <button class="btn-ai" onclick="copyForChatGPT('${idea.sym}')" style="background:var(--s2);border-color:var(--border);color:var(--muted);" title="Скопировать данные для ChatGPT">
+        📋 Копировать
+      </button>
     </div>
   </div>`;
 }
@@ -1430,6 +1433,7 @@ function tfOrient(cds){
 // ═══════════════════════════════════════════════════════
 function setPhase(n,el){
   S.phase=n;
+  S.activeCardSym=null; // сбрасываем lock карточки
   document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));
   if(el)el.classList.add('active');
   showPhaseContent(n);
@@ -1437,6 +1441,7 @@ function setPhase(n,el){
 
 function showPhaseContent(phase){
   const dz=document.getElementById('dynamic-zone');if(!dz)return;
+  if(phase===0)return; // карточка монеты открыта — не перетираем
   if(phase===5){showWinrates();return;}
   const phaseNames={1:'🔴 Памп',2:'🟡 Истощение',3:'🔴 Слом структуры',4:'✅ Готов к входу'};
   const sigNames={1:'Фаза 1: памп +15%+ от EMA20',2:'Фаза 2: признаки истощения RSI/MACD/CVD',3:'Фаза 3: слом EMA20 на 15m',4:'Все фазы пройдены — сигнал на вход'};
@@ -2087,6 +2092,70 @@ async function runActiveMonitor(){
   if(ideasTab==='active') renderIdeas();
 }
 
+// ═══════════════════════════════════════════════════════
+//  COPY FOR CHATGPT
+// ═══════════════════════════════════════════════════════
+async function copyForChatGPT(sym){
+  const idea = S.ideas.find(i=>i.sym===sym) || S.activeTrack.find(t=>t.sym===sym);
+  const a = S.analysis;
+  const lp = S.prices[sym]?.price || idea?.entry || 0;
+  const phase = a ? "ФАЗЫ ИСТОЩЕНИЯ: " + a.phase + "/3\n  Истощение: " + ((a.exSigs||[]).map(s=>s.t).join(", ")||"нет") + "\n  Слом: " + ((a.bkSigs||[]).map(s=>s.t).join(", ")||"нет") : "";
+  const sigsText = (idea?.sigs||[]).map(s=>"  * " + s).join("\n");
+  const prompt = [
+    "Проанализируй торговый сетап для " + sym + ":",
+    "",
+    "НАПРАВЛЕНИЕ: " + (idea?.dir||"?") + " | Уверенность: " + (idea?.conf?.toFixed(0)||"?") + "/100",
+    "Цена: $" + fmt(lp) + " | Памп 8h: +" + (idea?.pumpPct?.toFixed(1)||0) + "%",
+    "",
+    "УРОВНИ:",
+    "  Entry:  $" + fmt(idea?.entry||0),
+    "  Stop:   $" + fmt(idea?.sl||0),
+    "  Target: $" + fmt(idea?.tp1||0),
+    "  R/R:    " + (idea?.rr?.toFixed(1)||"?"),
+    "",
+    "ТЕХНИЧЕСКИЕ ДАННЫЕ:",
+    "  RSI 1h:   " + (idea?.rsiNow?.toFixed(0)||"?"),
+    "  Vol/avg:  x" + (idea?.volRatio?.toFixed(1)||"?"),
+    "  CVD:      " + (idea?.cvdFalling ? "медвежий" : "бычий") + (idea?.cvdDiv ? " + дивергенция" : ""),
+    "  ATR ratio: x" + (idea?.atrRatio?.toFixed(2)||"?"),
+    "  4h тренд: " + (idea?.trend4h||"neutral"),
+    "",
+    "СИГНАЛЫ:",
+    sigsText,
+    phase ? "\n" + phase : "",
+    "",
+    "Дай конкретный анализ: надёжен ли сетап, главные риски, рекомендация.",
+  ].join("\n");
+
+  // Захватываем canvas графика
+  try {
+    const chartEl = document.getElementById("chart1h");
+    const canvas = chartEl ? chartEl.querySelector("canvas") : null;
+    if (canvas) {
+      const imgUrl = canvas.toDataURL("image/png");
+      await navigator.clipboard.writeText(prompt).catch(()=>{});
+      const win = window.open("","_blank");
+      if (win) {
+        win.document.write("<html><head><title>Chart " + sym + "</title><style>body{margin:0;background:#0f172a;padding:20px;font-family:monospace;color:#94a3b8;}img{border:1px solid #334155;border-radius:6px;max-width:100%;}pre{background:#1e293b;padding:16px;border-radius:6px;white-space:pre-wrap;font-size:12px;line-height:1.6;margin-top:16px;}h3{color:#f1f5f9;}</style></head><body><h3>Chart " + sym + "</h3><img src='" + imgUrl + "'/><h3>Промпт (скопирован в буфер):</h3><pre>" + prompt.replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre></body></html>");
+        win.document.close();
+      }
+      showToast("Скриншот открыт, данные скопированы!");
+      return;
+    }
+  } catch(e){}
+
+  // Fallback — просто копируем текст
+  try {
+    await navigator.clipboard.writeText(prompt);
+    showToast("Данные скопированы! Вставьте в ChatGPT (Ctrl+V)");
+  } catch(e) {
+    const modal = document.createElement("div");
+    modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;";
+    modal.innerHTML = "<div style='background:#1e293b;border-radius:8px;padding:20px;max-width:500px;width:90%;max-height:80vh;overflow-y:auto;'><div style='display:flex;justify-content:space-between;margin-bottom:12px;'><b style='color:#f1f5f9;'>Скопируйте для ChatGPT</b><button onclick=\"this.closest('[style]').remove()\" style='background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px;'>x</button></div><textarea style='width:100%;height:300px;background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:8px;font-size:11px;font-family:monospace;' onclick='this.select()'>" + prompt + "</textarea></div>";
+    document.body.appendChild(modal);
+  }
+}
+
 async function openActiveCard(sym){
   // Cancel any in-progress open
   S._openingCard = sym;
@@ -2121,7 +2190,10 @@ async function openActiveCard(sym){
   });
   redrawCharts();
   fetchFutures(sym);
-  S.activeCardSym = sym; // lock: renderActiveTab won't overwrite while card is open
+  S.activeCardSym = sym;
+  // Переключаем phase на 0 чтобы showPhaseContent не перетирал карточку
+  S.phase = 0;
+  document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));
   showCoinCard(idea, S.analysis||{});
 }
 
