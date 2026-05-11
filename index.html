@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 20:35</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 21:19</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
@@ -393,7 +393,6 @@ const REFRESH_INTERVAL = 30000;
 const IDEAS_INTERVAL   = 3 * 60000;
 const VOL_INTERVAL     = 60000;
 const WR_KEY = 'pf_wr_v2';
-const WR_HISTORY_KEY = 'pf_wr_history_v1';
 const ACTIVE_KEY = 'pf_active_v1';
 let PUMP_THRESH = 15;
 let MIN_CONF = 65;
@@ -402,19 +401,6 @@ let MIN_CONF = 65;
 //  STATE
 // ═══════════════════════════════════════════════════════
 // WR helpers must be before S
-function loadWRHistory(){
-  try{return JSON.parse(localStorage.getItem(WR_HISTORY_KEY)||'[]');}catch{return[];}
-}
-function saveWRHistory(records){
-  try{
-    var hist=loadWRHistory();
-    hist=hist.concat(records);
-    // Keep max 2000 records in history
-    if(hist.length>2000)hist=hist.slice(-2000);
-    localStorage.setItem(WR_HISTORY_KEY,JSON.stringify(hist));
-  }catch(e){console.warn('WR history save failed:',e);}
-}
-
 function loadWR(){
   try{
     var d=JSON.parse(localStorage.getItem(WR_KEY)||'[]');
@@ -1065,10 +1051,12 @@ async function runIdeas(manual=false){
               target.verdictConf = parseInt(v.confidence)||0;
               target.verdictChecked = true;
               if (v.verdict === 'SKIP') {
-                S.ideas = S.ideas.filter(i => i.sym !== ideaObj.sym);
+                target.skipAt = Date.now(); // удалить через 15 мин
               } else if (v.verdict === 'WAIT') {
                 addToWatch(target);
+                S.ideas = S.ideas.filter(i => i.sym !== ideaObj.sym);
               } else if (v.verdict === 'GO') {
+                target.goAt = Date.now(); // удалить через 15 мин если не взят в работу
                 playAlert();
                 notify('✦ GO · ' + target.sym.replace('USDT',''), target.verdictReason);
                 if (target.entry && target.sl && target.tp1) scheduleWinrateCheck(target);
@@ -1183,6 +1171,12 @@ function renderIdeas(){
   }
 
   // SIGNALS TAB
+  // GO наверх, затем по confidence desc
+  filtered.sort(function(a,b){
+    var aGo=a.verdict==='GO'?1:0, bGo=b.verdict==='GO'?1:0;
+    if(aGo!==bGo)return bGo-aGo;
+    return (b.conf||0)-(a.conf||0);
+  });
   if(!filtered.length){
     list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет сигналов.<br><span style="font-size:9px;color:var(--dim);">Сканирую 200 монет каждые 3м.</span></div>';
     return;
@@ -1213,7 +1207,7 @@ function renderIdeas(){
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;">
         <span class="idea-age">${fmtAge(idea.ts)} назад</span>
         ${idea.verdict==='GO' ?
-          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--green-bg);color:var(--green);">✦ GO${idea.verdictConf>10?' '+idea.verdictConf+'%':''}</span>` :
+          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--green-bg);color:var(--green);">✦ GO${idea.verdictConf>10?' '+idea.verdictConf+'%':''}</span>${idea.goAt?`<span style="font-size:8px;color:var(--amber);margin-left:3px;">⏱${Math.max(0,15-Math.floor((Date.now()-idea.goAt)/60000))}м</span>`:''}` :
           idea.verdict==='WAIT' ?
           `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--amber-bg);color:var(--amber);">⏳ WAIT</span>` :
           idea.verdict==='SKIP' ? '' :
@@ -1557,17 +1551,12 @@ function checkMidnightReset(){
   var today=msk.toISOString().slice(0,10);
   if(localStorage.getItem('wr_reset_date')===today)return;
   localStorage.setItem('wr_reset_date',today);
-  // Archive all records before clearing
-  var toArchive=S.winrates.map(function(w){
-    var r=Object.assign({},w);
-    if(r.result==='pending'){r.result='expired';r.closedAt=Date.now();r.pnl=r.pnl||0;}
-    return r;
+  S.winrates.forEach(function(w){
+    if(w.result==='pending'){w.result='expired';w.closedAt=Date.now();w.pnl=w.pnl||0;}
   });
-  saveWRHistory(toArchive);
-  S.winrates=[];
   saveWR();
   if(S.phase===5)showWinrates();
-  showToast('🕛 00:00 МСК — WR сброшен, '+toArchive.length+' записей в истории');
+  showToast('🕛 00:00 МСК — WR сброшен');
 }
 
 async function checkPendingWinrates(){
@@ -1628,47 +1617,28 @@ function showWRInfo(){
   var pend=S.winrates.filter(function(w){return w.result==='pending';});
   var win=S.winrates.filter(function(w){return w.result==='win';});
   var loss=S.winrates.filter(function(w){return w.result==='loss';});
-  var hist=loadWRHistory();
-  alert('Сегодня — Всего: '+S.winrates.length+'\nPending: '+pend.length+' | Win: '+win.length+' | Loss: '+loss.length+
-    '\n\nВ истории: '+hist.length+' записей'+
-    '\n\nPending монеты:\n'+
-    pend.slice(0,10).map(function(w){return w.sym+' '+w.dir+' $'+(w.entry||0).toFixed(4)+' TP:$'+(w.tp||0).toFixed(4)+' SL:$'+(w.sl||0).toFixed(4);}).join('\n'));
+  alert('Всего: '+S.winrates.length+'\nPending: '+pend.length+' | Win: '+win.length+' | Loss: '+loss.length+'\n\n'+
+    pend.slice(0,10).map(function(w){return w.sym+' '+w.dir+' entry:'+(w.entry||0).toFixed(4)+' ('+Math.floor((Date.now()-(w.recordedAt||w.ts||0))/60000)+'м)';}).join('\n'));
 }
 
 function showWinrates(){
   var dz=document.getElementById('dynamic-zone');if(!dz)return;
-
-  // Merge history based on selected tab
-  var now2=Date.now();
-  var histData=[];
-  if(_wrTab!=='today'){
-    var hist=loadWRHistory();
-    var cutoff=_wrTab==='week'?now2-7*86400000:_wrTab==='month'?now2-30*86400000:0;
-    histData=hist.filter(function(w){return (w.signalTime||w.ts||0)>=cutoff;});
-  }
-  var allData=S.winrates.concat(histData);
-  var wins=allData.filter(function(w){return w.result==='win';});
-  var losses=allData.filter(function(w){return w.result==='loss';});
-  var pend=allData.filter(function(w){return w.result==='pending';});
+  var wins=S.winrates.filter(function(w){return w.result==='win';});
+  var losses=S.winrates.filter(function(w){return w.result==='loss';});
+  var pend=S.winrates.filter(function(w){return w.result==='pending';});
   var total=wins.length+losses.length;
   var wr=total>0?(wins.length/total*100).toFixed(0):'—';
   var avgW=wins.length>0?wins.reduce(function(s,w){return s+(w.pnl||0);},0)/wins.length:0;
   var avgL=losses.length>0?losses.reduce(function(s,w){return s+(w.pnl||0);},0)/losses.length:0;
-  var maxPnlAll=allData.reduce(function(m,w){return Math.max(m,w.maxPnl||0);},0);
-  var sorted=[].concat(allData).sort(function(a,b){
+  var maxPnlAll=S.winrates.reduce(function(m,w){return Math.max(m,w.maxPnl||0);},0);
+  var sorted=[].concat(S.winrates).sort(function(a,b){
     if(a.result==='pending'&&b.result!=='pending')return -1;
     if(a.result!=='pending'&&b.result==='pending')return 1;
     return (b.signalTime||b.ts||0)-(a.signalTime||a.ts||0);
   });
-  var _wrTab=window._wrTab||'today';
   dz.innerHTML='<div class="fade" style="font-size:12px;">'
     +'<div class="phase-list-hd" style="display:flex;justify-content:space-between;align-items:center;">'
-    +'<div style="display:flex;gap:4px;">'
-    +'<button onclick="window._wrTab=\'today\';showWinrates();" style="font-size:8px;padding:2px 7px;border-radius:3px;cursor:pointer;font-family:inherit;'+((_wrTab==='today')?'background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);':'background:var(--s3);border:1px solid var(--border);color:var(--muted);')+'">Сегодня</button>'
-    +'<button onclick="window._wrTab=\'week\';showWinrates();" style="font-size:8px;padding:2px 7px;border-radius:3px;cursor:pointer;font-family:inherit;'+((_wrTab==='week')?'background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);':'background:var(--s3);border:1px solid var(--border);color:var(--muted);')+'">Неделя</button>'
-    +'<button onclick="window._wrTab=\'month\';showWinrates();" style="font-size:8px;padding:2px 7px;border-radius:3px;cursor:pointer;font-family:inherit;'+((_wrTab==='month')?'background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);':'background:var(--s3);border:1px solid var(--border);color:var(--muted);')+'">Месяц</button>'
-    +'<button onclick="window._wrTab=\'all\';showWinrates();" style="font-size:8px;padding:2px 7px;border-radius:3px;cursor:pointer;font-family:inherit;'+((_wrTab==='all')?'background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);':'background:var(--s3);border:1px solid var(--border);color:var(--muted);')+'">Всё время</button>'
-    +'</div>'
+    +'<span>📊 Winrate · сброс 00:00 МСК</span>'
     +'<div style="display:flex;gap:4px;">'
     +'<button onclick="checkPendingWinrates().then(function(){showWinrates();})" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;">↻ Проверить</button>'
     +'<button onclick="clearWinrates()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🗑 Сброс</button>'
@@ -2542,6 +2512,25 @@ setInterval(()=>{
   S.nextRefresh=Date.now()+REFRESH_INTERVAL;
 },REFRESH_INTERVAL);
 setInterval(()=>runIdeas(false),IDEAS_INTERVAL);
+setInterval(function(){
+  var now=Date.now();
+  var before=S.ideas.length;
+  S.ideas=S.ideas.filter(function(idea){
+    // Удаляем GO через 15 мин если не в работе
+    if(idea.verdict==='GO'&&idea.goAt&&!isActiveTrack(idea.sym)){
+      if(now-idea.goAt>15*60*1000){
+        showToast('⏱ '+idea.sym.replace('USDT','')+' GO истёк (15м)');
+        return false;
+      }
+    }
+    // Удаляем SKIP через 15 мин
+    if(idea.verdict==='SKIP'&&idea.skipAt){
+      if(now-idea.skipAt>15*60*1000)return false;
+    }
+    return true;
+  });
+  if(S.ideas.length!==before)renderIdeas();
+},60*1000); // expiry check every 1 min
 setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
 setInterval(function(){checkPendingWinrates();checkMidnightReset();}, 15*60*1000); // WR check every 15 min
 setInterval(()=>runActiveMonitor(), 60*1000); // Active track monitor every 1 min
