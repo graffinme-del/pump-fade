@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 21:36</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 23:15</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
@@ -1563,16 +1563,19 @@ function checkMidnightReset(){
   var today=msk.toISOString().slice(0,10);
   if(localStorage.getItem('wr_reset_date')===today)return;
   localStorage.setItem('wr_reset_date',today);
-  var toArchive=S.winrates.map(function(w){
-    var r=Object.assign({},w);
-    if(r.result==='pending'){r.result='expired';r.closedAt=Date.now();r.pnl=r.pnl||0;}
-    return r;
+  // Check prices first, then archive
+  checkPendingWinrates().then(function(){
+    var toArchive=S.winrates.map(function(w){
+      var r=Object.assign({},w);
+      if(r.result==='pending'){r.result='expired';r.closedAt=Date.now();}
+      return r;
+    });
+    saveWRHistory(toArchive);
+    S.winrates=[];
+    saveWR();
+    if(S.phase===5)showWinrates();
+    showToast('🕛 00:00 МСК — WR сброшен, '+toArchive.length+' записей в истории');
   });
-  saveWRHistory(toArchive);
-  S.winrates=[];
-  saveWR();
-  if(S.phase===5)showWinrates();
-  showToast('🕛 00:00 МСК — WR сброшен, '+toArchive.length+' записей в истории');
 }
 
 async function checkPendingWinrates(){
@@ -1622,6 +1625,21 @@ async function fetchPrice(sym){try{const r=await fetch(`${FAPI}/ticker/price?sym
 
 
 function wrOpenSym(sym){openSym(sym);}
+
+// Пересчитать ВСЕ монеты в WR (pending + expired с нулевым PnL)
+async function recheckAllWinrates(){
+  var now=Date.now();
+  // Restore expired-with-zero-pnl back to pending for recheck
+  S.winrates.forEach(function(w){
+    if(w.result==='expired'&&(w.pnl===0||w.pnl===null||w.pnl===undefined)){
+      w.result='pending';
+    }
+  });
+  showToast('Пересчитываю все монеты...');
+  await checkPendingWinrates();
+  showWinrates();
+  showToast('✅ Пересчёт завершён');
+}
 // Event delegation for WR table rows
 document.addEventListener('click',function(e){
   var tr=e.target.closest('.wr-tr');
@@ -1681,7 +1699,8 @@ function showWinrates(){
     +'<div class="phase-list-hd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">'
     +'<div style="display:flex;gap:3px;">'+tabBtn('today','Сегодня')+tabBtn('week','Неделя')+tabBtn('month','Месяц')+tabBtn('all','Всё время')+'</div>'
     +'<div style="display:flex;gap:3px;">'
-    +'<button onclick="checkPendingWinrates().then(function(){showWinrates();})" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;">↻</button>'
+    +'<button onclick="checkPendingWinrates().then(function(){showWinrates();})" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;" title="Проверить pending">↻</button>'
+    +'<button onclick="recheckAllWinrates()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;" title="Пересчитать все монеты">⟳ Все</button>'
     +'<button onclick="clearWinrates()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🗑</button>'
     +'<button onclick="showWRInfo()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🔍</button>'
     +'</div></div>'
