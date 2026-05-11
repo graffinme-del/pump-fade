@@ -1598,10 +1598,10 @@ function showToast(msg){
 async function callGemini(prompt,maxTokens=800){
   const key=getApiKey();if(!key)return null;
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+  const fullPrompt=`Данные для анализа:\n${prompt}\n\nОтветь СТРОГО по формату (без markdown, без звёздочек, только текст):\nСИГНАЛ: подтверждён / слабый / опровергнут\nЧТО ПРОИСХОДИТ: 1-2 предложения\nРИСКИ: главный риск одной фразой\nДЕЙСТВИЕ: входить / ждать / пропустить`;
   const body={
-    contents:[{parts:[{text:prompt}]}],
+    contents:[{parts:[{text:fullPrompt}]}],
     generationConfig:{maxOutputTokens:maxTokens,temperature:0.2},
-    systemInstruction:{parts:[{text:'Отвечай строго по формату, без markdown, без заголовков:\nСИГНАЛ: [подтверждён/слабый/опровергнут]\nЧТО ПРОИСХОДИТ: [1-2 предложения по данным монеты]\nРИСКИ: [главный риск одной фразой]\nДЕЙСТВИЕ: [входить / ждать / пропустить]\nТолько русский язык. Не отступай от формата.'}]}
   };
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!r.ok){
@@ -2052,12 +2052,16 @@ async function runActiveMonitor(){
 }
 
 async function openActiveCard(sym){
+  // Cancel any in-progress open
+  S._openingCard = sym;
   const rec = S.activeTrack.find(t=>t.sym===sym);
   // Always fetch fresh candles so analyzeFull works
   const [c1h, c15m] = await Promise.all([
     fetchCds(sym,'1h',120),
     fetchCds(sym,'15m',80),
   ]);
+  // If another card was requested while we were fetching — abort
+  if(S._openingCard !== sym) return;
   // Try existing idea first, otherwise build from rec
   let idea = S.ideas.find(i=>i.sym===sym);
   if(!idea){
@@ -2081,10 +2085,12 @@ async function openActiveCard(sym){
   });
   redrawCharts();
   fetchFutures(sym);
+  S.activeCardSym = sym; // lock: renderActiveTab won't overwrite while card is open
   showCoinCard(idea, S.analysis||{});
 }
 
 function renderActiveTab(list){
+  // Don't overwrite coin card in dynamic-zone — only update ideas-list
   if(!S.activeTrack.length){
     list.innerHTML='<div style="padding:16px;text-align:center;font-size:11px;color:var(--muted);">Нет монет в работе.<br><span style="font-size:9px;color:var(--dim);">Нажмите 📌 В работе на карточке монеты.</span></div>';
     return;
