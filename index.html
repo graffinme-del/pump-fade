@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v11.05 23:15</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v12.05 17:22</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
@@ -2247,37 +2247,69 @@ async function runActiveMonitor(){
       const prevPrice = rec.lastPrice||lp;
       rec.lastPrice = lp;
       rec.lastCheck = now;
-      // PnL from entry
+
+      // PnL от точки входа
       if(rec.entry>0){
         rec.pnlPct = rec.dir==='SHORT'
           ? (rec.entry-lp)/rec.entry*100
           : (lp-rec.entry)/rec.entry*100;
       }
-      // Change since last check
-      const chgPct = (lp-prevPrice)/prevPrice*100;
+
+      // Прогресс к TP (0-100%)
+      if(rec.entry>0 && rec.tp1>0){
+        rec.progress = rec.dir==='LONG'
+          ? Math.max(0, Math.min(100, (lp-rec.entry)/(rec.tp1-rec.entry)*100))
+          : Math.max(0, Math.min(100, (rec.entry-lp)/(rec.entry-rec.tp1)*100));
+      }
+
+      // Изменение с прошлой проверки
+      const chgPct = prevPrice>0?(lp-prevPrice)/prevPrice*100:0;
       rec.chgPct = chgPct;
-      // === REVERSAL WARNINGS ===
+
       const newAlerts = [];
-      // 1. Price approaching SL (within 0.5%)
+
+      // 1. SL пробит — критично
       if(rec.sl>0){
-        const distToSL = rec.dir==='SHORT'
-          ? (lp-rec.sl)/lp*100
-          : (rec.sl-lp)/lp*100;
-        if(distToSL>0 && distToSL<0.8){
-          newAlerts.push({type:'danger', msg:`⛔ SL близко! ${distToSL.toFixed(2)}% до стопа`});
-          notify(`⛔ ${rec.sym.replace('USDT','')} — SL близко!`, `${distToSL.toFixed(2)}% до стопа`);
+        const slHit = rec.dir==='SHORT'?lp>=rec.sl:lp<=rec.sl;
+        if(slHit){
+          newAlerts.push({type:'danger', msg:`🚨 SL ПРОБИТ! Цена $${fmt(lp)}`});
+          notify(`🚨 SL · ${rec.sym.replace('USDT','')}`, `Цена пробила стоп $${fmt(lp)}`);
+          playAlert();
+          rec.slHit = true;
+        } else {
+          // Дистанция до SL
+          const distToSL = rec.dir==='SHORT'
+            ? (lp-rec.sl)/lp*100
+            : (rec.sl-lp)/lp*100;
+          if(distToSL>0 && distToSL<1.0){
+            const urgency = distToSL<0.3?'danger':'warn';
+            newAlerts.push({type:urgency, msg:`⛔ SL близко: ${distToSL.toFixed(2)}% (${fmt(rec.sl)})`});
+            if(distToSL<0.5&&!rec._slWarnedAt||(now-(rec._slWarnedAt||0))>60000){
+              notify(`⛔ ${rec.sym.replace('USDT','')} SL близко!`, `${distToSL.toFixed(2)}% до стопа`);
+              rec._slWarnedAt = now;
+            }
+          }
         }
       }
-      // 2. Price near TP (within 0.5%)
+
+      // 2. TP достигнут
       if(rec.tp1>0){
-        const distToTP = rec.dir==='SHORT'
-          ? (rec.tp1-lp)/lp*100
-          : (lp-rec.tp1)/lp*100;
-        if(distToTP>0 && distToTP<0.8){
-          newAlerts.push({type:'success', msg:`🎯 TP близко! ${distToTP.toFixed(2)}% до цели`});
+        const tpHit = rec.dir==='SHORT'?lp<=rec.tp1:lp>=rec.tp1;
+        if(tpHit){
+          newAlerts.push({type:'success', msg:`🎯 TP ДОСТИГНУТ! +${rec.pnlPct?.toFixed(2)}%`});
+          notify(`🎯 TP · ${rec.sym.replace('USDT','')}`, `+${rec.pnlPct?.toFixed(2)}% — цель достигнута!`);
+          playAlert();
+        } else {
+          const distToTP = rec.dir==='SHORT'
+            ? (rec.tp1-lp)/lp*100
+            : (lp-rec.tp1)/lp*100;
+          if(distToTP>0 && distToTP<1.0){
+            newAlerts.push({type:'success', msg:`🎯 TP близко: ${distToTP.toFixed(2)}% (${fmt(rec.tp1)})`});
+          }
         }
       }
-      // 3. Sharp reversal move (>1% against position)
+
+      // 3. Резкое движение против позиции за 15 сек
       if(Math.abs(chgPct)>1.0){
         const isAgainst = rec.dir==='SHORT' ? chgPct>0 : chgPct<0;
         if(isAgainst){
@@ -2285,12 +2317,128 @@ async function runActiveMonitor(){
           notify(`⚠️ ${rec.sym.replace('USDT','')} — разворот?`, `${chgPct>0?'+':''}${chgPct.toFixed(2)}% за последний интервал`);
         }
       }
-      // 4. Strong momentum with position (good news)
+      // 4. Strong momentum with position
       if(Math.abs(chgPct)>0.8){
         const isFor = rec.dir==='SHORT' ? chgPct<0 : chgPct>0;
-        if(isFor) newAlerts.push({type:'ok', msg:`✅ Сильное движение в сторону позиции: ${chgPct>0?'+':''}${chgPct.toFixed(2)}%`});
+        if(isFor) newAlerts.push({type:'ok', msg:`✅ Движение в сторону позиции: ${chgPct>0?'+':''}${chgPct.toFixed(2)}%`});
       }
-      if(newAlerts.length) rec.alerts = [...newAlerts, ...(rec.alerts||[])].slice(0,5);
+
+      // 5. Глубокий анализ — CVD, EMA20, объём, свечи (каждые 2 мин)
+      const _deepInterval = 2*60*1000;
+      if(!rec._lastDeepCheck || (now-rec._lastDeepCheck) > _deepInterval) {
+        rec._lastDeepCheck = now;
+        try {
+          const [c15m, c1h] = await Promise.all([fetchCds(rec.sym,'15m',30), fetchCds(rec.sym,'1h',20)]);
+          if(c15m.length>=10) {
+            const closes = c15m.map(c=>c.close);
+            const vols = c15m.map(c=>c.volume);
+            const e20 = ema(closes,20);
+            const e20n = e20[e20.length-1];
+            const lastC = c15m[c15m.length-1];
+            const prevC = c15m[c15m.length-2];
+            const prevC2 = c15m[c15m.length-3];
+            const avgVol = vols.slice(-20,-1).reduce((s,v)=>s+v,0)/19;
+            const curVol = lastC.volume;
+
+            // CVD разворот
+            let cvd=0;
+            const cvdArr=c15m.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cvd+=b/r*c.volume;return cvd;});
+            const cvdNow=cvdArr[cvdArr.length-1];
+            const cvdPrev=cvdArr[Math.max(0,cvdArr.length-4)];
+            const cvdDrop = rec.dir==='LONG' ? cvdNow<cvdPrev*0.85 : cvdNow>cvdPrev*1.15;
+            if(cvdDrop) {
+              newAlerts.push({type:'danger', msg:'🔴 CVD резко развернулся против позиции'});
+              if(!rec._cvdWarnAt||(now-rec._cvdWarnAt)>3*60*1000) {
+                rec._cvdWarnAt=now;
+                notify(`🔴 ${rec.sym.replace('USDT','')} — CVD разворот`, 'Давление покупателей/продавцов сменилось');
+                playAlert();
+              }
+            }
+
+            // EMA20 пробита против позиции
+            const emaBroken = rec.dir==='LONG' ? lastC.close<e20n && prevC.close>e20[e20.length-2]
+                                                : lastC.close>e20n && prevC.close<e20[e20.length-2];
+            if(emaBroken) {
+              newAlerts.push({type:'danger', msg:`🔴 EMA20 пробита против позиции ($${fmt(e20n)})`});
+              if(!rec._emaWarnAt||(now-rec._emaWarnAt)>3*60*1000) {
+                rec._emaWarnAt=now;
+                notify(`🔴 ${rec.sym.replace('USDT','')} — EMA20 пробита!`, 'Цена пробила EMA20 против направления');
+                playAlert();
+              }
+            }
+
+            // Объём ×2+ при движении против позиции
+            const volSpike = curVol > avgVol*2;
+            const priceAgainst = rec.dir==='LONG' ? lastC.close<lastC.open : lastC.close>lastC.open;
+            if(volSpike && priceAgainst) {
+              newAlerts.push({type:'danger', msg:`🔴 Объём ×${(curVol/avgVol).toFixed(1)} против позиции`});
+              if(!rec._volWarnAt||(now-rec._volWarnAt)>3*60*1000) {
+                rec._volWarnAt=now;
+                notify(`🔴 ${rec.sym.replace('USDT','')} — всплеск объёма`, `Объём ×${(curVol/avgVol).toFixed(1)} при движении против`);
+                playAlert();
+              }
+            }
+
+            // 2 свечи подряд против позиции с телом >0.5%
+            const bodyPrev = Math.abs(prevC.close-prevC.open)/prevC.open*100;
+            const bodyPrev2 = Math.abs(prevC2.close-prevC2.open)/prevC2.open*100;
+            const candleAgainst1 = rec.dir==='LONG' ? prevC.close<prevC.open : prevC.close>prevC.open;
+            const candleAgainst2 = rec.dir==='LONG' ? prevC2.close<prevC2.open : prevC2.close>prevC2.open;
+            if(candleAgainst1 && candleAgainst2 && bodyPrev>0.5 && bodyPrev2>0.5) {
+              newAlerts.push({type:'warn', msg:`⚠️ 2 свечи против позиции (${bodyPrev2.toFixed(1)}%, ${bodyPrev.toFixed(1)}%)`});
+              if(!rec._candleWarnAt||(now-rec._candleWarnAt)>5*60*1000) {
+                rec._candleWarnAt=now;
+                notify(`⚠️ ${rec.sym.replace('USDT','')} — свечи против`, '2 свечи подряд против позиции');
+              }
+            }
+
+            // Цена упала/выросла >2% за 5 последних свечей 15m
+            const price5ago = c15m[c15m.length-6]?.close||lp;
+            const move5 = (lp-price5ago)/price5ago*100;
+            const move5against = rec.dir==='LONG' ? move5<-2 : move5>2;
+            if(move5against) {
+              newAlerts.push({type:'danger', msg:`🔴 Движение ${move5.toFixed(1)}% за 5 свечей 15m против позиции`});
+              if(!rec._move5WarnAt||(now-rec._move5WarnAt)>5*60*1000) {
+                rec._move5WarnAt=now;
+                notify(`🔴 ${rec.sym.replace('USDT','')} — резкое движение`, `${move5.toFixed(1)}% за 75 минут против позиции`);
+                playAlert();
+              }
+            }
+
+            // AI анализ каждые 15 мин если есть ключ
+            const _aiInterval = 15*60*1000;
+            if(getApiKey() && (!rec._lastAiCheck||(now-rec._lastAiCheck)>_aiInterval)) {
+              rec._lastAiCheck = now;
+              const dangerSignals = newAlerts.filter(a=>a.type==='danger');
+              if(dangerSignals.length>=2) {
+                // Запускаем AI анализ при 2+ опасных сигналах
+                const prompt = `СРОЧНО. Монета ${rec.sym}, ${rec.dir} позиция.
+Entry: $${fmt(rec.entry)}, текущая цена: $${fmt(lp)}, PnL: ${rec.pnlPct?.toFixed(2)}%
+SL: $${fmt(rec.sl)}, TP: $${fmt(rec.tp1)}
+Опасные сигналы: ${dangerSignals.map(a=>a.msg).join('; ')}
+EMA20: $${fmt(e20n)}, цена ${lp>e20n?'выше':'ниже'} EMA20
+CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
+Объём: ×${(curVol/avgVol).toFixed(1)} от среднего
+Оцени опасность для позиции. Нужно ли срочно закрывать?`;
+                callGemini(prompt, 300).then(reply => {
+                  if(!reply) return;
+                  rec.aiWarning = reply;
+                  // Если AI говорит закрывать — критичный алерт
+                  const urgentWords = ['закрыть','закрывать','выйти','стоп','опасно','срочно'];
+                  const isUrgent = urgentWords.some(w=>reply.toLowerCase().includes(w));
+                  if(isUrgent) {
+                    notify(`🤖 AI: ${rec.sym.replace('USDT','')} — ЗАКРЫТЬ?`, reply.slice(0,100));
+                    playAlert();
+                  }
+                  if(ideasTab==='active') renderIdeas();
+                });
+              }
+            }
+          }
+        } catch(e) { console.warn('Deep check error:', rec.sym, e.message); }
+      }
+
+      if(newAlerts.length) rec.alerts = [...newAlerts, ...(rec.alerts||[])].slice(0,8);
     } catch(e){}
   }));
   saveActive();
@@ -2425,10 +2573,14 @@ function renderActiveTab(list){
         ${rec.rr>0?`<span>R/R <b>${rec.rr.toFixed(1)}</b></span>`:''}
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${latestAlert?'4px':'0'};">
-        <span style="font-size:9px;color:var(--dim);">Цена: <b style="color:var(--text2);">${rec.lastPrice?'$'+fmt(rec.lastPrice):'—'}</b></span>
-        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${pnlColor};">${rec.pnlPct!=null&&rec.entry>0?(rec.pnlPct>=0?'+':'')+rec.pnlPct.toFixed(2)+'%':'—'}</span>
+        <span style="font-size:9px;color:var(--dim);">Цена: <b style="color:var(--text2);font-family:var(--mono);">${rec.lastPrice?'$'+fmt(rec.lastPrice):'—'}</b>${rec.lastCheck?` <span style="font-size:8px;color:var(--dim);">${Math.floor((Date.now()-rec.lastCheck)/1000)}с</span>`:''}</span>
+        <span style="font-family:var(--mono);font-size:12px;font-weight:800;color:${pnlColor};">${rec.pnlPct!=null&&rec.entry>0?(rec.pnlPct>=0?'+':'')+rec.pnlPct.toFixed(2)+'%':'—'}</span>
+      </div>
+      <div style="height:5px;background:var(--s3);border-radius:3px;margin:3px 0;overflow:hidden;">
+        <div style="height:100%;width:${Math.min(100,rec.progress||0)}%;background:${(rec.progress||0)>70?'var(--green)':'var(--blue)'};border-radius:3px;transition:width .3s;"></div>
       </div>
       ${latestAlert?`<div style="font-size:9px;padding:3px 6px;border-radius:3px;background:var(--s2);border-left:2px solid ${alertColor};color:${alertColor};margin-top:2px;">${latestAlert.msg}</div>`:''}
+      ${rec.aiWarning?`<div style="font-size:9px;padding:4px 6px;border-radius:3px;background:var(--blue-bg);border-left:2px solid var(--blue);color:var(--blue);margin-top:3px;line-height:1.4;">🤖 AI: ${rec.aiWarning.slice(0,120)}${rec.aiWarning.length>120?'…':''}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -2595,7 +2747,7 @@ setInterval(function(){
 },60*1000); // expiry check every 1 min
 setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
 setInterval(function(){checkPendingWinrates();checkMidnightReset();}, 15*60*1000); // WR check every 15 min
-setInterval(()=>runActiveMonitor(), 60*1000); // Active track monitor every 1 min
+setInterval(()=>runActiveMonitor(), 15*1000); // Active track monitor every 15 sec
 setTimeout(()=>runActiveMonitor(), 5000); // Initial active monitor check
 // Initial check on load
 // Clean up winrates with bad TP/SL (<1% range)
