@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v13.05 12:02</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v13.05 12:46</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 Gemini</button>
   <button id="claude-btn" onclick="promptClaudeKey()" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px;cursor:pointer;background:var(--s2);border:1px solid var(--border);color:var(--muted);">🔑 Claude</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
@@ -1088,13 +1088,16 @@ async function runIdeas(manual=false){
       if(lbl)lbl.textContent=`⏳ ${i}/${candidates.length}`;
       const batch=candidates.slice(i,i+12);
       const results=await Promise.allSettled(batch.map(c=>scoreForIdea(c.sym)));
-      results.forEach(res=>{
+      results.forEach((res,ri)=>{
         if(res.status!=='fulfilled'||!res.value||!res.value.bestDir)return;
         const r=res.value;
         if(r.bestConf<MIN_CONF)return;
         const lastTs=S.ideaDedup[r.sym];
         if(lastTs&&now-lastTs<7200000)return; // 2h dedup
         S.ideaDedup[r.sym]=now;
+        // Get 24h volume from candidates array
+        const candItem = candidates.find(cc=>cc.sym===r.sym);
+        const quoteVol24h = candItem ? candItem.vol : 0;
         const ideaObj = {sym:r.sym,dir:r.bestDir,conf:r.bestConf,quoteVol24h:quoteVol24h||0,
           sigs:r.bestSigs||[],why:r.why||'',
           entry:r.entry,sl:r.sl,tp1:r.tp1,tp2:r.tp2,rr:r.rr,atrv:r.atrv,
