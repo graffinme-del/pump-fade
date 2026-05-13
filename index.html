@@ -219,7 +219,7 @@ button:hover{opacity:.85;}
   <span class="top-price" id="price-display">—</span>
   <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v12.05 17:22</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v13.05 09:26</span>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 AI</button>
   <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
   <!-- theme toggle disabled -->
@@ -861,7 +861,7 @@ async function scoreForIdea(sym){
 
     // L1. Начало тренда вверх: цена > EMA50 + пробой EMA20 на 15m
     if (!trendBanned) {
-      if (price > e50n && confirmBull && ema20_slope > 0.02 && volRatio > 1.1 && !cvdFalling) {
+      if (price > e50n && confirmBull && ema20_slope > 0.02 && volRatio > 1.1 && !cvdFalling && trend4h !== 'bear') {
         const c = Math.min(90, 56 + (trend4h==='bull'?12:trend4h==='bear'?-8:0) + volRatio*3 + (hTurningUp?8:0) + longPatBonus);
         if (c >= MIN_CONF) {
           const s = ['📈 Начало тренда ↑ (цена>EMA50, пробой EMA20)', `EMA20 наклон: +${ema20_slope.toFixed(3)}%, Vol×${volRatio.toFixed(1)}`];
@@ -877,7 +877,7 @@ async function scoreForIdea(sym){
     {
       const nowBull = price > e20n && e20n > e50n;
       const prevBull = c1h[n1h-1] > e20_1h[n1h-1] && e20_1h[n1h-1] > e50_1h[n1h-1];
-      if (nowBull && volRatio > 1.1 && rsiNow > 45 && rsiNow < 75) {
+      if (nowBull && volRatio > 1.1 && rsiNow > 45 && rsiNow < 75 && trend4h !== 'bear') {
         const fresh = !prevBull ? 15 : 0;
         const c = Math.min(90, 52 + fresh + (trend4h==='bull'?12:trend4h==='bear'?-8:0) + volRatio*3 + (hTurningUp?8:0) + longPatBonus);
         if (c >= MIN_CONF) {
@@ -904,7 +904,7 @@ async function scoreForIdea(sym){
     }
 
     // L4. Volume Breakout вверх
-    if (volRatio > 2.5 && bodyRatio > 0.65 && lastC.close > lastC.open && rsiNow > 50 && rsiNow < 75) {
+    if (volRatio > 2.5 && bodyRatio > 0.65 && lastC.close > lastC.open && rsiNow > 50 && rsiNow < 75 && trend4h !== 'bear') {
       const c = Math.min(84, 52 + volRatio*4 + (trend4h==='bull'?10:0));
       if (c >= MIN_CONF) {
         const s = [`🚀 Volume Breakout ×${volRatio.toFixed(1)}`, `Body ${(bodyRatio*100).toFixed(0)}%`, trend4h==='bull'?'4h бычий':''].filter(Boolean);
@@ -1891,7 +1891,7 @@ Rules: GO only if 4h trend aligns AND volume >1.5x avg AND RSI in normal range. 
       body: JSON.stringify({
         contents:[{parts:[{text:prompt}]}],
         generationConfig:{maxOutputTokens:200, temperature:0.2},
-        systemInstruction:{parts:[{text:'You are a disciplined intraday crypto trader with a strict filter. You take only HIGH-PROBABILITY setups. Your rules: GO only if trend on 1h/4h aligns with direction AND volume confirms AND RSI is not overextended (not >75 for SHORT entry, not <25 for LONG entry). WAIT if 1-2 signals conflict or confirmation is weak. SKIP if trend opposes direction, ATR ratio >1.8 (too volatile), or pump >15% already happened. Aim for 30-40% GO rate — most setups should be WAIT or SKIP. Reply ONLY with valid JSON. No markdown.'}]}
+        systemInstruction:{parts:[{text:'You are a disciplined intraday crypto trader with a strict filter. CRITICAL RULES: (1) NEVER give GO for LONG if 4h trend is bearish — only SKIP or WAIT. (2) NEVER give GO for SHORT if 4h trend is bullish — only SKIP or WAIT. (3) GO only if: 4h trend aligns with direction AND 1h trend aligns AND volume >1.5x avg AND RSI not overextended. (4) WAIT if trend neutral or 1 signal conflicts. (5) SKIP if trends oppose direction. Target 20-30% GO rate. Reply ONLY valid JSON. No markdown.'}]}
       })
     });
     if (!r.ok) return null;
