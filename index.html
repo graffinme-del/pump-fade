@@ -215,11 +215,14 @@ button:hover{opacity:.85;}
     <span class="thresh-val" id="thresh-val">15%</span>
   </div>
   <div style="flex:1"></div>
-  <span id="sym-label" style="font-size:10px;color:#94a3b8;"></span>
-  <span class="top-price" id="price-display">—</span>
-  <span id="change-display" style="font-size:11px;font-weight:700;">—</span>
+  <div id="btc-topbar" style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;padding:0 10px;border-left:1px solid var(--border);border-right:1px solid var(--border);">
+    <span style="color:var(--dim);font-size:9px;">₿</span>
+    <span id="btc-price" style="font-weight:700;color:var(--text2);">—</span>
+    <span id="btc-change" style="font-weight:700;">—</span>
+    <span id="btc-trend" style="font-size:8px;padding:1px 4px;border-radius:2px;"></span>
+  </div>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v14.05 13:55</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v14.05 20:06</span>
   <button id="mute-btn" onclick="toggleMute()" style="font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:3px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);" title="Звук вкл/выкл">🔔</button>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 Gemini</button>
   <button id="claude-btn" onclick="promptClaudeKey()" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px;cursor:pointer;background:var(--s2);border:1px solid var(--border);color:var(--muted);">🔑 Claude</button>
@@ -378,7 +381,7 @@ button:hover{opacity:.85;}
     </div>
     <div class="chat-input-row">
       <textarea id="chat-input" placeholder="Спросите или введите монету: BTCUSDT"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();handleChatOrAnalyze();}"></textarea>
       <button class="chat-send" onclick="sendChat()">↑</button>
     </div>
   </div>
@@ -647,6 +650,9 @@ function analyzeFull(cds1h,cds15m){
     entry,sl,tp1,tp2,rr,atrv,e20_1h:e20n,e50_1h:e50n,e20_15m:e20_15n,price15m:p15,
     impulseBase:Math.min(...cds1h.slice(-8).map(c=>c.open)),cvdData:cvd15.slice(-80)};
 }
+
+function swingLow(candles,n){var s=candles.slice(-n);return Math.min.apply(null,s.map(function(x){return x.low;}));}
+function swingHigh(candles,n){var s=candles.slice(-n);return Math.max.apply(null,s.map(function(x){return x.high;}));}
 
 // ═══════════════════════════════════════════════════════
 //  SCORE PER COIN (for scan)
@@ -1022,29 +1028,25 @@ async function scoreForIdea(sym){
 
     if(shortConf>=MIN_CONF&&shortConf>=longConf&&shortConf>=earlyPumpConf){
       const entry=p15;
-      // Minimum SL: 2.5%, TP: 5%, R/R >= 2.0
-      const atrSL = Math.max(atrv*1.5, entry*0.025);
-      const sl = entry + atrSL;
-      const atrTP = Math.max(atrv*3, entry*0.05);
-      const tp1 = entry - atrTP;
-      const tp2 = entry - atrTP*2;
-      const rr = +(atrTP/atrSL).toFixed(2);
+      const swH=swingHigh(cds1h,20);const slS=Math.max(swH+atrv*0.3,e50n+atrv*0.2);
+      const slDist=Math.max(slS-entry,entry*0.01);const tpDist=Math.max(slDist*2,entry*0.05);
+      const sl=slS,tp1=entry-tpDist,tp2=entry-tpDist*2,rr=+(tpDist/slDist).toFixed(2);
       Object.assign(res,{bestDir:'SHORT',bestConf:shortConf,bestSigs:shortSigs,
         entry,sl,tp1,tp2,rr,atrv,
         why:`+${pumpPct.toFixed(1)}% за 8ч, ${dist.toFixed(1)}% от EMA20. ${shortSigs.slice(0,2).join(', ')}.`});
     } else if(earlyPumpConf>=72&&earlyPumpConf>=longConf){
       const entry=p15;
-      const slDist = Math.max(atrv*1.5, entry*0.025);
-      const tpDist = Math.max(atrv*3, entry*0.05);
-      const sl=entry-slDist, tp1=entry+tpDist, tp2=entry+tpDist*2;
+      const swL=swingLow(cds1h,20);const slL=Math.min(swL-atrv*0.3,e50n-atrv*0.2);
+      const slDistL=Math.max(entry-slL,entry*0.01);const tpDistL=Math.max(slDistL*2,entry*0.05);
+      const sl=slL,tp1=entry+tpDistL,tp2=entry+tpDistL*2;
       Object.assign(res,{bestDir:'LONG',bestConf:earlyPumpConf,bestSigs:earlyPumpSigs,
         entry,sl,tp1,tp2,rr:+((tp1-entry)/(entry-sl||1)).toFixed(2),atrv,
         why:earlyPumpSigs.join(', '),earlyPump:true});
     } else if(longConf>=MIN_CONF&&longDir){
       const entry=p15;
-      const slDist = Math.max(atrv*1.5, entry*0.025);
-      const tpDist = Math.max(atrv*3, entry*0.05);
-      const sl=entry-slDist, tp1=entry+tpDist, tp2=entry+tpDist*2;
+      const swL=swingLow(cds1h,20);const slL=Math.min(swL-atrv*0.3,e50n-atrv*0.2);
+      const slDistL=Math.max(entry-slL,entry*0.01);const tpDistL=Math.max(slDistL*2,entry*0.05);
+      const sl=slL,tp1=entry+tpDistL,tp2=entry+tpDistL*2;
       Object.assign(res,{bestDir:'LONG',bestConf:longConf,bestSigs:longSigs,
         entry,sl,tp1,tp2,rr:+((tp1-entry)/(entry-sl||1)).toFixed(2),atrv,
         why:longSigs.join(', ')});
@@ -1734,8 +1736,12 @@ function showWinrates(){
   var histData=[];
   if(_wrTab!=='today'){
     var hist=loadWRHistory();
-    var cutoff=_wrTab==='week'?now2-7*86400000:_wrTab==='month'?now2-30*86400000:0;
-    histData=hist.filter(function(w){return(w.signalTime||w.ts||0)>=cutoff;});
+    var cutoff=0,cutoffEnd=now2;
+    if(_wrTab==='yesterday'){var msk=new Date(now2+3*3600000);var md=new Date(Date.UTC(msk.getUTCFullYear(),msk.getUTCMonth(),msk.getUTCDate())-3*3600000);cutoffEnd=md.getTime();cutoff=cutoffEnd-86400000;}
+    else if(_wrTab==='week'){cutoff=now2-7*86400000;}
+    else if(_wrTab==='month'){cutoff=now2-30*86400000;}
+    else if(_wrTab==='custom'){cutoff=window._wrDateFrom?new Date(window._wrDateFrom).getTime():0;cutoffEnd=window._wrDateTo?new Date(window._wrDateTo).getTime()+86400000:now2;}
+    histData=hist.filter(function(w){var t=w.signalTime||w.ts||0;return t>=cutoff&&t<=cutoffEnd;});
   }
   var allData=S.winrates.concat(histData);
   var wins=allData.filter(function(w){return w.result==='win';});
@@ -1759,7 +1765,7 @@ function showWinrates(){
 
   dz.innerHTML='<div class="fade" style="font-size:12px;">'
     +'<div class="phase-list-hd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">'
-    +'<div style="display:flex;gap:3px;">'+tabBtn('today','Сегодня')+tabBtn('week','Неделя')+tabBtn('month','Месяц')+tabBtn('all','Всё время')+'</div>'
+    +'<div style="display:flex;gap:3px;flex-wrap:wrap;">'+tabBtn('today','Сегодня')+tabBtn('yesterday','Вчера')+tabBtn('week','7 дней')+tabBtn('month','Месяц')+tabBtn('all','Всё')+' <input type="date" id="wr-date-from" onchange="window._wrTab=\'custom\';window._wrDateFrom=this.value;showWinrates();" style="font-size:8px;padding:1px 3px;border-radius:2px;border:1px solid var(--border);background:var(--s3);color:var(--text2);"> <input type="date" id="wr-date-to" onchange="window._wrTab=\'custom\';window._wrDateTo=this.value;showWinrates();" style="font-size:8px;padding:1px 3px;border-radius:2px;border:1px solid var(--border);background:var(--s3);color:var(--text2);">  </div>'
     +'<div style="display:flex;gap:3px;">'
     +'<button onclick="checkPendingWinrates().then(function(){showWinrates();})" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;" title="Проверить pending">↻</button>'
     +'<button onclick="recheckAllWinrates()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;" title="Пересчитать все монеты">⟳ Все</button>'
@@ -2062,6 +2068,54 @@ function buildContext(){
   return ctx;
 }
 
+function handleChatOrAnalyze(){
+  var inp=document.getElementById('chat-input');
+  if(!inp)return;
+  var val=inp.value.trim().toUpperCase().replace(/\s/g,'');
+  if(/^[A-Z]{2,10}(USDT)?$/.test(val)){
+    var sym=val.endsWith('USDT')?val:val+'USDT';
+    inp.value='';
+    analyzeFromChat(sym);
+  } else {
+    sendChat();
+  }
+}
+
+async function analyzeFromChat(sym){
+  appendMsg('user','📊 '+sym.replace('USDT',''));
+  var tid='t'+Date.now();
+  appendThinking(tid);
+  try{
+    var c1h=await fetchCds(sym,'1h',120);
+    var c15m=await fetchCds(sym,'15m',80);
+    if(!c1h.length){document.getElementById(tid)?.remove();appendMsg('ai','❌ Монета не найдена: '+sym);return;}
+    var r=await scoreForIdea(sym).catch(function(){return null;});
+    var lp=c1h[c1h.length-1].close;
+    var idea=r&&r.bestDir?
+      {sym,dir:r.bestDir,conf:r.bestConf,sigs:r.bestSigs||[],why:r.why||'',entry:r.entry,sl:r.sl,tp1:r.tp1,tp2:r.tp2,rr:r.rr,atrv:r.atrv,pumpPct:r.pumpPct||0,pumpSpeed:r.pumpSpeed||0,dist:r.dist||0,volRatio:r.volRatio||1,rsiNow:r.rsiNow||50,trend4h:r.trend4h||'neutral',cvdFalling:r.cvdFalling,cvdDiv:r.cvdDiv,atrRatio:r.atrRatio||1,cds1h:c1h,cds15m:c15m,ts:Date.now(),quoteVol24h:0}:
+      {sym,dir:'?',conf:0,sigs:[],why:'Сетап не обнаружен',entry:lp,sl:0,tp1:0,tp2:0,rr:0,atrv:0,pumpPct:0,pumpSpeed:0,dist:0,volRatio:1,rsiNow:50,trend4h:'neutral',cvdFalling:false,cvdDiv:false,atrRatio:1,cds1h:c1h,cds15m:c15m,ts:Date.now(),quoteVol24h:0};
+    S.sym=sym;S.cds1h=c1h;S.cds15m=c15m;
+    S.cvdData=cvdFromCandles(c15m.slice(-80));
+    S.analysis=analyzeFull(c1h,c15m);S.phase=0;
+    ['sym-label','ctf1h','ctf15m'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el)el.textContent=id==='sym-label'?sym.replace('USDT',''):id==='ctf1h'?'1H · '+sym.replace('USDT',''):'15M · '+sym.replace('USDT','');
+    });
+    redrawCharts();fetchFutures(sym);
+    showCoinCard(idea,S.analysis||{});
+    document.getElementById(tid)?.remove();
+    appendMsg('ai',r&&r.bestDir?'✅ Сетап: '+r.bestDir+' '+r.bestConf.toFixed(0)+'/100':'⚠️ Активного сетапа нет');
+    if(getApiKey()){
+      getGeminiVerdict(idea).then(function(v){
+        if(!v)return;
+        idea.verdict=v.verdict;idea.verdictReason=v.reason;
+        showCoinCard(idea,S.analysis||{});
+        appendMsg('ai',(v.verdict==='GO'?'✅':v.verdict==='WAIT'?'⏳':'⏭')+' '+v.verdict+' — '+v.reason);
+      });
+    }
+  }catch(e){document.getElementById(tid)?.remove();appendMsg('ai','❌ Ошибка: '+e.message);}
+}
+
 async function sendChat(userMsg){
   const inp=document.getElementById('chat-input');
   const msg=userMsg||inp?.value?.trim();if(!msg)return;
@@ -2162,31 +2216,61 @@ function getCapLabel(v){
 }
 async function fetchFutures(sym){
   try{const r=await fetch(`${FAPI}/openInterest?symbol=${sym}`);const j=await r.json();if(j.openInterest)S.oi=+j.openInterest;}catch{S.oi=null;}
+  // OI history 4h
+  try{
+    const r=await fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${sym}&period=30m&limit=9`);
+    const j=await r.json();
+    if(Array.isArray(j)&&j.length>=2){
+      const oiNow=+j[j.length-1].sumOpenInterest;
+      const oi4h=+j[0].sumOpenInterest;
+      S.oiChange4h=oi4h>0?(oiNow-oi4h)/oi4h*100:0;
+    }
+  }catch{S.oiChange4h=null;}
+  // Funding rate
   try{const r=await fetch(`${FAPI}/fundingRate?symbol=${sym}&limit=1`);const j=await r.json();if(Array.isArray(j)&&j[0])S.fr=+j[0].fundingRate*100;}catch{S.fr=null;}
+  // Taker buy/sell ratio 4h
+  try{
+    const r=await fetch(`https://fapi.binance.com/futures/data/takerlongshortRatio?symbol=${sym}&period=1h&limit=4`);
+    const j=await r.json();
+    if(Array.isArray(j)&&j.length){
+      S.takerRatio=j.reduce((s,x)=>s+(+x.buySellRatio),0)/j.length;
+    }
+  }catch{S.takerRatio=null;}
   updateFuturesDisplay();
 }
 
 function updateFuturesDisplay(){
-  // Mini topbar indicator
   const el=document.getElementById('oi-fr');
   if(el)el.textContent=S.fr!=null?`FR: ${S.fr>0?'+':''}${S.fr.toFixed(4)}%`:'—';
-  // Coin card fields
   const ccOI=document.getElementById('cc-oi');
-  if(ccOI)ccOI.textContent=S.oi!=null?fmt(S.oi)+' контр':'—';
-  const ccFR=document.getElementById('cc-fr');
-  if(ccFR){
-    ccFR.textContent=S.fr!=null?`${S.fr>0?'+':''}${S.fr.toFixed(4)}%`:'—';
-    if(ccFR)ccFR.style.color=S.fr!=null?(S.fr>0?'var(--red)':'var(--green)'):'var(--muted)';
+  if(ccOI){
+    var oiTxt=S.oi?fmt(S.oi)+' конт':'—';
+    if(S.oiChange4h!=null){
+      var oiColor=S.oiChange4h>0?'var(--green)':'var(--red)';
+      var oiArrow=S.oiChange4h>0?'↑':'↓';
+      oiTxt+=' <span style="color:'+oiColor+';font-weight:700;">'+oiArrow+' '+(S.oiChange4h>=0?'+':'')+S.oiChange4h.toFixed(1)+'% 4h</span>';
+    }
+    ccOI.innerHTML=oiTxt;
   }
+  const ccFR=document.getElementById('cc-fr');
+  if(ccFR&&S.fr!=null){
+    var frColor=S.fr>0.05?'var(--red)':S.fr<-0.05?'var(--green)':'var(--muted)';
+    var frNote=S.fr>0.05?' лонги платят':S.fr<-0.05?' шорты платят':'';
+    var takerHtml='';
+    if(S.takerRatio!=null){
+      var trColor=S.takerRatio>1.1?'var(--green)':S.takerRatio<0.9?'var(--red)':'var(--muted)';
+      var trLabel=S.takerRatio>1.1?'агр.лонги':S.takerRatio<0.9?'агр.шорты':'нейтр.';
+      takerHtml=' <span style="font-size:8px;color:'+trColor+';">Taker: '+trLabel+'</span>';
+    }
+    ccFR.innerHTML='<span style="color:'+frColor+';">'+(S.fr>=0?'+':'')+S.fr.toFixed(4)+'%</span><span style="font-size:8px;color:var(--dim);">'+frNote+'</span>'+takerHtml;
+  } else if(ccFR){ccFR.textContent='—';}
   const ccWarn=document.getElementById('cc-fr-warn');
   if(ccWarn){
     if(S.fr!=null&&Math.abs(S.fr)>0.05){
-      ccWarn.style.display='block';
+      ccWarn.style.cssText='display:block;font-size:9px;padding:3px 5px;border-radius:2px;margin-top:3px;font-weight:600;background:'+(S.fr>0?'var(--red-bg)':'var(--green-bg)')+';color:'+(S.fr>0?'var(--red)':'var(--green)')+';';
       ccWarn.textContent=S.fr>0?'⚠ Лонги перегреты — фаворизирует шорт':'⚠ Шорты перегреты';
-      ccWarn.style.cssText=`display:block;font-size:9px;padding:3px 5px;border-radius:2px;margin-top:3px;font-weight:600;background:${S.fr>0?'var(--red-bg)':'var(--green-bg)'};color:${S.fr>0?'var(--red)':'var(--green)'};`;
     } else ccWarn.style.display='none';
   }
-  // CVD fields
   const cvdFall=S.cvdData.length>10&&S.cvdData[S.cvdData.length-1]<S.cvdData[Math.max(0,S.cvdData.length-10)];
   const cvdDiv=S.analysis?.cvdDiv;
   const ccCVD=document.getElementById('cc-cvd-trend');
@@ -2856,22 +2940,23 @@ async function checkBTC(){
   }catch(e){}
 }
 function updateBTCBanner(){
-  var b=document.getElementById('btc-banner'); if(!b)return;
-  var ch=BTC_STATE.change1h||0; var abs=Math.abs(ch);
   var price=BTC_STATE.price||0;
-  if(!price){b.innerHTML='<span style="color:var(--dim);font-size:9px;padding:0 4px;">₿ загрузка...</span>';b.style.display='flex';return;}
+  var ch=BTC_STATE.change1h||0;
+  var abs=Math.abs(ch);
+  var pEl=document.getElementById('btc-price');
+  var cEl=document.getElementById('btc-change');
+  var tEl=document.getElementById('btc-trend');
+  if(!pEl)return;
+  pEl.textContent=price>0?'$'+price.toFixed(0):'—';
   var dir=ch>0?'↑':ch<0?'↓':'→';
   var color=abs>=2?ch>0?'var(--green)':'var(--red)':abs>=0.5?ch>0?'#16a34a':'#dc2626':'var(--muted)';
-  var alert=abs>=2?'⚡ ':'';
-  b.style.display='flex';
-  b.style.borderBottomColor=abs>=2?ch>0?'var(--green-b)':'var(--red-b)':'var(--border)';
-  b.innerHTML='<span style="color:var(--dim);font-size:10px;margin-right:3px;">₿</span>'
-    +'<span style="font-family:var(--mono);font-weight:700;color:var(--text2);margin-right:6px;">$'+price.toFixed(0)+'</span>'
-    +'<span style="font-weight:700;color:'+color+';">'+alert+dir+' '+(ch>=0?'+':'')+ch.toFixed(2)+'%</span>'
-    +'<span style="color:var(--dim);font-size:8px;margin-left:3px;">1ч</span>'
-    +(BTC_STATE.trend==='bull'?'<span style="font-size:8px;color:var(--green);margin-left:6px;padding:1px 4px;background:var(--green-bg);border-radius:2px;">▲ бычий</span>'
-      :BTC_STATE.trend==='bear'?'<span style="font-size:8px;color:var(--red);margin-left:6px;padding:1px 4px;background:var(--red-bg);border-radius:2px;">▼ медвежий</span>'
-      :'<span style="font-size:8px;color:var(--muted);margin-left:6px;">→ нейтрально</span>');
+  cEl.textContent=(ch>=0?'+':'')+ch.toFixed(2)+'% 1ч';
+  cEl.style.color=color;
+  if(tEl){
+    if(BTC_STATE.trend==='bull'){tEl.textContent='▲ бычий';tEl.style.background='var(--green-bg)';tEl.style.color='var(--green)';}
+    else if(BTC_STATE.trend==='bear'){tEl.textContent='▼ медвежий';tEl.style.background='var(--red-bg)';tEl.style.color='var(--red)';}
+    else{tEl.textContent='→';tEl.style.background='transparent';tEl.style.color='var(--muted)';}
+  }
   if(abs>=2&&(!BTC_STATE._notified||(Date.now()-BTC_STATE._notified)>30*60*1000)){
     BTC_STATE._notified=Date.now();
     notify('⚡ BTC '+dir+' '+(ch>=0?'+':'')+ch.toFixed(2)+'% за 1ч','Проверьте позиции');
