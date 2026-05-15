@@ -303,7 +303,7 @@ button:hover{opacity:.85;}
     <span id="btc-trend-main" style="margin-left:2px;line-height:1;"></span>
   </div>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v15.05 21:29</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v15.05 21:36</span>
   <button id="mute-btn" onclick="toggleMute()" style="font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:3px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);" title="Звук вкл/выкл">🔔</button>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 Gemini</button>
   <button id="claude-btn" onclick="promptClaudeKey()" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px;cursor:pointer;background:var(--s2);border:1px solid var(--border);color:var(--muted);">🔑 Claude</button>
@@ -1465,7 +1465,7 @@ function showCoinCard(idea,analysis){
   const dbg=idea.isPump?'var(--amber-bg)':idea.dir==='LONG'?'var(--green-bg)':'var(--red-bg)';
   const dbl=idea.isPump?'var(--amber-b)':idea.dir==='LONG'?'var(--green-b)':'var(--red-b)';
   const dl=idea.isPump?'🔥 ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT';
-  const tf=tfOrient(a);
+  const tf=tfOrient(idea.cds1h||S.cds1h||[]);
   const mtfHtml=[{tf:'5m',v:tf.m5},{tf:'15m',v:tf.m15},{tf:'1h',v:tf.h1},{tf:'4h',v:tf.h4}].map(x=>{
     const cls=x.v==='bull'?'mp-bull':x.v==='bear'?'mp-bear':'mp-neut';
     const arrow=x.v==='bull'?'▲':x.v==='bear'?'▼':'→';
