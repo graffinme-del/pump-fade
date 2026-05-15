@@ -2,263 +2,3093 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Карточка монеты</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>◈ PUMP FADE</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap');
+:root{
+  --bg:#f1f5f9;--s1:#fff;--s2:#f8fafc;--s3:#f1f5f9;
+  --border:#e2e8f0;--border2:#cbd5e1;
+  --text:#0f172a;--text2:#334155;--muted:#64748b;--dim:#94a3b8;
+  --red:#dc2626;--red-bg:#fef2f2;--red-b:#fecaca;
+  --green:#16a34a;--green-bg:#f0fdf4;--green-b:#bbf7d0;
+  --amber:#d97706;--amber-bg:#fffbeb;--amber-b:#fde68a;
+  --blue:#2563eb;--blue-bg:#eff6ff;--blue-b:#bfdbfe;
+  --sky:#0369a1;--orange:#ea580c;--violet:#7c3aed;
+  --topbar:#1e293b;--mono:'JetBrains Mono',monospace;
+}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:16px;}
-.coin-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;width:100%;max-width:580px;overflow:hidden;box-shadow:0 1px 8px rgba(0,0,0,.05);}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:12px;display:flex;flex-direction:column;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+button{cursor:pointer;border:none;font-family:inherit;transition:all .12s;background:transparent;}
+button:hover{opacity:.85;}
 
-/* ROW 1: HEADER */
-.hd{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #f1f5f9;}
-.hd-l{display:flex;align-items:center;gap:8px;}
-.sym{font-family:monospace;font-size:18px;font-weight:900;}
-.sym.short{color:#dc2626;}.sym.long{color:#16a34a;}
-.dir-pill{padding:2px 8px;border-radius:20px;font-size:9px;font-weight:800;}
-.dir-pill.short{background:#fee2e2;color:#991b1b;}.dir-pill.long{background:#dcfce7;color:#166534;}
-.cap-badge{display:flex;align-items:center;gap:3px;font-size:8px;color:#64748b;font-weight:600;}
-.cap-dot{width:7px;height:7px;border-radius:50%;}
-.hd-r{display:flex;align-items:center;gap:8px;}
+/* Animations */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes live-glow{0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.5)}50%{box-shadow:0 0 0 5px rgba(74,222,128,0)}}
+@keyframes pump-glow{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4)}50%{box-shadow:0 0 0 5px rgba(245,158,11,0)}}
+@keyframes sig-blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.fade{animation:fadeIn .2s ease;}
+
+/* ── TOPBAR ── */
+#topbar{
+  background:var(--topbar);height:42px;display:flex;align-items:center;
+  padding:0 14px;gap:10px;border-bottom:2px solid #334155;flex-shrink:0;z-index:100;
+}
+.logo{font-family:var(--mono);font-size:13px;font-weight:700;color:#f59e0b;letter-spacing:2px;}
+.tdiv{width:1px;height:18px;background:#334155;flex-shrink:0;}
+#live-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;
+  animation:live-glow 2s infinite;flex-shrink:0;}
+#live-dot.scanning{background:#f59e0b;animation:pulse .5s infinite;}
+#live-text{font-family:var(--mono);font-size:10px;font-weight:700;color:#4ade80;}
+#live-text.scanning{color:#f59e0b;}
+.top-price{font-family:var(--mono);font-size:19px;font-weight:700;color:#f8fafc;}
+.pump-thresh{display:flex;align-items:center;gap:5px;font-size:10px;color:#94a3b8;}
+.pump-thresh input{width:65px;accent-color:#f59e0b;}
+.thresh-val{font-family:var(--mono);color:#f59e0b;font-weight:700;min-width:28px;}
+.top-btn{font-size:9px;color:#94a3b8;border:1px solid #334155;padding:2px 8px;border-radius:2px;}
+.top-btn:hover{color:#f8fafc;}
+#gemini-btn{font-family:var(--mono);font-size:10px;font-weight:700;color:#4ade80;
+  border:1px solid #334155;padding:2px 8px;border-radius:2px;cursor:pointer;}
+#gemini-btn.off{color:#f87171;animation:sig-blink 2s infinite;}
+#gemini-btn.working{color:#f59e0b;}
+
+/* ── PUMP ALERT ── */
+#pump-alert{
+  display:none;padding:5px 14px;background:var(--amber-bg);border-bottom:2px solid var(--amber);
+  font-size:11px;font-weight:700;color:#92400e;align-items:center;gap:8px;flex-shrink:0;
+  animation:pump-glow 1.5s infinite;
+}
+
+/* ── BODY LAYOUT ── */
+#body{
+  display:grid;
+  grid-template-columns:230px 1fr 300px;
+  flex:1;min-height:0;overflow:hidden;
+}
+
+/* ── LEFT: IDEAS LIST ── */
+#left{
+  background:var(--s1);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.left-hd{
+  padding:7px 9px;border-bottom:1px solid var(--border);background:var(--s2);flex-shrink:0;
+}
+.left-hd-row{display:flex;justify-content:space-between;align-items:center;}
+.left-title{font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;}
+.scan-btn{font-size:9px;color:var(--sky);border:1px solid var(--blue-b);padding:2px 7px;border-radius:2px;background:var(--blue-bg);}
+.left-sub{font-size:8px;color:var(--dim);margin-top:2px;}
+#ideas-list{flex:1;overflow-y:auto;padding:5px;}
+
+/* Idea cards */
+.idea-card{border:1px solid var(--border);border-radius:5px;padding:7px 8px;margin-bottom:4px;cursor:pointer;transition:all .15s;background:var(--s1);}
+.idea-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.idea-card.long{border-left:3px solid var(--green);}
+.idea-card.short{border-left:3px solid var(--red);}
+.idea-card.pump{border-left:3px solid var(--amber);background:linear-gradient(135deg,#fffbeb,#fff);animation:pump-glow 2s infinite;}
+.idea-card.active{box-shadow:0 2px 10px rgba(0,0,0,.12);}
+.idea-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;}
+.idea-sym{font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;}
+.idea-dir-badge{font-size:8px;font-weight:700;padding:1px 4px;border-radius:2px;}
+.idea-dir-badge.long{background:var(--green-bg);color:var(--green);border:1px solid var(--green-b);}
+.idea-dir-badge.short{background:var(--red-bg);color:var(--red);border:1px solid var(--red-b);}
+.idea-dir-badge.pump{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-b);}
+.conf-bar{height:2px;background:var(--s3);border-radius:1px;margin:3px 0;}
+.conf-fill{height:100%;border-radius:1px;}
+.idea-meta{font-size:9px;color:var(--muted);display:flex;gap:4px;flex-wrap:wrap;}
+.idea-age{font-size:8px;color:var(--dim);}
+
+/* Volatility */
+#vol-section{border-top:1px solid var(--border);flex-shrink:0;padding:5px;background:var(--s2);max-height:180px;overflow-y:auto;}
+.vol-hd{font-size:9px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;display:flex;justify-content:space-between;}
+.vol-item{display:flex;align-items:center;gap:4px;padding:3px 4px;border-radius:3px;margin-bottom:2px;background:var(--s1);border:1px solid #f1f5f9;cursor:pointer;}
+.vol-item:hover{background:var(--s2);}
+.vol-rank{font-size:9px;min-width:14px;font-weight:700;color:var(--dim);}
+.vol-sym{font-family:var(--mono);font-size:11px;font-weight:700;flex:1;}
+.vol-bar-wrap{width:36px;height:4px;background:var(--s3);border-radius:2px;}
+.vol-bar-fill{height:100%;border-radius:2px;}
+.vol-chg{font-size:9px;font-weight:700;}
+
+/* ── CENTER ── */
+#center{display:flex;flex-direction:column;overflow:hidden;}
+
+/* Chart area */
+#charts-area{flex-shrink:0;display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:6px 8px 3px;background:var(--s2);}
+.chart-box{background:var(--s1);border:1px solid var(--border);border-radius:4px;overflow:hidden;display:flex;flex-direction:column;}
+.chart-hd{padding:4px 8px;border-bottom:1px solid var(--border);background:var(--s2);display:flex;align-items:center;gap:7px;flex-shrink:0;flex-wrap:wrap;}
+.chart-tf{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text2);}
+.ema-legend{display:flex;gap:5px;font-size:7px;}
+.chart-wrap{flex:1;min-height:160px;}
+
+/* CVD + Volume mini */
+#mini-charts{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:0 8px 4px;flex-shrink:0;background:var(--s2);}
+.mini-box{background:var(--s1);border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+.mini-hd{padding:3px 7px;border-bottom:1px solid var(--border);background:var(--s2);display:flex;align-items:center;justify-content:space-between;}
+.mini-hd-title{font-size:9px;font-weight:700;color:var(--text2);}
+.mini-wrap{height:52px;}
+
+/* Phase tabs */
+#phase-tabs{display:flex;background:var(--s1);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;padding:0 6px;}
+.ptab{padding:6px 10px;font-size:9px;font-weight:700;color:var(--dim);border-bottom:3px solid transparent;cursor:pointer;display:flex;align-items:center;gap:3px;margin-bottom:-1px;white-space:nowrap;background:transparent;}
+.ptab:hover{color:var(--text2);}
+.ptab.active{color:var(--red);border-bottom-color:var(--red);}
+.ptab.done{color:var(--green);}
+.ptab-dot{width:5px;height:5px;border-radius:50%;}
+@keyframes dot-blink{0%,100%{opacity:1}50%{opacity:.1}}
+
+/* Dynamic zone — under charts */
+#dynamic-zone{flex:1;overflow-y:auto;padding:8px 10px;background:var(--bg);}
+
+/* Coin card (shown when idea selected) */
+.coin-card{background:var(--s1);border:1px solid var(--border);border-radius:6px;padding:12px;animation:fadeIn .2s ease;}
+.coin-card-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.coin-sym-big{font-family:var(--mono);font-size:16px;font-weight:800;}
+.coin-dir-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:3px;}
+.coin-conf{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto;}
+.why-box{border-radius:4px;padding:8px 10px;margin-bottom:8px;font-size:11px;line-height:1.7;}
+.why-box b{display:block;font-size:8px;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;}
+.levels-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px;}
+.level-box{background:var(--s2);border:1px solid var(--border);border-radius:3px;padding:5px 7px;}
+.level-lbl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);}
+.level-val{font-family:var(--mono);font-size:12px;font-weight:700;}
+.level-sub{font-size:8px;color:var(--dim);}
+.stats-row{display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;}
+.stat-item .sl{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;}
+.stat-item .sv{font-family:var(--mono);font-weight:700;font-size:13px;}
+.tf-badges{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;}
+.tf-badge{font-size:8px;padding:2px 5px;border-radius:3px;font-weight:700;}
+.ai-comment-box{background:var(--blue-bg);border:1px solid var(--blue-b);border-radius:4px;padding:8px 10px;font-size:10px;line-height:1.7;color:#1e40af;margin-bottom:8px;}
+.coin-actions{display:flex;gap:6px;}
+.btn-tv{flex:1;padding:8px;border-radius:3px;font-size:11px;font-weight:700;color:white;border:none;cursor:pointer;}
+.btn-ai{padding:8px 12px;border-radius:3px;font-size:11px;font-weight:700;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;}
+.btn-wr{padding:8px 12px;border-radius:3px;font-size:11px;font-weight:700;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;}
+
+/* Phase list (when tab clicked) */
+.phase-list-hd{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border);}
+.phase-coin-row{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;margin-bottom:3px;background:var(--s1);border:1px solid var(--border);cursor:pointer;transition:all .12s;}
+.phase-coin-row:hover{box-shadow:0 1px 4px rgba(0,0,0,.08);}
+.phase-sig-row{display:flex;gap:5px;align-items:center;font-size:11px;padding:4px 0;border-bottom:1px solid var(--border);}
+
+/* Winrate */
+.wr-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px;}
+.wr-box{background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:7px;text-align:center;}
+.wr-v{font-family:var(--mono);font-size:16px;font-weight:800;}
+.wr-l{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:1px;}
+.wr-row{display:flex;align-items:center;gap:5px;padding:4px 7px;margin-bottom:3px;background:var(--s1);border:1px solid var(--border);border-radius:4px;font-size:10px;cursor:pointer;}
+.wr-row.win{border-left:3px solid var(--green);}
+.wr-row.loss{border-left:3px solid var(--red);}
+.wr-row.pending{border-left:3px solid var(--amber);}
+
+/* ── RIGHT: CHAT ── */
+#right{background:var(--s1);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.right-hd{padding:8px 10px;border-bottom:1px solid var(--border);background:var(--s2);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;}
+.right-title{font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;}
+#chat-messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:0;}
+.msg-user{background:var(--red-bg);border:1px solid var(--red-b);border-radius:6px;padding:8px 10px;font-size:11px;align-self:flex-end;max-width:90%;line-height:1.6;}
+.msg-ai{background:var(--blue-bg);border:1px solid var(--blue-b);border-radius:6px;padding:9px 11px;font-size:11px;color:var(--text2);line-height:1.75;}
+.msg-ai-hd{font-size:9px;color:var(--blue);font-weight:700;margin-bottom:4px;letter-spacing:.5px;text-transform:uppercase;}
+.msg-thinking{background:var(--s3);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11px;color:var(--muted);animation:pulse 1s infinite;}
+.qbtns{padding:5px 8px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px;flex-shrink:0;background:var(--s2);}
+.qbtn{background:var(--s3);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;}
+.qbtn:hover{background:var(--blue-bg);border-color:var(--blue-b);color:var(--blue);}
+.chat-input-row{padding:8px;border-top:1px solid var(--border);display:flex;gap:5px;flex-shrink:0;}
+#chat-input{flex:1;background:var(--s1);border:1px solid var(--border);border-radius:3px;padding:6px 8px;font-size:11px;font-family:inherit;color:var(--text);resize:none;height:48px;outline:none;}
+.chat-send{background:var(--red);color:white;border-radius:3px;padding:0 12px;font-size:15px;font-weight:700;align-self:stretch;}
+
+/* ══════════════════════════════════════════════
+   COIN CARD — новый дизайн
+══════════════════════════════════════════════ */
+.coin-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.cc-hd{display:flex;justify-content:space-between;align-items:flex-start;padding:8px 12px;border-bottom:1px solid var(--border);}
+.cc-hd-l{display:flex;flex-direction:column;gap:4px;}
+.cc-sym-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.cc-sym{font-family:var(--mono);font-size:20px;font-weight:900;}
+.cc-dir-pill{padding:2px 9px;border-radius:20px;font-size:9px;font-weight:800;}
+.cap-badge{display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);font-weight:600;}
+.cap-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.cc-price-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.cc-price{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text2);}
+.cc-ptag{font-size:7px;padding:1px 4px;border-radius:2px;font-weight:700;}
+.cc-ptag-pump{background:#fef3c7;color:#92400e;}
+.cc-ptag-speed{background:var(--s2);color:var(--muted);}
+.cc-hd-r{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
 .conf-ring{position:relative;width:40px;height:40px;flex-shrink:0;}
-.conf-ring svg{position:absolute;top:0;left:0;transform:rotate(-90deg);}
-.conf-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;font-weight:900;color:#2563eb;}
+.conf-ring svg{position:absolute;top:0;left:0;}
+.conf-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:900;}
 
-/* ROW 2: PRICE + LEVELS */
-.price-levels{display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr;border-bottom:1px solid #f1f5f9;}
-.price-cell{padding:7px 12px;border-right:1px solid #f1f5f9;display:flex;flex-direction:column;justify-content:center;}
-.price-big{font-family:monospace;font-size:16px;font-weight:900;color:#1e293b;}
-.price-tags{display:flex;gap:4px;margin-top:2px;}
-.ptag{font-size:7px;padding:1px 4px;border-radius:2px;font-weight:700;}
-.ptag-pump{background:#fef3c7;color:#92400e;}.ptag-speed{background:#f1f5f9;color:#64748b;}
-.lv{padding:7px 8px;border-right:1px solid #f1f5f9;text-align:center;}
-.lv:last-child{border-right:none;}
-.lv-l{font-size:7px;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;}
-.lv-v{font-family:monospace;font-size:12px;font-weight:800;}
-.lv-p{font-size:8px;font-weight:600;margin-top:1px;}
-.c-e{color:#1e293b;}.c-s{color:#dc2626;}.c-t{color:#16a34a;}.c-r{color:#2563eb;}
+/* Levels */
+.cc-levels{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);}
+.cc-lv{background:var(--s1);border:1px solid var(--border);border-radius:6px;padding:6px 8px;}
+.cc-lv-l{font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;}
+.cc-lv-v{font-family:var(--mono);font-size:13px;font-weight:800;}
+.cc-lv-p{font-size:8px;font-weight:600;margin-top:1px;}
 
-/* ROW 3: STATS */
-.stats{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid #f1f5f9;}
-.st{padding:6px 4px;text-align:center;border-right:1px solid #f1f5f9;}
-.st:last-child{border-right:none;}
-.st-l{font-size:7px;color:#94a3b8;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;}
-.st-v{font-family:monospace;font-size:11px;font-weight:700;}
+/* Progress */
+.cc-prog{padding:5px 12px 8px;border-bottom:1px solid var(--border);}
+.cc-prog-meta{display:flex;justify-content:space-between;font-size:8px;color:var(--dim);margin-bottom:3px;}
+.cc-prog-bar{height:5px;background:var(--s3);border-radius:3px;overflow:hidden;}
+.cc-prog-fill{height:100%;border-radius:3px;transition:width .3s;}
 
-/* ROW 4: FUTURES */
-.futures{display:grid;grid-template-columns:2fr 1fr 1fr;border-bottom:1px solid #f1f5f9;}
-.ft{padding:7px 10px;border-right:1px solid #f1f5f9;}
-.ft:last-child{border-right:none;}
-.ft-l{font-size:7px;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;}
-.ft-main{display:flex;align-items:center;gap:5px;}
-.ft-v{font-family:monospace;font-size:12px;font-weight:800;}
-.oi-arr{font-size:10px;font-weight:800;padding:1px 5px;border-radius:3px;}
-.oi-dn{background:#fee2e2;color:#991b1b;}.oi-up{background:#dcfce7;color:#166534;}
-.ft-sub{font-size:8px;color:#94a3b8;margin-top:2px;}
+/* Stats */
+.cc-stats{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid var(--border);}
+.cc-st{padding:6px 4px;text-align:center;border-right:1px solid var(--border);}
+.cc-st:last-child{border-right:none;}
+.cc-st-l{font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;}
+.cc-st-v{font-family:var(--mono);font-size:11px;font-weight:700;}
 
-/* ROW 5: CVD + MTF + CANDLES */
-.row5{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f1f5f9;}
-.r5b{padding:7px 10px;border-right:1px solid #f1f5f9;}
-.r5b:last-child{border-right:none;}
-.r5-t{font-size:7px;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;}
-.cvd-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;}
-.cvd-lbl{font-size:9px;color:#64748b;}
-.cvd-val{font-size:9px;font-weight:700;}
-.mtf-pills{display:flex;gap:2px;flex-wrap:wrap;}
+/* Futures */
+.cc-futures{display:grid;grid-template-columns:2fr 1fr 1fr;border-bottom:1px solid var(--border);}
+.cc-ft{padding:7px 10px;border-right:1px solid var(--border);}
+.cc-ft:last-child{border-right:none;}
+.cc-ft-l{font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;}
+.cc-ft-main{display:flex;align-items:center;gap:5px;}
+.cc-ft-v{font-family:var(--mono);font-size:12px;font-weight:800;color:var(--text2);}
+.cc-ft-sub{font-size:8px;color:var(--muted);margin-top:2px;}
+.oi-arr{font-size:9px;font-weight:800;padding:1px 5px;border-radius:3px;}
+.oi-up{background:var(--green-bg);color:var(--green);}
+.oi-dn{background:var(--red-bg);color:var(--red);}
+
+/* CVD + MTF + Candles row */
+.cc-row5{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border);}
+.cc-r5b{padding:7px 10px;border-right:1px solid var(--border);}
+.cc-r5b:last-child{border-right:none;}
+.cc-r5-t{font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;}
+.cc-cvd-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;}
+.cc-cvd-lbl{font-size:9px;color:var(--muted);}
+.cc-cvd-val{font-size:9px;font-weight:700;}
+.cc-mtf-pills{display:flex;gap:2px;flex-wrap:wrap;}
 .mp{padding:2px 5px;border-radius:3px;font-size:8px;font-weight:700;}
-.mp-bull{background:#dcfce7;color:#166534;}.mp-bear{background:#fee2e2;color:#991b1b;}.mp-neut{background:#f1f5f9;color:#64748b;}
-.candle-list{display:flex;flex-direction:column;gap:3px;}
+.mp-bull{background:var(--green-bg);color:var(--green);}
+.mp-bear{background:var(--red-bg);color:var(--red);}
+.mp-neut{background:var(--s2);color:var(--muted);border:1px solid var(--border);}
+.cc-candle-list{display:flex;flex-direction:column;gap:2px;}
 .ci{font-size:8px;display:flex;align-items:center;gap:3px;}
-.ci.bear{color:#dc2626;}.ci.bull{color:#16a34a;}.ci.neut{color:#64748b;}
+.ci.bear{color:var(--red);}.ci.bull{color:var(--green);}.ci.neut{color:var(--muted);}
 
-/* ROW 6: AGENT + AI */
-.text-section{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #f1f5f9;}
-.tb{padding:8px 10px;border-right:1px solid #f1f5f9;}
-.tb:last-child{border-right:none;}
-.tb-hd{display:flex;align-items:center;gap:4px;margin-bottom:5px;}
-.tb-title{font-size:8px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.4px;}
-.vp{padding:1px 6px;border-radius:3px;font-size:8px;font-weight:800;margin-left:4px;}
-.vp-go{background:#dcfce7;color:#166534;}.vp-wait{background:#fef3c7;color:#92400e;}.vp-skip{background:#f1f5f9;color:#64748b;}
-.tb-text{font-size:9px;color:#475569;line-height:1.5;}
-.tb-agent{background:#f8fafc;}.tb-ai{background:#eff6ff;}
+/* Two text boxes */
+.cc-text-section{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--border);}
+.cc-tb{padding:8px 10px;border-right:1px solid var(--border);}
+.cc-tb:last-child{border-right:none;}
+.cc-tb-hd{display:flex;align-items:center;gap:4px;margin-bottom:5px;}
+.cc-tb-title{font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+.cc-vp{padding:1px 6px;border-radius:3px;font-size:8px;font-weight:800;margin-left:4px;}
+.cc-tb-text{font-size:9px;color:var(--text2);line-height:1.5;}
+.cc-tb-agent{background:var(--s1);}
+.cc-tb-ai{background:#eff6ff;}
 
-/* ROW 7: PHASES */
-.phases{padding:7px 12px;border-bottom:1px solid #f1f5f9;}
-.ph-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
-.ph-title{font-size:7px;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;}
-.ph-score{display:flex;align-items:center;gap:3px;}
-.ph-dot{width:16px;height:3px;border-radius:2px;background:#e2e8f0;}
-.ph-dot.done{background:#f59e0b;}
-.ph-tags{display:flex;gap:3px;flex-wrap:wrap;}
+/* Phases */
+.cc-phases{padding:7px 12px;border-bottom:1px solid var(--border);}
+.cc-ph-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.cc-ph-title{font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;}
+.cc-ph-score{display:flex;align-items:center;gap:3px;}
+.cc-ph-dot{width:16px;height:3px;border-radius:2px;background:var(--border);}
+.cc-ph-dot.done{background:#f59e0b;}
+.cc-ph-tags{display:flex;gap:3px;flex-wrap:wrap;}
 .ph-tag{padding:2px 6px;background:#fef3c7;border:1px solid #fde68a;border-radius:3px;font-size:7px;font-weight:600;color:#92400e;}
 
-/* ROW 8: FUTURE SLOT */
-.future-slot{padding:6px 12px;background:#fafafa;border-bottom:1px solid #f1f5f9;min-height:26px;display:flex;align-items:center;justify-content:center;}
-.fs-label{font-size:7px;color:#e2e8f0;text-transform:uppercase;letter-spacing:1px;}
+/* Future slot */
+.cc-future-slot{padding:6px 12px;background:var(--s1);border-bottom:1px solid var(--border);min-height:24px;display:flex;align-items:center;justify-content:center;}
+.cc-fs-label{font-size:7px;color:var(--border);text-transform:uppercase;letter-spacing:1px;}
 
-/* ACTIONS */
-.actions{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;}
-.act{padding:9px 6px;border:none;cursor:pointer;font-size:9px;font-weight:700;font-family:inherit;border-right:1px solid rgba(255,255,255,.15);}
-.act:last-child{border-right:none;}
-.act-tv{background:#dc2626;color:#fff;}
-.act-ai{background:#1e40af;color:#bfdbfe;}
-.act-work{background:#15803d;color:#dcfce7;}
-.act-copy{background:#f1f5f9;color:#64748b;}
+/* Actions */
+.cc-actions{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;}
+.cc-act{padding:9px 6px;border:none;cursor:pointer;font-size:9px;font-weight:700;font-family:inherit;border-right:1px solid rgba(0,0,0,.05);}
+.cc-act:last-child{border-right:none;}
+.cc-act-tv{background:var(--red);color:#fff;}
+.cc-act-ai{background:#1e40af;color:#bfdbfe;}
+.cc-act-work{background:#15803d;color:#dcfce7;}
+.cc-act-copy{background:var(--s2);color:var(--muted);border-top:1px solid var(--border);}
+
 </style>
 </head>
 <body>
-<div class="coin-card">
 
-  <!-- HEADER -->
-  <div class="hd">
-    <div class="hd-l">
-      <span class="sym short">IRYS</span>
-      <span class="dir-pill short">▼ SHORT</span>
-      <div class="cap-badge">
-        <span class="cap-dot" style="background:#f97316;"></span>
-        <span>Низкая кап · $39M vol/24h</span>
+<!-- TOPBAR -->
+<div id="topbar">
+  <div class="logo">◈ PUMP FADE</div>
+  <div class="tdiv"></div>
+  <div id="live-dot"></div>
+  <span id="live-text">LIVE</span>
+  <span id="refresh-timer" style="font-size:9px;color:#475569;font-family:var(--mono);"></span>
+  <div class="pump-thresh">
+    Порог: <input type="range" min="5" max="30" value="15" id="thresh-slider" oninput="PUMP_THRESH=+this.value;document.getElementById('thresh-val').textContent=this.value+'%'">
+    <span class="thresh-val" id="thresh-val">15%</span>
+  </div>
+  <div style="flex:1"></div>
+  <span style="font-size:10px;color:#94a3b8;font-family:var(--mono);margin-right:4px;">₿</span>
+  <span class="top-price" id="btc-price-main">—</span>
+  <span id="btc-change-main" style="font-size:13px;font-weight:700;margin-left:4px;">—</span>
+  <span id="btc-trend-main" style="font-size:9px;padding:2px 5px;border-radius:3px;margin-left:6px;"></span>
+  <div class="tdiv"></div>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v15.05 21:18</span>
+  <button id="mute-btn" onclick="toggleMute()" style="font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:3px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);" title="Звук вкл/выкл">🔔</button>
+  <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 Gemini</button>
+  <button id="claude-btn" onclick="promptClaudeKey()" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px;cursor:pointer;background:var(--s2);border:1px solid var(--border);color:var(--muted);">🔑 Claude</button>
+  <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
+  <!-- theme toggle disabled -->
+</div>
+
+<!-- PUMP ALERT -->
+<div id="pump-alert">
+  <span id="pump-alert-text">🔥</span>
+  <button onclick="document.getElementById('pump-alert').style.display='none'" style="margin-left:auto;background:#92400e;color:white;border:none;border-radius:3px;padding:2px 7px;font-size:9px;cursor:pointer;">✕</button>
+</div>
+
+<!-- BODY -->
+<div id="body">
+
+  <!-- LEFT -->
+  <div id="left">
+    <div class="left-hd">
+      <div class="left-hd-row">
+        <span class="left-title" id="scanner-label">💡 Идеи агента</span>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <span id="ideas-count" style="font-size:9px;color:var(--muted);"></span>
+          <button class="scan-btn" onclick="runIdeas(true)">↻</button>
+        </div>
+      </div>
+      <div class="left-sub">200 монет · все типы сетапов · min
+        <span id="min-conf-label">65</span>%
+        <input type="range" min="45" max="85" value="65" id="conf-slider"
+          oninput="MIN_CONF=+this.value;document.getElementById('min-conf-label').textContent=this.value;renderIdeas()"
+          style="width:45px;accent-color:var(--red);vertical-align:middle;margin-left:3px;">
+      </div>
+      <div style="display:flex;border-top:1px solid var(--border);margin-top:4px;">
+        <button id="tab-signals" onclick="setIdeasTab('signals')"
+          style="flex:1;padding:5px 4px;font-size:9px;font-weight:700;border:none;background:transparent;cursor:pointer;border-bottom:2px solid var(--red);color:var(--red);font-family:inherit;">
+          🔥 Сигналы <span id="tab-signals-count" style="font-size:8px;"></span>
+        </button>
+        <button id="tab-watch" onclick="setIdeasTab('watch')"
+          style="flex:1;padding:5px 4px;font-size:9px;font-weight:700;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);font-family:inherit;">
+          👁 Наблюдение <span id="tab-watch-count" style="font-size:8px;"></span>
+        </button>
+        <button id="tab-active" onclick="setIdeasTab('active')"
+          style="flex:1;padding:5px 4px;font-size:9px;font-weight:700;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);font-family:inherit;">
+          ⚡ В работе <span id="tab-active-count" style="font-size:8px;color:var(--blue);"></span>
+        </button>
       </div>
     </div>
-    <div class="hd-r">
-      <div class="conf-ring">
-        <svg width="40" height="40" viewBox="0 0 40 40">
-          <circle cx="20" cy="20" r="17" fill="none" stroke="#f1f5f9" stroke-width="3.5"/>
-          <circle cx="20" cy="20" r="17" fill="none" stroke="#2563eb" stroke-width="3.5"
-            stroke-dasharray="106.8" stroke-dashoffset="4.3" stroke-linecap="round"/>
-        </svg>
-        <div class="conf-num">96</div>
+    <div id="ideas-list" style="flex:1;overflow-y:auto;padding:5px;">
+      <div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Запуск агента...</div>
+    </div>
+    <div id="vol-section">
+      <div class="vol-hd">
+        <span>⚡ Волатильность</span>
+        <span id="vol-ts" style="font-size:8px;color:var(--dim);font-weight:400;">—</span>
+      </div>
+      <div id="vol-list"></div>
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div id="center">
+    <!-- Charts -->
+    <div id="charts-area">
+      <div class="chart-box">
+        <div class="chart-hd">
+          <span class="chart-tf" id="ctf1h">1H</span>
+          <div class="ema-legend">
+            <span style="color:#d97706;">━EMA20</span>
+            <span style="color:#7c3aed;">━EMA50</span>
+            <span style="color:#0369a1;">━EMA100</span>
+            <span style="color:#374151;">━EMA200</span>
+          </div>
+          <span id="pump-label" style="margin-left:auto;font-size:9px;font-family:var(--mono);color:var(--muted);"></span>
+        </div>
+        <div class="chart-wrap"><div id="chart1h" style="width:100%;height:100%;"></div></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-hd">
+          <span class="chart-tf" id="ctf15m">15M</span>
+          <div class="ema-legend">
+            <span style="color:#d97706;">━EMA20</span>
+            <span style="color:#7c3aed;">━EMA50</span>
+            <span style="color:#0369a1;">━EMA100</span>
+          </div>
+        </div>
+        <div class="chart-wrap"><div id="chart15m" style="width:100%;height:100%;"></div></div>
       </div>
     </div>
-  </div>
 
-  <!-- PRICE + LEVELS -->
-  <div class="price-levels">
-    <div class="price-cell">
-      <span class="price-big">$0.0471</span>
-      <div class="price-tags">
-        <span class="ptag ptag-pump">🔥 +14%</span>
-        <span class="ptag ptag-speed">⚡ -1.8%/2ч</span>
+    <!-- CVD + Volume mini -->
+    <div id="mini-charts">
+      <div class="mini-box">
+        <div class="mini-hd">
+          <span class="mini-hd-title">CVD · 15m</span>
+          <span id="cvd-label" style="font-size:9px;font-weight:700;color:var(--muted);">—</span>
+        </div>
+        <div class="mini-wrap"><div id="cvd-chart" style="width:100%;height:100%;"></div></div>
+      </div>
+      <div class="mini-box">
+        <div class="mini-hd">
+          <span class="mini-hd-title">Volume · 1h</span>
+          <span id="oi-fr" style="font-size:9px;color:var(--muted);">—</span>
+        </div>
+        <div class="mini-wrap"><div id="vol-chart" style="width:100%;height:100%;"></div></div>
       </div>
     </div>
-    <div class="lv"><div class="lv-l">Триггер</div><div class="lv-v c-e">$0.0471</div></div>
-    <div class="lv"><div class="lv-l">Стоп</div><div class="lv-v c-s">$0.0505</div><div class="lv-p c-s">+7.2%</div></div>
-    <div class="lv"><div class="lv-l">Тейк</div><div class="lv-v c-t">$0.0401</div><div class="lv-p c-t">-14.8%</div></div>
-    <div class="lv"><div class="lv-l">R/R</div><div class="lv-v c-r">2.0×</div></div>
-  </div>
 
-  <!-- PROGRESS BAR -->
-  <div style="padding:6px 12px;border-bottom:1px solid #f1f5f9;">
-    <div style="display:flex;justify-content:space-between;font-size:8px;color:#94a3b8;margin-bottom:4px;">
-      <span>Entry $0.0471</span>
-      <span style="color:#3b82f6;font-weight:700;">↓ 34% к цели</span>
-      <span>TP $0.0401</span>
-    </div>
-    <div style="height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;">
-      <div style="height:100%;width:34%;border-radius:3px;background:linear-gradient(90deg,#3b82f6,#22c55e);"></div>
-    </div>
-  </div>
-
-  <!-- STATS -->
-  <div class="stats">
-    <div class="st"><div class="st-l">Памп 8h</div><div class="st-v" style="color:#f59e0b;">+14%</div></div>
-    <div class="st"><div class="st-l">Скорость</div><div class="st-v" style="color:#94a3b8;">-1.8%</div></div>
-    <div class="st"><div class="st-l">Vol/avg</div><div class="st-v" style="color:#f59e0b;">×0.9</div></div>
-    <div class="st"><div class="st-l">RSI</div><div class="st-v" style="color:#dc2626;">75</div></div>
-    <div class="st"><div class="st-l">ATR ratio</div><div class="st-v">×1.01</div></div>
-    <div class="st"><div class="st-l">CVD</div><div class="st-v" style="color:#dc2626;">↓</div></div>
-  </div>
-
-  <!-- FUTURES: OI + FR + TAKER -->
-  <div class="futures">
-    <div class="ft">
-      <div class="ft-l">Open Interest</div>
-      <div class="ft-main">
-        <span class="ft-v">26.0М конт</span>
-        <span class="oi-arr oi-dn">↓ −4.2% 4ч</span>
+    <!-- Phase tabs -->
+    <div id="phase-tabs">
+      <div class="ptab done" onclick="setPhase(1,this)">
+        <div class="ptab-dot" style="background:var(--green);"></div>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:800;">1</span> ПАМП
       </div>
-      <div class="ft-sub">OI падает — позиции закрываются</div>
+      <div class="ptab done" onclick="setPhase(2,this)">
+        <div class="ptab-dot" style="background:var(--green);"></div>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:800;">2</span> ИСТОЩЕНИЕ
+      </div>
+      <div class="ptab active" onclick="setPhase(3,this)">
+        <div class="ptab-dot" style="background:var(--red);animation:dot-blink 1s infinite;"></div>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:800;">3</span> СЛОМ
+      </div>
+      <div class="ptab" onclick="setPhase(4,this)">
+        <div class="ptab-dot" style="background:var(--dim);"></div>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:800;">4</span> ВХОД
+      </div>
+      <div class="ptab" onclick="setPhase(5,this)" style="font-size:9px;">📊 WINRATES</div>
     </div>
-    <div class="ft">
-      <div class="ft-l">Funding Rate</div>
-      <div class="ft-v" style="color:#dc2626;">+0.0050%</div>
-      <div class="ft-sub" style="color:#dc2626;">лонги платят</div>
-    </div>
-    <div class="ft">
-      <div class="ft-l">Taker 4ч</div>
-      <div class="ft-v" style="color:#dc2626;">агр. шорты</div>
-      <div class="ft-sub">ratio 0.82</div>
+
+    <!-- Dynamic zone -->
+    <div id="dynamic-zone">
+      <div style="font-size:11px;color:var(--muted);">Нажмите на идею или вкладку фазы.</div>
     </div>
   </div>
 
-  <!-- CVD + MTF + CANDLES -->
-  <div class="row5">
-    <div class="r5b">
-      <div class="r5-t">CVD · 15M</div>
-      <div class="cvd-row"><span class="cvd-lbl">Тренд дельты</span><span class="cvd-val" style="color:#dc2626;">↓ МЕДВЕЖ.</span></div>
-      <div class="cvd-row"><span class="cvd-lbl">Дивергенция</span><span class="cvd-val" style="color:#dc2626;">⚠ Да</span></div>
+  <!-- RIGHT: CHAT ONLY -->
+  <div id="right">
+    <div class="right-hd">
+      <span class="right-title">💬 AI Советник · Gemini</span>
+      <span id="chat-status" style="font-size:9px;color:var(--muted);">не подключён</span>
     </div>
-    <div class="r5b">
-      <div class="r5-t">МТФ</div>
-      <div class="mtf-pills">
-        <span class="mp mp-neut">5m →</span>
-        <span class="mp mp-bull">15m ▲</span>
-        <span class="mp mp-bear">1h ▼</span>
-        <span class="mp mp-bull">4h ▲</span>
-      </div>
-      <div style="font-size:8px;color:#94a3b8;margin-top:4px;">↓ 4h медвежий сигнал</div>
-    </div>
-    <div class="r5b">
-      <div class="r5-t">Свечной анализ</div>
-      <div class="candle-list">
-        <div class="ci bear">🕯 Bearish engulfing</div>
-        <div class="ci bear">↓ Lower highs 15m</div>
-        <div class="ci bear">⬛ 3 медв. свечи подряд</div>
+    <div id="chat-messages">
+      <div class="msg-ai">
+        <div class="msg-ai-hd">✦ Gemini</div>
+        Привет! Слежу за рынком.<br>
+        <span style="color:var(--dim);">Спрашивайте про монету, тренд, CVD.<br>
+        Или нажмите <b>✦ AI</b> в карточке монеты.</span>
       </div>
     </div>
-  </div>
-
-  <!-- AGENT + AI TEXT -->
-  <div class="text-section">
-    <div class="tb tb-agent">
-      <div class="tb-hd"><span>⚡</span><span class="tb-title">Сигналы агента</span></div>
-      <div class="tb-text">Pump Exhaustion: +24.5%, EMA 11.1%, RSI 75 перекупленность.<br>Начало тренда ↓ (цена&lt;EMA50, пробой EMA20), EMA20 наклон: -0.905%<br>Vol×3.4 — объём подтверждает.</div>
+    <div class="qbtns">
+      <button class="qbtn" onclick="askQuick('Анализ текущей монеты')">анализ</button>
+      <button class="qbtn" onclick="askQuick('Стоит ли входить прямо сейчас?')">входить?</button>
+      <button class="qbtn" onclick="askQuick('Не развернулся ли тренд?')">тренд?</button>
+      <button class="qbtn" onclick="askQuick('CVD и OI — что говорят?')">CVD+OI?</button>
+      <button class="qbtn" onclick="askQuick('Где поставить стоп?')">стоп?</button>
     </div>
-    <div class="tb tb-ai">
-      <div class="tb-hd"><span>✦</span><span class="tb-title">Gemini · AI</span><span class="vp vp-go">GO 85%</span></div>
-      <div class="tb-text">4h тренд бычий, объём подтверждает импульс, RSI в допустимом диапазоне, все технические условия для шорта соблюдены.</div>
+    <div class="chat-input-row">
+      <textarea id="chat-input" placeholder="Спросите или введите монету: BTCUSDT"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+      <button class="chat-send" onclick="sendChat()">↑</button>
     </div>
-  </div>
-
-  <!-- PHASES -->
-  <div class="phases">
-    <div class="ph-hd">
-      <span class="ph-title">Фазы истощения</span>
-      <div class="ph-score">
-        <div class="ph-dot done"></div><div class="ph-dot done"></div><div class="ph-dot done"></div>
-        <span style="font-size:8px;color:#f59e0b;font-weight:700;margin-left:3px;">3/3</span>
-      </div>
-    </div>
-    <div class="ph-tags">
-      <span class="ph-tag">RSI 75 — перекупленность</span>
-      <span class="ph-tag">RSI дивергенция</span>
-      <span class="ph-tag">MACD разворачивается ↓</span>
-      <span class="ph-tag">CVD ↓ — покупки иссякают</span>
-      <span class="ph-tag">▼ Lower highs 15m</span>
-      <span class="ph-tag">▼ CVD ↓ подтверждает</span>
-    </div>
-  </div>
-
-  <!-- FUTURE SLOT -->
-  <div class="future-slot">
-    <span class="fs-label">· · · место для дополнительных данных · · ·</span>
-  </div>
-
-  <!-- ACTIONS -->
-  <div class="actions">
-    <button class="act act-tv">▼ TradingView ↗</button>
-    <button class="act act-ai">✦ AI анализ</button>
-    <button class="act act-work">📌 В работу</button>
-    <button class="act act-copy">📋 Копировать</button>
   </div>
 
 </div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════════
+const FAPI   = 'https://fapi.binance.com/fapi/v1';
+const BINANCE = FAPI; // same — futures API has no CORS issues
+// Model is set by user via 📋 Модели button → localStorage('gemini_model_override')
+
+// ── CLAUDE API ──────────────────────────────────────────
+const CLAUDE_MODEL = 'claude-haiku-4-5';
+function getClaudeKey(){return localStorage.getItem('claude_api_key')||'';}
+
+async function callClaude(prompt, maxTokens=300){
+  const key=getClaudeKey();
+  if(!key)return null;
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key':key,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify({
+        model:CLAUDE_MODEL,
+        max_tokens:maxTokens,
+        system:'You are a disciplined intraday crypto trader. CRITICAL: NEVER give GO for LONG if 4h trend is bearish. NEVER give GO for SHORT if 4h trend is bullish. GO only if 4h aligns + volume confirms + RSI ok. SKIP if 4h opposes. Target <30% GO rate. Reply ONLY with valid JSON: {"verdict":"GO"|"WAIT"|"SKIP","confidence":0-100,"reason":"1 sentence"}',
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const j=await r.json();
+    if(j.error){console.warn('Claude error:',j.error.message);return null;}
+    const text=j.content?.[0]?.text||'';
+    const match=text.match(/\{[^}]+\}/);
+    if(!match)return null;
+    return JSON.parse(match[0]);
+  }catch(e){console.warn('Claude API error:',e);return null;}
+}
+
+async function getAIVerdict(idea){
+  // Используем Claude если есть ключ, иначе Gemini
+  if(getClaudeKey()) return callClaudeVerdict(idea);
+  return getGeminiVerdict(idea);
+}
+
+async function callClaudeVerdict(idea){
+  const prompt=`${idea.sym} ${idea.dir} conf:${(idea.conf||0).toFixed(0)}/100
+Pump:+${(idea.pumpPct||0).toFixed(1)}% EMA:${(idea.dist||0).toFixed(1)}% Vol:x${(idea.volRatio||1).toFixed(1)} RSI:${(idea.rsiNow||50).toFixed(0)} CVD:${idea.cvdFalling?'↓':'↑'} ATR:x${(idea.atrRatio||1).toFixed(2)} 4h:${idea.trend4h||'neutral'}
+Entry:$${(idea.entry||0).toFixed(4)} SL:$${(idea.sl||0).toFixed(4)} TP:$${(idea.tp1||0).toFixed(4)} RR:${(idea.rr||0).toFixed(1)}
+Signals:${(idea.sigs||[]).join(', ')}`;
+  return callClaude(prompt, 150);
+}
+const REFRESH_INTERVAL = 30000;
+const IDEAS_INTERVAL   = 3 * 60000;
+const VOL_INTERVAL     = 60000;
+const WR_KEY = 'pf_wr_v2';
+const WR_HISTORY_KEY = 'pf_wr_history_v1';
+const ACTIVE_KEY = 'pf_active_v1';
+let PUMP_THRESH = 15;
+let MIN_CONF = 70;
+
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+// WR helpers must be before S
+function loadWRHistory(){
+  try{return JSON.parse(localStorage.getItem(WR_HISTORY_KEY)||'[]');}catch{return[];}
+}
+function saveWRHistory(records){
+  try{
+    var hist=loadWRHistory();
+    hist=hist.concat(records);
+    if(hist.length>2000)hist=hist.slice(-2000);
+    localStorage.setItem(WR_HISTORY_KEY,JSON.stringify(hist));
+  }catch(e){}
+}
+function loadWR(){
+  try{
+    var d=JSON.parse(localStorage.getItem(WR_KEY)||'[]');
+    var resolved=d.filter(function(w){return w.result!=='pending';});
+    var pending=d.filter(function(w){return w.result==='pending';}).slice(0,20);
+    return resolved.concat(pending);
+  }catch{return[];}
+}
+function loadActive(){try{return JSON.parse(localStorage.getItem(ACTIVE_KEY)||'[]');}catch{return[];}}
+function saveActive(){try{localStorage.setItem(ACTIVE_KEY,JSON.stringify(S.activeTrack));}catch{}}
+function saveWR(){try{localStorage.setItem(WR_KEY,JSON.stringify(S.winrates));}catch{}}
+
+const S = {
+  sym:'SOLUSDT', cds1h:[], cds15m:[],
+  prices:{}, oi:null, fr:null,
+  ideas:[], ideaDedup:{},
+  volData:[],
+  analysis:null,
+  cvdData:[],
+  positions:[],
+  winrates: loadWR(),
+  activeTrack: loadActive(), // [{sym, dir, entry, sl, tp1, rr, addedAt, lastPrice, alerts:[]}]
+  scanning:false, phase:3,
+  activeIdea:null,
+  nextRefresh: Date.now()+REFRESH_INTERVAL,
+};
+
+// ═══════════════════════════════════════════════════════
+//  MATH (compact)
+// ═══════════════════════════════════════════════════════
+function ema(arr,p){const k=2/(p+1);const out=[];let prev=null;const init=[];for(let i=0;i<arr.length;i++){if(arr[i]==null){out.push(null);continue;}if(prev==null){init.push(arr[i]);if(init.length<p){out.push(null);continue;}prev=init.reduce((a,b)=>a+b,0)/p;out.push(prev);continue;}prev=arr[i]*k+prev*(1-k);out.push(prev);}return out;}
+function rsi(c,p=14){const r=Array(p).fill(null);let ag=0,al=0;for(let i=1;i<=p;i++){const d=c[i]-c[i-1];d>=0?ag+=d:al-=d;}ag/=p;al/=p;r.push(al===0?100:100-100/(1+ag/al));for(let i=p+1;i<c.length;i++){const d=c[i]-c[i-1];ag=(ag*(p-1)+(d>0?d:0))/p;al=(al*(p-1)+(d<0?-d:0))/p;r.push(al===0?100:100-100/(1+ag/al));}return r;}
+function macd(c){const f=ema(c,12),s=ema(c,26);const ml=c.map((_,i)=>f[i]!=null&&s[i]!=null?f[i]-s[i]:null);const valid=ml.filter(v=>v!=null);const sr=ema(valid,9);let si=0;const sig=ml.map(v=>v!=null?sr[si++]:null);const h=ml.map((v,i)=>v!=null&&sig[i]!=null?v-sig[i]:null);return{ml,sig,h};}
+function atrCalc(cds,p=14){if(cds.length<2)return 0;const trs=cds.slice(1).map((c,i)=>Math.max(c.high-c.low,Math.abs(c.high-cds[i].close),Math.abs(c.low-cds[i].close)));return trs.slice(-p).reduce((s,v)=>s+v,0)/Math.min(p,trs.length);}
+function cvdFromCandles(cds){let cum=0;return cds.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cum+=b/r*c.volume;return cum;});}
+function fmt(n,d=2){if(n==null)return'—';if(Math.abs(n)>=1e9)return(n/1e9).toFixed(1)+'B';if(Math.abs(n)>=1e6)return(n/1e6).toFixed(1)+'M';if(Math.abs(n)>=1000)return n.toLocaleString('en',{maximumFractionDigits:0});if(Math.abs(n)<0.0001)return n.toFixed(6);if(Math.abs(n)<0.01)return n.toFixed(5);if(Math.abs(n)<1)return n.toFixed(4);return n.toFixed(d);}
+function fmtAge(ts){const s=Math.floor((Date.now()-ts)/1000);if(s<60)return s+'с';if(s<3600)return Math.floor(s/60)+'м';return Math.floor(s/3600)+'ч';}
+
+// ═══════════════════════════════════════════════════════
+//  LIGHTWEIGHT CHARTS
+// ═══════════════════════════════════════════════════════
+const LWC={};
+function getChart(id){
+  const el=document.getElementById(id);if(!el)return null;
+  if(LWC[id])return LWC[id].chart;
+  const chart=LightweightCharts.createChart(el,{
+    width:el.clientWidth||400,height:el.clientHeight||170,
+    layout:{background:{color:'#fff'},textColor:'#334155',fontSize:10},
+    grid:{vertLines:{color:'#f8fafc',style:1},horzLines:{color:'#f8fafc',style:1}},
+    crosshair:{mode:0},
+    rightPriceScale:{borderColor:'#e2e8f0'},
+    timeScale:{borderColor:'#e2e8f0',timeVisible:true,secondsVisible:false,rightOffset:12,barSpacing:5},
+    handleScroll:true,handleScale:true,
+  });
+  const ro=new ResizeObserver(()=>{if(LWC[id])LWC[id].chart.applyOptions({width:el.clientWidth,height:el.clientHeight});});
+  ro.observe(el);
+  LWC[id]={chart,ro,series:{}};
+  return chart;
+}
+function destroyChart(id){if(LWC[id]){LWC[id].ro.disconnect();try{LWC[id].chart.remove();}catch{}delete LWC[id];}}
+function cdsToLW(cds){return cds.map(c=>({time:Math.floor(c.time/1000),open:c.open,high:c.high,low:c.low,close:c.close}));}
+function emaToLW(cds,arr){return arr.map((v,i)=>v!=null&&i<cds.length?{time:Math.floor(cds[i].time/1000),value:v}:null).filter(Boolean);}
+
+function drawCandles(id,cds,analysis){
+  if(!cds||cds.length<5)return;
+  const chart=getChart(id);if(!chart)return;
+  const lw=LWC[id];
+  ['candle','e20','e50','e100','e200','tp1','sl','entry'].forEach(k=>{if(lw.series[k]){try{chart.removeSeries(lw.series[k]);}catch{}delete lw.series[k];}});
+  const cs=chart.addCandlestickSeries({upColor:'#16a34a',downColor:'#dc2626',borderUpColor:'#16a34a',borderDownColor:'#dc2626',wickUpColor:'#16a34a',wickDownColor:'#dc2626'});
+  cs.setData(cdsToLW(cds));lw.series.candle=cs;
+  const closes=cds.map(c=>c.close);
+  const emaConf=[{p:20,c:'#d97706',w:1.5,k:'e20'},{p:50,c:'#7c3aed',w:1.3,k:'e50'},{p:100,c:'#0369a1',w:1.0,k:'e100'}];
+  if(id==='chart1h')emaConf.push({p:200,c:'#374151',w:.85,k:'e200'});
+  emaConf.forEach(({p,c,w,k})=>{const s=chart.addLineSeries({color:c,lineWidth:w,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});s.setData(emaToLW(cds,ema(closes,p)));lw.series[k]=s;});
+  if(analysis){
+    [[analysis.tp1,'#16a34a','tp1'],[analysis.sl,'#dc2626','sl'],[analysis.entry,'#94a3b8','entry']].forEach(([price,color,key])=>{
+      if(!price)return;
+      const s=chart.addLineSeries({color,lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false});
+      s.setData([{time:Math.floor(cds[0].time/1000),value:price},{time:Math.floor(cds[cds.length-1].time/1000),value:price}]);
+      lw.series[key]=s;
+    });
+  }
+  chart.timeScale().fitContent();
+}
+
+function drawCVD(data){
+  if(!data||data.length<3)return;
+  const chart=getChart('cvd-chart');if(!chart)return;
+  const lw=LWC['cvd-chart'];
+  if(lw.series.cvd){try{chart.removeSeries(lw.series.cvd);}catch{}delete lw.series.cvd;}
+  const falling=data[data.length-1]<data[Math.max(0,data.length-10)];
+  const now=Math.floor(Date.now()/1000),step=15*60;
+  const d=data.map((v,i)=>({time:now-(data.length-1-i)*step,value:v}));
+  const s=chart.addLineSeries({color:falling?'#dc2626':'#16a34a',lineWidth:1.5,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+  s.setData(d);lw.series.cvd=s;chart.timeScale().fitContent();
+  const lbl=document.getElementById('cvd-label');
+  if(lbl){lbl.textContent=falling?'↓ медвежий':'↑ бычий';lbl.style.color=falling?'var(--red)':'var(--green)';}
+  // Update coin card CVD fields
+  if(typeof updateFuturesDisplay==='function') updateFuturesDisplay();
+}
+
+function drawVolume(cds){
+  if(!cds||cds.length<5)return;
+  const chart=getChart('vol-chart');if(!chart)return;
+  const lw=LWC['vol-chart'];
+  ['vol','vema'].forEach(k=>{if(lw.series[k]){try{chart.removeSeries(lw.series[k]);}catch{}delete lw.series[k];}});
+  const hs=chart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'vol',scaleMargins:{top:0.1,bottom:0}});
+  hs.setData(cds.map(c=>({time:Math.floor(c.time/1000),value:c.volume,color:c.close>=c.open?'rgba(22,163,74,.45)':'rgba(220,38,38,.4)'})));
+  lw.series.vol=hs;
+  const ve=ema(cds.map(c=>c.volume),20);
+  const ls=chart.addLineSeries({color:'#d97706',lineWidth:1.2,priceScaleId:'vol',priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+  ls.setData(emaToLW(cds,ve));lw.series.vema=ls;
+  chart.timeScale().fitContent();
+}
+
+function redrawCharts(){
+  setTimeout(()=>{
+    if(S.cds1h.length)drawCandles('chart1h',S.cds1h,S.analysis?.readyToShort?S.analysis:null);
+    if(S.cds15m.length)drawCandles('chart15m',S.cds15m,S.analysis?.readyToShort?S.analysis:null);
+    if(S.cvdData.length)drawCVD(S.cvdData);
+    if(S.cds1h.length)drawVolume(S.cds1h);
+  },100);
+}
+
+// ═══════════════════════════════════════════════════════
+//  ANALYSIS ENGINE
+// ═══════════════════════════════════════════════════════
+function analyzeFull(cds1h,cds15m){
+  if(!cds1h||cds1h.length<30||!cds15m||cds15m.length<20)return null;
+  const c1h=cds1h.map(c=>c.close),v1h=cds1h.map(c=>c.volume),n1h=cds1h.length-1;
+  const e20_1h=ema(c1h,20),e50_1h=ema(c1h,50),ve20=ema(v1h,20);
+  const price=c1h[n1h],e20n=e20_1h[n1h],e50n=e50_1h[n1h];
+  const distE20=e20n?(price-e20n)/e20n*100:0;
+  const pumpLow=Math.min(...cds1h.slice(-8).map(c=>c.low));
+  const pumpPct=pumpLow>0?(price-pumpLow)/pumpLow*100:0;
+  const p2=Math.min(...cds1h.slice(-2).map(c=>c.low));
+  const pumpSpeed=p2>0?(price-p2)/p2*100:0;
+  const atrNow=atrCalc(cds1h),atrHist=cds1h.length>20?atrCalc(cds1h.slice(0,-1)):atrNow;
+  const atrRatio=atrHist>0?atrNow/atrHist:1;
+  const volRatio=(ve20[n1h]||1)>0?v1h[n1h]/(ve20[n1h]||1):1;
+  const rsi1h=rsi(c1h),rsiNow=rsi1h[n1h];
+  const{h}=macd(c1h);
+  const macdT=h[n1h]!=null&&h[n1h-1]!=null&&h[n1h]<h[n1h-1]&&h[n1h-1]>0;
+  const rsiDiv=c1h[n1h]>c1h[n1h-3]&&rsi1h[n1h]<rsi1h[n1h-3]&&rsiNow>60;
+  const isPumped=pumpPct>=PUMP_THRESH&&distE20>=8;
+  // CVD
+  const cvd15=cvdFromCandles(cds15m);
+  const cvdNow=cvd15[cvd15.length-1],cvdPrev=cvd15[Math.max(0,cvd15.length-6)];
+  const cvdFalling=cvdNow<cvdPrev;
+  const c15=cds15m.map(c=>c.close),n15=cds15m.length-1;
+  const cvdDiv=c15[n15]>c15[n15-4]&&cvdNow<cvd15[Math.max(0,n15-4)];
+  // Exhaustion signals
+  const exSigs=[];
+  if(rsiNow>70)exSigs.push({t:`RSI ${rsiNow.toFixed(0)} — перекупленность`,w:2});
+  if(rsiDiv)exSigs.push({t:'RSI дивергенция',w:3});
+  if(macdT)exSigs.push({t:'MACD разворачивается ↓',w:2});
+  if(cvdDiv)exSigs.push({t:'CVD дивергенция',w:3});
+  if(cvdFalling)exSigs.push({t:'CVD ↓ — покупки иссякают',w:2});
+  const exScore=exSigs.reduce((s,e)=>s+e.w,0),isExhausted=exScore>=4;
+  // Breakdown signals
+  const e20_15m=ema(c15,20),e50_15m=ema(c15,50);
+  const p15=c15[n15],e20_15n=e20_15m[n15],e50_15n=e50_15m[n15];
+  const recentH=cds15m.slice(-6).map(c=>c.high);
+  const lowerHighs=recentH[5]<recentH[4]&&recentH[4]<recentH[3];
+  const brokeEma20=p15<e20_15n;
+  const bkSigs=[];
+  if(lowerHighs)bkSigs.push({t:'Lower highs на 15m',w:3});
+  if(brokeEma20)bkSigs.push({t:'Пробой EMA20 на 15m',w:2});
+  if(cvdFalling)bkSigs.push({t:'CVD ↓ подтверждает',w:2});
+  if(p15<e50_15n)bkSigs.push({t:'Пробой EMA50 на 15m',w:2});
+  const bkScore=bkSigs.reduce((s,e)=>s+e.w,0),hasBreakdown=bkScore>=3;
+  const totalScore=(isPumped?4:0)+exScore+bkScore;
+  let phase=0;
+  if(isPumped)phase=1;
+  if(isPumped&&isExhausted)phase=2;
+  if(isPumped&&isExhausted&&hasBreakdown)phase=3;
+  const readyToShort=phase===3&&totalScore>=10;
+  const atrv=atrCalc(cds15m),entry=p15,sl=entry+atrv*1.5;
+  const tp1=Math.max(e20n||0,entry-atrv*2),tp2=Math.max(e50n||0,entry-atrv*4);
+  const rr=sl>entry?Math.abs(tp1-entry)/Math.abs(sl-entry):0;
+  return{phase,readyToShort,totalScore,pumpPct,pumpSpeed,atrRatio,distE20,volRatio,isPumped,
+    exSigs,exScore,isExhausted,rsiNow,macdT,rsiDiv,bkSigs,bkScore,hasBreakdown,cvdFalling,cvdDiv,
+    entry,sl,tp1,tp2,rr,atrv,e20_1h:e20n,e50_1h:e50n,e20_15m:e20_15n,price15m:p15,
+    impulseBase:Math.min(...cds1h.slice(-8).map(c=>c.open)),cvdData:cvd15.slice(-80)};
+}
+
+// ═══════════════════════════════════════════════════════
+//  SCORE PER COIN (for scan)
+// ═══════════════════════════════════════════════════════
+async function scoreForIdea(sym){
+  try{
+    const[r1h,r15m,r4h,r5m]=await Promise.all([
+      fetch(`${FAPI}/klines?symbol=${sym}&interval=1h&limit=120`),
+      fetch(`${FAPI}/klines?symbol=${sym}&interval=15m&limit=80`),
+      fetch(`${FAPI}/klines?symbol=${sym}&interval=4h&limit=60`),
+      fetch(`${FAPI}/klines?symbol=${sym}&interval=5m&limit=60`),
+    ]);
+    const[j1h,j15m,j4h,j5m]=await Promise.all([r1h.json(),r15m.json(),r4h.json(),r5m.json()]);
+    if(!Array.isArray(j1h)||j1h.length<30)return null;
+    const parse=arr=>arr.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
+    const cds1h=parse(j1h);
+    const cds15m=Array.isArray(j15m)&&j15m.length>10?parse(j15m):[];
+    const cds4h=Array.isArray(j4h)&&j4h.length>10?parse(j4h):[];
+    const cds5m=Array.isArray(j5m)&&j5m.length>10?parse(j5m):[];
+
+    const c1h=cds1h.map(c=>c.close);
+    const v1h=cds1h.map(c=>c.volume);
+    const n1h=cds1h.length-1;
+    const price=c1h[n1h];
+
+    // EMAs 1h
+    const e20_1h=ema(c1h,20); const e20n=e20_1h[n1h]||price;
+    const e50_1h=ema(c1h,50); const e50n=e50_1h[n1h]||price;
+    const e200_1h=ema(c1h,200);
+
+    // Price metrics 1h
+    const dist=(price-e20n)/e20n*100;
+    const pumpLow=Math.min(...cds1h.slice(-8).map(c=>c.low));
+    const pumpPct=pumpLow>0?(price-pumpLow)/pumpLow*100:0;
+    const pumpSpeed=cds1h.length>2?(price-cds1h[n1h-2].close)/cds1h[n1h-2].close*100:0;
+    const atrNow=atrCalc(cds1h);
+    const atrHist=atrCalc(cds1h.slice(0,-1));
+    const atrRatio=atrHist>0?atrNow/atrHist:1;
+    const ve20=ema(v1h,20);
+    const volRatio=(ve20[n1h]||1)>0?v1h[n1h]/(ve20[n1h]||1):1;
+    const lastC=cds1h[n1h];
+    const bodyRatio=Math.abs(lastC.close-lastC.open)/(lastC.high-lastC.low||0.0001);
+    const rsiArr=rsi(c1h); const rsiNow=rsiArr[n1h];
+    const{h}=macd(c1h);
+    const hTurning=h[n1h]!=null&&h[n1h-1]!=null&&h[n1h]<h[n1h-1]&&h[n1h-1]>0;
+    const hTurningUp=h[n1h]!=null&&h[n1h-1]!=null&&h[n1h]>h[n1h-1]&&h[n1h-1]<0;
+
+    // CVD 15m
+    let cvdFalling=false,cvdDiv=false;
+    if(cds15m.length>10){
+      const cvd15=cvdFromCandles(cds15m);
+      const cn=cvd15.length-1;
+      cvdFalling=cvd15[cn]<cvd15[Math.max(0,cn-6)];
+      const c15=cds15m.map(c=>c.close);
+      cvdDiv=c15[c15.length-1]>c15[Math.max(0,c15.length-5)]&&cvd15[cn]<cvd15[Math.max(0,cn-4)];
+    }
+
+    // 4h orientation
+    let trend4h='neutral';
+    if(cds4h.length>=22){
+      const c4=cds4h.map(c=>c.close),n4=c4.length-1;
+      const e20_4=ema(c4,20),e50_4=ema(c4,50);
+      if(e20_4[n4]&&e50_4[n4]){
+        if(c4[n4]>e20_4[n4]&&e20_4[n4]>e50_4[n4])trend4h='bull';
+        else if(c4[n4]<e20_4[n4]&&e20_4[n4]<e50_4[n4])trend4h='bear';
+      }
+    }
+
+    // 15m data
+    const c15=cds15m.length>0?cds15m.map(c=>c.close):c1h;
+    const n15=c15.length-1;
+    const p15=c15[n15];
+    const e20_15=ema(c15,20); const e20_15n=e20_15[n15]||p15;
+    const e50_15=ema(c15,50); const e50_15n=e50_15[n15]||p15;
+    const rsi15=cds15m.length>14?rsi(c15):rsiArr;
+    const rsiNow15=rsi15[rsi15.length-1];
+
+    // ── ПАТТЕРНЫ СВЕЧЕЙ ────────────────────────────────────
+    function candlePatterns(cds) {
+      if (!cds || cds.length < 3) return {score:0, patterns:[]};
+      const n = cds.length - 1;
+      const c = cds[n], p1 = cds[n-1], p2 = cds[n-2];
+      const body = c => Math.abs(c.close - c.open);
+      const range = c => c.high - c.low || 0.0001;
+      const bullish = c => c.close > c.open;
+      const bearish = c => c.close < c.open;
+      const wickTop = c => c.high - Math.max(c.open, c.close);
+      const wickBot = c => Math.min(c.open, c.close) - c.low;
+      const bodyPct = c => body(c) / range(c);
+      const patterns = [];
+      let score = 0;
+
+      // ── МЕДВЕЖЬИ паттерны (хорошо для SHORT) ──
+      // Доджи на вершине (нерешительность после роста)
+      if (bodyPct(c) < 0.1 && range(c) > 0 && bullish(p1)) {
+        patterns.push({name:'Доджи', dir:'bear', w:6});
+      }
+      // Повешенный (Hanging Man) — малое тело вверху, длинная нижняя тень
+      if (bullish(p1) && bodyPct(c) < 0.35 && wickBot(c) > body(c) * 2 && wickTop(c) < body(c) * 0.5) {
+        patterns.push({name:'Повешенный', dir:'bear', w:9});
+      }
+      // Медвежье поглощение
+      if (bullish(p1) && bearish(c) && c.open >= p1.close && c.close <= p1.open && body(c) > body(p1)) {
+        patterns.push({name:'Медвежье поглощение', dir:'bear', w:14});
+      }
+      // Падающая звезда (Shooting Star) — длинная верхняя тень
+      if (wickTop(c) > body(c) * 2 && wickBot(c) < body(c) * 0.5 && bullish(p1)) {
+        patterns.push({name:'Падающая звезда', dir:'bear', w:11});
+      }
+      // Три вороны (три медвежьих свечи подряд)
+      if (bearish(c) && bearish(p1) && bearish(p2) &&
+          c.close < p1.close && p1.close < p2.close &&
+          bodyPct(c) > 0.5 && bodyPct(p1) > 0.5) {
+        patterns.push({name:'Три вороны', dir:'bear', w:12});
+      }
+      // Вечерняя звезда
+      if (bullish(p2) && bodyPct(p1) < 0.2 && bearish(c) && body(c) > body(p2) * 0.5) {
+        patterns.push({name:'Вечерняя звезда', dir:'bear', w:13});
+      }
+      // Медвежий харами (маленькая свеча внутри большой бычьей)
+      if (bullish(p1) && bearish(c) && c.open < p1.close && c.close > p1.open && body(c) < body(p1) * 0.5) {
+        patterns.push({name:'Харами медвежий', dir:'bear', w:7});
+      }
+
+      // ── БЫЧЬИ паттерны (хорошо для LONG) ──
+      // Молот (Hammer) — длинная нижняя тень, маленькое тело
+      if (bearish(p1) && wickBot(c) > body(c) * 2 && wickTop(c) < body(c) * 0.5 && bodyPct(c) < 0.4) {
+        patterns.push({name:'Молот', dir:'bull', w:10});
+      }
+      // Бычье поглощение
+      if (bearish(p1) && bullish(c) && c.open <= p1.close && c.close >= p1.open && body(c) > body(p1)) {
+        patterns.push({name:'Бычье поглощение', dir:'bull', w:14});
+      }
+      // Утренняя звезда
+      if (bearish(p2) && bodyPct(p1) < 0.2 && bullish(c) && body(c) > body(p2) * 0.5) {
+        patterns.push({name:'Утренняя звезда', dir:'bull', w:13});
+      }
+      // Три солдата (три бычьих свечи подряд)
+      if (bullish(c) && bullish(p1) && bullish(p2) &&
+          c.close > p1.close && p1.close > p2.close &&
+          bodyPct(c) > 0.5 && bodyPct(p1) > 0.5) {
+        patterns.push({name:'Три солдата', dir:'bull', w:12});
+      }
+      // Бычий харами
+      if (bearish(p1) && bullish(c) && c.open > p1.close && c.close < p1.open && body(c) < body(p1) * 0.5) {
+        patterns.push({name:'Харами бычий', dir:'bull', w:7});
+      }
+      // Перевёрнутый молот
+      if (bearish(p1) && wickTop(c) > body(c) * 2 && wickBot(c) < body(c) * 0.5) {
+        patterns.push({name:'Перев. молот', dir:'bull', w:7});
+      }
+
+      // Считаем скор: медвежьи +, бычьи -
+      score = patterns.reduce((s, p) => s + (p.dir === 'bear' ? p.w : -p.w), 0);
+      return {score, patterns};
+    }
+
+    // Паттерны на 1h и 15m
+    const pat1h  = candlePatterns(cds1h);
+    const pat15m = candlePatterns(cds15m);
+    // Общий скор паттернов (положительный = медвежий, отрицательный = бычий)
+    const patScore = pat1h.score * 0.6 + pat15m.score * 0.4;
+    const allPatterns = [...pat1h.patterns.map(p=>({...p,tf:'1h'})), ...pat15m.patterns.map(p=>({...p,tf:'15m'}))];
+
+    // ── Общие константы ──────────────────────────────────────
+    const patBonus = Math.max(-15, Math.min(20, patScore));
+    const longPatBonus = Math.max(-15, Math.min(20, -patScore));
+    const trendBanned = atrRatio > 1.8 || pumpPct > 12 || Math.abs(dist) > 7;
+    const isSharpPump = pumpPct >= PUMP_THRESH && dist >= 8;
+
+    const ema20_slope = cds15m.length > 5
+      ? (e20_15n - (e20_15[cds15m.length-4] || e20_15n)) / (e20_15[cds15m.length-4] || e20_15n) * 100
+      : 0;
+    const last3_15 = cds15m.slice(-3);
+    const confirmBull = last3_15.filter(c => c.close > e20_15n).length >= 2;
+    const confirmBear = last3_15.filter(c => c.close < e20_15n).length >= 2;
+
+    // ── SHORT — все кандидаты, побеждает лучший ──────────────
+    const exCount = (rsiNow>70?1:0)+(hTurning?1:0)+(cvdDiv?1:0)+(atrRatio>1.5?1:0)+(cvdFalling?1:0);
+    const shortCandidates = [];
+
+    // S1. Pump Exhaustion
+    if (isSharpPump && exCount >= 1) {
+      const c = Math.min(96, 38 + pumpPct*1.2 + dist*0.8 + exCount*7 + patBonus);
+      const s = [`▼ Pump Exhaustion: +${pumpPct.toFixed(1)}%, EMA ${dist.toFixed(1)}%`];
+      if (rsiNow>70) s.push(`RSI ${rsiNow.toFixed(0)} перекупленность`);
+      if (hTurning) s.push('MACD ↓ разворот');
+      if (cvdDiv)   s.push('CVD дивергенция');
+      if (cvdFalling) s.push('CVD ↓');
+      allPatterns.filter(p=>p.dir==='bear').forEach(p=>s.push(`🕯 ${p.name} (${p.tf})`));
+      shortCandidates.push({conf:c, sigs:s});
+    }
+
+    // S2. Начало тренда вниз: цена < EMA50 + пробой EMA20 на 15m
+    if (!trendBanned) {
+      if (price < e50n && confirmBear && ema20_slope < -0.02 && volRatio > 1.1 && cvdFalling) {
+        const c = Math.min(90, 56 + (trend4h==='bear'?12:0) + volRatio*3 + (hTurning?8:0) + patBonus);
+        const s = ['📉 Начало тренда ↓ (цена<EMA50, пробой EMA20)', `EMA20 наклон: ${ema20_slope.toFixed(3)}%, Vol×${volRatio.toFixed(1)}`];
+        if (trend4h==='bear') s.push('4h тренд медвежий ✓');
+        if (hTurning) s.push('MACD ↓');
+        if (cvdFalling) s.push('CVD ↓');
+        allPatterns.filter(p=>p.dir==='bear').forEach(p=>s.push(`🕯 ${p.name}`));
+        shortCandidates.push({conf:c, sigs:s});
+      }
+    }
+
+    // S3. Пробой EMA20 ↓ на 1h
+    {
+      const prevAbove = cds1h.slice(-5,-1).filter(c=>c.close>(e20_1h[n1h-2]||0)).length >= 3;
+      if (prevAbove && price < e20n && volRatio > 1.3 && rsiNow < 60) {
+        const c = Math.min(84, 50 + (trend4h==='bear'?10:0) + volRatio*2 + (cvdFalling?8:0) + patBonus);
+        const s = ['📉 Пробой EMA20 ↓ на 1h', `Vol×${volRatio.toFixed(1)}, RSI ${rsiNow.toFixed(0)}`];
+        if (cvdFalling) s.push('CVD ↓');
+        shortCandidates.push({conf:c, sigs:s});
+      }
+    }
+
+    // S4. RSI перекупленность + MACD
+    if (rsiNow > 72 && hTurning && cvdFalling) {
+      const c = Math.min(80, 47 + (rsiNow-72)*2 + (cvdDiv?10:0) + (trend4h==='bear'?8:0) + patBonus);
+      const s = [`RSI ${rsiNow.toFixed(0)} перекупленность + MACD ↓`];
+      if (cvdDiv) s.push('CVD дивергенция');
+      if (trend4h==='bear') s.push('4h медвежий');
+      shortCandidates.push({conf:c, sigs:s});
+    }
+
+    // S5. ATR+ROC разворот вниз
+    if (cds4h.length >= 14) {
+      const atrCtx = atrCalc(cds4h,14) / cds4h[cds4h.length-1].close * 100;
+      const roc6 = n1h>=6 && c1h[n1h-6]>0 ? (price-c1h[n1h-6])/c1h[n1h-6]*100 : 0;
+      if (atrCtx >= 0.35 && roc6 >= 2.2 && cvdFalling) {
+        const last15 = cds15m[cds15m.length-1];
+        const barR15 = last15.high - last15.low || 0.0001;
+        const wickTop15 = (last15.high - Math.max(last15.open,last15.close)) / barR15;
+        const bearish15 = last15.close < last15.open || (wickTop15>=0.4 && (last15.close-last15.low)/barR15<=0.55);
+        if (bearish15) {
+          const c = Math.min(85, 55 + atrCtx*5 + (roc6-2.2)*3 + patBonus);
+          const s = [`↩ Разворот: 4h ATR ${atrCtx.toFixed(2)}%, ROC +${roc6.toFixed(1)}%`, '15m отказ на вершине'];
+          if (cvdFalling) s.push('CVD ↓');
+          shortCandidates.push({conf:c, sigs:s});
+        }
+      }
+    }
+
+    // S6. Пробой поддержки с объёмом
+    if (volRatio > 2.0 && bodyRatio > 0.6 && lastC.close < lastC.open && rsiNow < 55 && rsiNow > 35) {
+      if (price < e20n && price < e50n && cvdFalling) {
+        const c = Math.min(78, 46 + volRatio*4 + (trend4h==='bear'?8:0) + patBonus);
+        const s = [`📉 Пробой поддержки ×${volRatio.toFixed(1)}`, `Body ${(bodyRatio*100).toFixed(0)}%, RSI ${rsiNow.toFixed(0)}`];
+        allPatterns.filter(p=>p.dir==='bear').forEach(p=>s.push(`🕯 ${p.name}`));
+        shortCandidates.push({conf:c, sigs:s});
+      }
+    }
+
+    const bestShort = shortCandidates.reduce((b,c)=>c.conf>b.conf?c:b, {conf:0,sigs:[]});
+    let shortConf = bestShort.conf, shortSigs = bestShort.sigs;
+
+    // ── LONG — все кандидаты, побеждает лучший ───────────────
+    const longCandidates = [];
+    let longConf = 0, longDir = null, longSigs = [];
+
+    // L1. Начало тренда вверх: цена > EMA50 + пробой EMA20 на 15m
+    if (!trendBanned) {
+      if (price > e50n && confirmBull && ema20_slope > 0.02 && volRatio > 1.1 && !cvdFalling && trend4h !== 'bear') {
+        const c = Math.min(90, 56 + (trend4h==='bull'?12:trend4h==='bear'?-8:0) + volRatio*3 + (hTurningUp?8:0) + longPatBonus);
+        if (c >= MIN_CONF) {
+          const s = ['📈 Начало тренда ↑ (цена>EMA50, пробой EMA20)', `EMA20 наклон: +${ema20_slope.toFixed(3)}%, Vol×${volRatio.toFixed(1)}`];
+          if (trend4h==='bull') s.push('4h тренд бычий ✓');
+          if (hTurningUp) s.push('MACD ↑');
+          if (!cvdFalling) s.push('CVD ↑');
+          longCandidates.push({conf:c, sigs:s});
+        }
+      }
+    }
+
+    // L2. EMA стек 1h выровнен вверх
+    {
+      const nowBull = price > e20n && e20n > e50n;
+      const prevBull = c1h[n1h-1] > e20_1h[n1h-1] && e20_1h[n1h-1] > e50_1h[n1h-1];
+      if (nowBull && volRatio > 1.1 && rsiNow > 45 && rsiNow < 75 && trend4h !== 'bear') {
+        const fresh = !prevBull ? 15 : 0;
+        const c = Math.min(90, 52 + fresh + (trend4h==='bull'?12:trend4h==='bear'?-8:0) + volRatio*3 + (hTurningUp?8:0) + longPatBonus);
+        if (c >= MIN_CONF) {
+          const s = ['📈 EMA стек ↑ на 1h', fresh?'Только что выровнялся':trend4h==='bull'?'4h бычий':'', !cvdFalling?'CVD ↑':''].filter(Boolean);
+          longCandidates.push({conf:c, sigs:s});
+        }
+      }
+    }
+
+    // L3. Разворот ATR+ROC вверх
+    if (cds1h.length > 20) {
+      const atrPctVal = atrNow / price * 100;
+      const roc12 = n1h>=12 && c1h[n1h-12]>0 ? (price-c1h[n1h-12])/c1h[n1h-12]*100 : 0;
+      if (atrPctVal >= 0.22 && roc12 <= -1.8 && rsiNow < 45 && hTurningUp) {
+        const lastBar = cds1h[n1h];
+        const wickBot = (Math.min(lastBar.open,lastBar.close) - lastBar.low) / (lastBar.high - lastBar.low || 0.001);
+        if (wickBot >= 0.3 || lastBar.close > lastBar.open) {
+          const c = Math.min(84, 56 + Math.abs(roc12)*1.5 + (hTurningUp?10:0) + (rsiNow<35?8:0));
+          if (c >= MIN_CONF) {
+            longCandidates.push({conf:c, sigs:[`↩ Разворот: ATR ${atrPctVal.toFixed(2)}%, ROC ${roc12.toFixed(1)}%`, `RSI ${rsiNow.toFixed(0)} перепродан`, 'MACD ↑']});
+          }
+        }
+      }
+    }
+
+    // L4. Volume Breakout вверх
+    if (volRatio > 2.5 && bodyRatio > 0.65 && lastC.close > lastC.open && rsiNow > 50 && rsiNow < 75 && trend4h !== 'bear') {
+      const c = Math.min(84, 52 + volRatio*4 + (trend4h==='bull'?10:0));
+      if (c >= MIN_CONF) {
+        const s = [`🚀 Volume Breakout ×${volRatio.toFixed(1)}`, `Body ${(bodyRatio*100).toFixed(0)}%`, trend4h==='bull'?'4h бычий':''].filter(Boolean);
+        longCandidates.push({conf:c, sigs:s});
+      }
+    }
+
+    // L5. RSI перепроданность
+    if (rsiNow < 32 && rsiNow15 < 38) {
+      const c = Math.min(82, 54 + (hTurningUp?10:0) + (rsiNow<25?8:0) + (!cvdFalling?5:0));
+      if (c >= MIN_CONF) {
+        const s = [`📉 RSI перепроданность: 1h ${rsiNow.toFixed(0)}, 15m ${rsiNow15.toFixed(0)}`, hTurningUp?'MACD ↑':''].filter(Boolean);
+        longCandidates.push({conf:c, sigs:s});
+      }
+    }
+
+    const bestLong = longCandidates.reduce((b,c)=>c.conf>b.conf?c:b, {conf:0,sigs:[]});
+    longConf = bestLong.conf; longSigs = bestLong.sigs;
+    if (longConf >= MIN_CONF) longDir = 'LONG';
+
+    // ── Ранний памп 5m (early_pump_scanner.py) ─────────────
+    let earlyPumpConf=0,earlyPumpSigs=[];
+    if(cds5m.length>=30){
+      const last5=cds5m[cds5m.length-1];
+      const body5=last5.open>0?(last5.close-last5.open)/last5.open*100:0;
+      const vols5=cds5m.slice(-48,cds5m.length-1).map(c=>c.volume);
+      const med5=[...vols5].sort((a,b)=>a-b)[Math.floor(vols5.length/2)]||1;
+      const vr5=last5.volume/med5;
+      const barR5=last5.high-last5.low||0.0001;
+      const taker5=(last5.close-last5.low)/barR5;
+      const c5=cds5m.map(c=>c.close);
+      const rsi5=rsi(c5); const rsi5n=rsi5[rsi5.length-1];
+      const e20_5=ema(c5,20); const emaPct5=e20_5[e20_5.length-1]>0?(c5[c5.length-1]-e20_5[e20_5.length-1])/e20_5[e20_5.length-1]*100:0;
+      let cvd5=0;
+      const cvdArr5=cds5m.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cvd5+=b/r*c.volume;return cvd5;});
+      const cvdD5=cvdArr5[cvdArr5.length-1]-cvdArr5[Math.max(0,cvdArr5.length-7)];
+      if(body5>=0.35&&body5<=3.0&&vr5>=2.0&&vr5<=28&&rsi5n<80&&rsi5n>35){
+        let q=0;
+        q+=vr5>=2&&vr5<=4?25:vr5<=10?20:12;
+        q+=body5>=0.5&&body5<=2.0?18:body5<0.5?8:12;
+        q+=taker5>=0.6?15:taker5>=0.4?8:0;
+        q+=cvdD5>0?12:0;
+        q+=rsi5n>=50&&rsi5n<=65?10:rsi5n<=75?6:0;
+        q+=emaPct5>0&&emaPct5<3?10:emaPct5>=3?4:0;
+        q+=cvdD5>0&&vr5>=3?10:0;
+        q=Math.min(100,q);
+        if(q>=72){
+          earlyPumpConf=q;
+          earlyPumpSigs=[`🚀 Старт пампа 5m: +${body5.toFixed(2)}%`,`Vol×${vr5.toFixed(1)}/мед`,`taker ${taker5.toFixed(2)}`,cvdD5>0?'CVD ↑':'CVD ↓'];
+        }
+      }
+    }
+
+    // BTC коррекция
+    if(typeof BTC_STATE!=='undefined'&&BTC_STATE.change1m){
+      var _btcCh=BTC_STATE.change1h||0;
+      if(_btcCh<-0.5){if(longConf>0)longConf=Math.max(0,longConf-Math.abs(_btcCh)*4);if(shortConf>0)shortConf=Math.min(96,shortConf+Math.abs(_btcCh)*2);}
+      if(_btcCh>0.5){if(shortConf>0)shortConf=Math.max(0,shortConf-_btcCh*4);if(longConf>0)longConf=Math.min(96,longConf+_btcCh*2);}
+    }
+
+    // ── Выбор лучшего сигнала ──────────────────────────────
+    const res={sym,cds1h,cds15m,price,pumpPct,pumpSpeed,dist,atrRatio,volRatio,
+      rsiNow,bodyRatio,trend4h,shortConf,shortSigs,longConf,longDir,longSigs,
+      earlyPumpConf,isSharpPump,cvdFalling,cvdDiv,allPatterns,patScore};
+    const atrv=atrCalc(cds15m.length>14?cds15m:cds1h);
+
+    if(shortConf>=MIN_CONF&&shortConf>=longConf&&shortConf>=earlyPumpConf){
+      const entry=p15;
+      // Minimum SL: 2.5%, TP: 5%, R/R >= 2.0
+      const atrSL = Math.max(atrv*1.5, entry*0.025);
+      const sl = entry + atrSL;
+      const atrTP = Math.max(atrv*3, entry*0.05);
+      const tp1 = entry - atrTP;
+      const tp2 = entry - atrTP*2;
+      const rr = +(atrTP/atrSL).toFixed(2);
+      Object.assign(res,{bestDir:'SHORT',bestConf:shortConf,bestSigs:shortSigs,
+        entry,sl,tp1,tp2,rr,atrv,
+        why:`+${pumpPct.toFixed(1)}% за 8ч, ${dist.toFixed(1)}% от EMA20. ${shortSigs.slice(0,2).join(', ')}.`});
+    } else if(earlyPumpConf>=72&&earlyPumpConf>=longConf){
+      const entry=p15;
+      const slDist = Math.max(atrv*1.5, entry*0.025);
+      const tpDist = Math.max(atrv*3, entry*0.05);
+      const sl=entry-slDist, tp1=entry+tpDist, tp2=entry+tpDist*2;
+      Object.assign(res,{bestDir:'LONG',bestConf:earlyPumpConf,bestSigs:earlyPumpSigs,
+        entry,sl,tp1,tp2,rr:+((tp1-entry)/(entry-sl||1)).toFixed(2),atrv,
+        why:earlyPumpSigs.join(', '),earlyPump:true});
+    } else if(longConf>=MIN_CONF&&longDir){
+      const entry=p15;
+      const slDist = Math.max(atrv*1.5, entry*0.025);
+      const tpDist = Math.max(atrv*3, entry*0.05);
+      const sl=entry-slDist, tp1=entry+tpDist, tp2=entry+tpDist*2;
+      Object.assign(res,{bestDir:'LONG',bestConf:longConf,bestSigs:longSigs,
+        entry,sl,tp1,tp2,rr:+((tp1-entry)/(entry-sl||1)).toFixed(2),atrv,
+        why:longSigs.join(', ')});
+    } else {
+      // Зарождающийся памп (наблюдение)
+      const isNewPump=pumpPct>=PUMP_THRESH&&pumpSpeed>=5&&volRatio>=1.5;
+      if(isNewPump){
+        Object.assign(res,{bestDir:'ПАМП',bestConf:Math.min(90,50+pumpPct+volRatio*4),
+          bestSigs:[`+${pumpPct.toFixed(1)}% за 8ч`,`⚡ +${pumpSpeed.toFixed(1)}%/2ч`,`Vol×${volRatio.toFixed(1)}`],
+          why:`Резкий памп +${pumpPct.toFixed(1)}%, Vol×${volRatio.toFixed(1)}`,
+          isPumpSignal:true,entry:price,sl:price*0.975,tp1:price*1.05,tp2:price*1.10,rr:2.0,atrv});
+      }
+    }
+    return res;
+  }catch(e){console.error('scoreForIdea error:',sym,e);return null;}
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  SCAN (200 coins)
+// ═══════════════════════════════════════════════════════
+async function runIdeas(manual=false){
+  if(S.scanning&&!manual)return;
+  S.scanning=true;
+  setLiveStatus('scanning');
+  const lbl=document.getElementById('scanner-label');
+  if(lbl){lbl.textContent='⏳ Сканирую...';lbl.style.animation='pulse .6s infinite';}
+  try{
+    const r=await fetch(`${FAPI}/ticker/24hr`);
+    const tickers=await r.json();
+    if(!Array.isArray(tickers))throw new Error('bad');
+    const candidates=tickers
+      .filter(t=>t.symbol.endsWith('USDT')&&!t.symbol.includes('_'))
+      .map(t=>({sym:t.symbol,chgPct:Math.abs(+t.priceChangePercent),vol:+t.quoteVolume,
+        hlPct:(+t.highPrice-+t.lowPrice)/(+t.lowPrice||1)*100,price:+t.lastPrice,
+        score:Math.abs(+t.priceChangePercent)*2.5+(+t.quoteVolume>100e6?4:+t.quoteVolume>30e6?2:+t.quoteVolume>5e6?1:0)}))
+      .filter(t=>t.vol>1e6&&t.price>0)
+      .sort((a,b)=>b.score-a.score).slice(0,200);
+    renderVolatility(candidates.slice(0,10));
+    const now=Date.now(),newIdeas=[];
+    for(let i=0;i<candidates.length;i+=12){
+      if(lbl)lbl.textContent=`⏳ ${i}/${candidates.length}`;
+      const batch=candidates.slice(i,i+12);
+      const results=await Promise.allSettled(batch.map(c=>scoreForIdea(c.sym)));
+      results.forEach((res,ri)=>{
+        if(res.status!=='fulfilled'||!res.value||!res.value.bestDir)return;
+        const r=res.value;
+        if(r.bestConf<MIN_CONF)return;
+        const lastTs=S.ideaDedup[r.sym];
+        if(lastTs&&now-lastTs<7200000)return; // 2h dedup
+        S.ideaDedup[r.sym]=now;
+        // Get 24h volume from candidates array
+        const candItem = candidates.find(cc=>cc.sym===r.sym);
+        const quoteVol24h = candItem ? candItem.vol : 0;
+        const ideaObj = {sym:r.sym,dir:r.bestDir,conf:r.bestConf,quoteVol24h:quoteVol24h||0,
+          sigs:r.bestSigs||[],why:r.why||'',
+          entry:r.entry,sl:r.sl,tp1:r.tp1,tp2:r.tp2,rr:r.rr,atrv:r.atrv,
+          pumpPct:r.pumpPct,pumpSpeed:r.pumpSpeed,dist:r.dist,
+          volRatio:r.volRatio,rsiNow:r.rsiNow,atrRatio:r.atrRatio,
+          bodyRatio:r.bodyRatio,trend4h:r.trend4h,cvdFalling:r.cvdFalling,
+          cvdDiv:r.cvdDiv,isPump:r.isPumpSignal,ts:now,
+          cds1h:r.cds1h,cds15m:r.cds15m,
+          verdict:null, verdictReason:'', verdictConf:0};
+        newIdeas.push(ideaObj);
+        // Async Gemini verdict — staggered to avoid rate limits
+        if (getApiKey()) {
+          const verdictDelay = (newIdeas.length - 1) * 3000;
+          setTimeout(() => {
+            getAIVerdict(ideaObj).then(v => {
+              if (!v) { ideaObj.verdictChecked = true; renderIdeas(); return; }
+              const inList = S.ideas.find(i => i.sym === ideaObj.sym && Math.abs((i.ts||0)-(ideaObj.ts||0))<5000);
+              const target = inList || ideaObj;
+              target.verdict = v.verdict;
+              target.verdictReason = (v.reason||'').trim();
+              target.verdictConf = parseInt(v.confidence)||0;
+              target.verdictChecked = true;
+              if (v.verdict === 'SKIP') {
+                target.skipAt = Date.now(); // удалить через 15 мин
+              } else if (v.verdict === 'WAIT') {
+                addToWatch(target);
+                S.ideas = S.ideas.filter(i => i.sym !== ideaObj.sym);
+              } else if (v.verdict === 'GO') {
+                target.goAt = Date.now(); // удалить через 15 мин если не взят в работу
+                notify('✦ GO · ' + target.sym.replace('USDT',''), target.verdictReason);
+                if (target.entry && target.sl && target.tp1) scheduleWinrateCheck(target);
+              }
+              renderIdeas();
+            }).catch(() => { ideaObj.verdictChecked = true; renderIdeas(); });
+          }, verdictDelay);
+        } else {
+          // No Gemini key — track winrate directly
+          ideaObj.verdictChecked = true;
+          if (ideaObj.entry && ideaObj.sl && ideaObj.tp1) scheduleWinrateCheck(ideaObj);
+        }
+      });
+      await new Promise(r=>setTimeout(r,100));
+    }
+    newIdeas.sort((a,b)=>(a.isPump&&!b.isPump)?-1:(!a.isPump&&b.isPump)?1:b.conf-a.conf);
+    // Merge
+    const stale=now-3600000;
+    S.ideas=[...newIdeas,...S.ideas.filter(o=>o.ts>stale&&!newIdeas.find(n=>n.sym===o.sym))].slice(0,30);
+    // Pump alert
+    const hot=newIdeas.filter(i=>i.isPump&&i.pumpPct>=PUMP_THRESH);
+    if(hot.length){
+      const h=hot[0];
+      const pa=document.getElementById('pump-alert'),pt=document.getElementById('pump-alert-text');
+      if(pa&&pt){pt.innerHTML=`🔥 ПАМП · <b style="cursor:pointer;text-decoration:underline;" onclick="openSym('${h.sym}')">${h.sym.replace('USDT','')}</b> +${h.pumpPct.toFixed(1)}% · ⚡+${h.pumpSpeed.toFixed(1)}%/2ч · Vol×${h.volRatio.toFixed(1)} · RSI ${h.rsiNow.toFixed(0)}`;pa.style.display='flex';}
+      notify('🔥 Новый памп!',`${h.sym} +${h.pumpPct.toFixed(0)}%`);
+    }
+    // NOTE: winrate tracking moved to GO verdict handler above (only confirmed signals)
+    renderIdeas();
+  }catch(e){console.warn('Scan failed:',e);}
+  S.scanning=false;
+  if(lbl){lbl.textContent='💡 Идеи агента';lbl.style.animation='none';}
+  setLiveStatus('live');
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDER IDEAS (left column — all types)
+// ═══════════════════════════════════════════════════════
+let ideasTab = 'signals';
+
+function setIdeasTab(tab) {
+  ideasTab = tab;
+  const sigBtn = document.getElementById('tab-signals');
+  const wchBtn = document.getElementById('tab-watch');
+  if (sigBtn) {
+    sigBtn.style.borderBottom = tab==='signals'?'2px solid var(--red)':'2px solid transparent';
+    sigBtn.style.color = tab==='signals'?'var(--red)':'var(--muted)';
+  }
+  if (wchBtn) {
+    wchBtn.style.borderBottom = tab==='watch'?'2px solid var(--amber)':'2px solid transparent';
+    wchBtn.style.color = tab==='watch'?'var(--amber)':'var(--muted)';
+  }
+  var srchBtn=document.getElementById('tab-search');
+  if(srchBtn){srchBtn.style.borderBottom=tab==='search'?'2px solid var(--blue)':'2px solid transparent';srchBtn.style.color=tab==='search'?'var(--blue)':'var(--muted)';}
+  const actBtn = document.getElementById('tab-active');
+  if (actBtn) {
+    actBtn.style.borderBottom = tab==='active'?'2px solid var(--blue)':'2px solid transparent';
+    actBtn.style.color = tab==='active'?'var(--blue)':'var(--muted)';
+  }
+  renderIdeas();
+}
+
+function updateTabCounts() {
+  const sc = document.getElementById('tab-signals-count');
+  const wc = document.getElementById('tab-watch-count');
+  const minConf = parseInt(document.getElementById('conf-slider')?.value||'65');
+  if (sc) sc.textContent = S.ideas.filter(i=>i.conf>=minConf).length || '';
+  if (wc) {
+    const n = Object.keys(WATCH_LIST).length;
+    wc.textContent = n || '';
+    wc.style.color = n>0?'var(--amber)':'';
+  }
+  const ac = document.getElementById('tab-active-count');
+  if (ac) {
+    const n = S.activeTrack.length;
+    ac.textContent = n || '';
+  }
+}
+
+function renderIdeas(){
+  const list=document.getElementById('ideas-list');if(!list)return;
+  const minConf=parseInt(document.getElementById('conf-slider')?.value||'65');
+  const filtered=S.ideas.filter(i=>i.conf>=minConf);
+  const cnt=document.getElementById('ideas-count');
+  if(cnt)cnt.textContent=filtered.length?`${filtered.length}`:'';
+  updateTabCounts();
+
+  if(ideasTab==='search'){renderSearchTab(list);return;}
+  // ACTIVE TAB
+  if (ideasTab === 'active') {
+    renderActiveTab(list);
+    return;
+  }
+
+  // WATCH TAB
+  if (ideasTab === 'watch') {
+    const watchItems = Object.values(WATCH_LIST);
+    if (!watchItems.length) {
+      list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет монет под наблюдением.<br><span style="font-size:9px;color:var(--dim);">Сюда попадают WAIT сигналы.<br>Агент перепроверяет каждые 5м.</span></div>';
+      return;
+    }
+    list.innerHTML = watchItems.map(w => `<div class="idea-card" onclick="openSym('${w.idea.sym}')" style="border-left:3px solid var(--amber);">
+      <div class="idea-hd">
+        <span class="idea-sym" style="color:var(--amber);" onclick="event.stopPropagation();openSym('${w.idea.sym}')">${w.idea.sym.replace('USDT','')}</span>
+        <span class="idea-dir-badge" style="background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-b);">⏳ WAIT</span>
+      </div>
+      <div style="font-size:9px;color:var(--muted);margin-bottom:2px;">${w.idea.verdictReason||'Ожидаем подтверждения...'}</div>
+      <div style="font-size:9px;color:var(--muted);">${w.idea.sigs?.[0]||''}</div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px;">
+        <span class="idea-age">${Math.floor((Date.now()-w.addedAt)/60000)}м · ${w.checks} проверок из ${w.maxChecks}</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--muted);">${w.idea.conf?.toFixed(0)||0}/100</span>
+      </div>
+    </div>`).join('');
+    return;
+  }
+
+  // SIGNALS TAB
+  // GO наверх, затем по confidence desc
+  filtered.sort(function(a,b){
+    var aGo=a.verdict==='GO'?1:0, bGo=b.verdict==='GO'?1:0;
+    if(aGo!==bGo)return bGo-aGo;
+    return (b.conf||0)-(a.conf||0);
+  });
+  if(!filtered.length){
+    list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет сигналов.<br><span style="font-size:9px;color:var(--dim);">Сканирую 200 монет каждые 3м.</span></div>';
+    return;
+  }
+  const watchHtml = '';
+  list.innerHTML=filtered.map((idea,_)=>{
+    const i=S.ideas.indexOf(idea);
+    const isActive=S.activeIdea===i;
+    const bc=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
+    const dc=idea.isPump?'pump':idea.dir==='LONG'?'long':'short';
+    const dl=idea.isPump?'🔥 ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT';
+    const sub=idea.sigs&&idea.sigs[0]?idea.sigs[0].substring(0,34).replace(/</g,'&lt;').replace(/>/g,'&gt;'):'';
+    return `<div class="idea-card ${dc} ${isActive?'active':''}" onclick="selectIdea(${i})">
+      <div class="idea-hd">
+        <span class="idea-sym" style="color:${idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--text)'};" onclick="event.stopPropagation();openSym('${idea.sym}')">${idea.sym.replace('USDT','')}</span>
+        <span class="idea-dir-badge ${dc}">${dl}</span>
+      </div>
+      ${sub?`<div style="font-size:8px;color:var(--muted);margin-bottom:2px;">${sub}</div>`:''}
+      <div class="conf-bar"><div class="conf-fill" style="width:${idea.conf}%;background:${bc};"></div></div>
+      <div class="idea-meta">
+        <span style="color:${idea.pumpPct>=PUMP_THRESH?'var(--orange)':'var(--muted)'};">+${idea.pumpPct.toFixed(0)}%</span>
+        <span>RSI ${idea.rsiNow.toFixed(0)}</span>
+        <span>Vol×${idea.volRatio.toFixed(1)}</span>
+        ${idea.cvdDiv?'<span style="color:var(--red);">CVDdiv</span>':''}
+        ${idea.trend4h&&idea.trend4h!=='neutral'?`<span style="color:${idea.trend4h==='bull'?'var(--green)':'var(--red)'};">4h:${idea.trend4h==='bull'?'↑':'↓'}</span>`:''}
+      </div>
+      ${idea.pumpSpeed>3?`<div class="idea-age">⚡ +${idea.pumpSpeed.toFixed(1)}%/2ч</div>`:''}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;">
+        <span class="idea-age">${fmtAge(idea.ts)} назад</span>
+        ${idea.verdict==='GO' ?
+          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--green-bg);color:var(--green);">✦ GO${idea.verdictConf>10?' '+idea.verdictConf+'%':''}</span>${idea.goAt?`<span style="font-size:8px;color:var(--amber);margin-left:3px;">⏱${Math.max(0,15-Math.floor((Date.now()-idea.goAt)/60000))}м</span>`:''}` :
+          idea.verdict==='WAIT' ?
+          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--amber-bg);color:var(--amber);">⏳ WAIT</span>` :
+          idea.verdict==='SKIP' ? '' :
+          idea.verdictChecked ?
+          `<span style="font-size:8px;color:var(--dim);">—</span>` :
+          getApiKey() ? `<span style="font-size:8px;color:var(--dim);animation:pulse 1s infinite;">✦</span>` :
+          `<span style="font-size:8px;color:var(--dim);">—</span>`
+        }
+        <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--muted)'};">${(idea.conf||0).toFixed(0)}/100</span>
+      </div>
+      ${idea.verdictReason ? `<div style="font-size:8px;color:var(--muted);margin-top:2px;line-height:1.4;border-top:1px solid var(--border);padding-top:2px;">${idea.verdictReason}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderVolatility(candidates){
+  const list=document.getElementById('vol-list');if(!list)return;
+  list.innerHTML=candidates.map((c,i)=>{
+    const hot=c.chgPct>15?2:c.chgPct>8?1:0;
+    const bc=hot===2?'#dc2626':hot===1?'#f59e0b':'#94a3b8';
+    return `<div class="vol-item" onclick="openSym('${c.sym}')" style="${hot===2?'background:#fef2f2;border-color:#fee2e2;':hot===1?'background:#fffbeb;border-color:#fef3c7;':''}">
+      <span class="vol-rank" style="color:${bc};">${i+1}</span>
+      <span class="vol-sym" style="color:${hot===2?'#dc2626':hot===1?'#d97706':'#0f172a'};">${c.sym.replace('USDT','')}</span>
+      <div class="vol-bar-wrap"><div class="vol-bar-fill" style="width:${Math.round(c.score/candidates[0].score*100)}%;background:${bc};"></div></div>
+      <span class="vol-chg" style="color:${hot===2?'#dc2626':hot===1?'#d97706':'#64748b'};">+${c.chgPct.toFixed(1)}%</span>
+    </div>`;
+  }).join('');
+  const vts=document.getElementById('vol-ts');if(vts)vts.textContent=new Date().toLocaleTimeString();
+}
+
+// ═══════════════════════════════════════════════════════
+//  SELECT IDEA → load charts + show coin card
+// ═══════════════════════════════════════════════════════
+async function selectIdea(i){
+  S.activeIdea=i;
+  renderIdeas();
+  const idea=S.ideas[i];if(!idea)return;
+  await loadSym(idea.sym,idea);
+}
+
+// Универсальный клик по монете — открывает карточку
+async function openSym(sym){
+  let idea = S.ideas.find(i=>i.sym===sym);
+  const [c1h,c15m] = await Promise.all([
+    idea?.cds1h||fetchCds(sym,'1h',120),
+    idea?.cds15m||fetchCds(sym,'15m',80),
+  ]);
+  if(!idea) idea={sym,dir:'?',entry:0,sl:0,tp1:0,tp2:0,rr:0,conf:0,
+    pumpPct:0,rsiNow:50,sigs:[],why:'',ts:Date.now(),cds1h:c1h,cds15m:c15m};
+  else idea={...idea,cds1h:c1h,cds15m:c15m};
+  S.sym=sym; S.cds1h=c1h; S.cds15m=c15m;
+  S.cvdData=cvdFromCandles(c15m.slice(-80));
+  S.analysis=analyzeFull(c1h,c15m);
+  const sname=sym.replace('USDT','');
+  ['sym-label','ctf1h','ctf15m'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.textContent=id==='sym-label'?sname:id==='ctf1h'?`1H · ${sname}`:`15M · ${sname}`;
+  });
+  redrawCharts(); fetchFutures(sym);
+  showCoinCard(idea,S.analysis||{});
+}
+
+async function loadSym(sym,idea=null){
+  S.sym=sym;
+  const sname=sym.replace('USDT','');
+  const $=id=>document.getElementById(id);
+  [['sym-label',sname],['ctf1h',`1H · ${sname}`],['ctf15m',`15M · ${sname}`]].forEach(([id,v])=>{const el=$(id);if(el)el.textContent=v;});
+  // Load candles
+  const[c1h,c15m]=await Promise.all([
+    idea?.cds1h||fetchCds(sym,'1h',120),
+    idea?.cds15m||fetchCds(sym,'15m',80),
+  ]);
+  S.cds1h=c1h;S.cds15m=c15m;
+  S.cvdData=cvdFromCandles(S.cds15m.slice(-80));
+  S.analysis=analyzeFull(S.cds1h,S.cds15m);
+  const a=S.analysis;
+  // Update pump label
+  if(a){
+    const pl=$('pump-label');
+    if(pl){pl.textContent=`${a.isPumped?'🔴':'📊'} +${a.pumpPct.toFixed(1)}% · ${a.distE20.toFixed(1)}% от EMA20`;pl.style.color=a.isPumped?'var(--red)':a.pumpPct>PUMP_THRESH/2?'var(--orange)':'var(--muted)';}
+  }
+  // Fetch futures (and update coin card display)
+  fetchFutures(sym);
+  // Draw charts
+  redrawCharts();
+  // Show coin card in dynamic zone
+  if(idea)showCoinCard(idea,a);
+  else showPhaseContent(S.phase);
+}
+
+// ═══════════════════════════════════════════════════════
+//  COIN CARD (dynamic zone)
+// ═══════════════════════════════════════════════════════
+function showCoinCard(idea,analysis){
+  const dz=document.getElementById('dynamic-zone');if(!dz)return;
+  const a=analysis||S.analysis;
+
+  // Direction colors
+  const dc=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
+  const dbg=idea.isPump?'var(--amber-bg)':idea.dir==='LONG'?'var(--green-bg)':'var(--red-bg)';
+  const dbl=idea.isPump?'var(--amber-b)':idea.dir==='LONG'?'var(--green-b)':'var(--red-b)';
+  const dl=idea.isPump?'🔥 ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT';
+
+  // TF orientation
+  const tf=tfOrient(a);
+  const mtfHtml=[
+    {tf:'5m',v:tf.m5},{tf:'15m',v:tf.m15},{tf:'1h',v:tf.h1},{tf:'4h',v:tf.h4}
+  ].map(x=>{
+    const cls=x.v==='bull'?'mp-bull':x.v==='bear'?'mp-bear':'mp-neut';
+    const arrow=x.v==='bull'?'▲':x.v==='bear'?'▼':'→';
+    return `<span class="mp ${cls}">${x.tf} ${arrow}</span>`;
+  }).join('');
+
+  // Cap
+  const cap=typeof getCapLabel==='function'&&idea.quoteVol24h>0?getCapLabel(idea.quoteVol24h):null;
+  const capHtml=cap?`<div class="cap-badge"><span class="cap-dot" style="background:${cap.color};"></span><span>${cap.label} · $${idea.quoteVol24h>1e9?(idea.quoteVol24h/1e9).toFixed(1)+'B':idea.quoteVol24h>1e6?(idea.quoteVol24h/1e6).toFixed(0)+'M':'<1M'} vol/24h</span></div>`:'';
+
+  // Confidence ring
+  const confPct=Math.min(100,idea.conf||0);
+  const r=17,circ=2*Math.PI*r;
+  const offset=circ*(1-confPct/100);
+  const confColor=confPct>=85?'#16a34a':confPct>=70?'#2563eb':'#f59e0b';
+  const confRing=`<div class="conf-ring">
+    <svg width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="none" stroke="#f1f5f9" stroke-width="3.5"/>
+    <circle cx="20" cy="20" r="17" fill="none" stroke="${confColor}" stroke-width="3.5"
+      stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"
+      stroke-linecap="round" transform="rotate(-90 20 20)"/></svg>
+    <div class="conf-num" style="color:${confColor};">${confPct.toFixed(0)}</div>
+  </div>`;
+
+  // Progress bar entry→TP
+  let progress=0;
+  if(idea.entry>0&&idea.tp1>0){
+    const lp=S.activeTrack.find(t=>t.sym===idea.sym)?.lastPrice||idea.entry;
+    progress=idea.dir==='LONG'
+      ?Math.max(0,Math.min(100,(lp-idea.entry)/(idea.tp1-idea.entry)*100))
+      :Math.max(0,Math.min(100,(idea.entry-lp)/(idea.entry-idea.tp1)*100));
+  }
+  const progressColor=progress>70?'#22c55e':progress>40?'#3b82f6':'#94a3b8';
+
+  // SL/TP pcts
+  const tpPct=idea.entry>0&&idea.tp1>0?Math.abs((idea.tp1-idea.entry)/idea.entry*100):0;
+  const slPct=idea.entry>0&&idea.sl>0?Math.abs((idea.sl-idea.entry)/idea.entry*100):0;
+  const rrVal=idea.rr>0?idea.rr.toFixed(1):'?';
+
+  // OI change
+  const oiHtml=S.oiChange4h!=null
+    ?`<span class="oi-arr ${S.oiChange4h>=0?'oi-up':'oi-dn'}">${S.oiChange4h>=0?'↑':'↓'} ${S.oiChange4h>=0?'+':''}${S.oiChange4h.toFixed(1)}% 4ч</span>`:'';
+
+  // Candle patterns
+  const patterns=a?.candlePatterns||[];
+  const candleHtml=patterns.length
+    ?patterns.slice(0,3).map(p=>`<div class="ci ${p.bull?'bull':'bear'}">🕯 ${p.name}</div>`).join('')
+    :'<div class="ci neut" style="color:#94a3b8;">нет паттернов</div>';
+
+  // Phase tags
+  const phases=a?.phases||idea.phases||[];
+  const phaseDone=phases.filter(p=>p.done).length;
+  const phaseTotal=Math.max(phases.length,3);
+  const phaseHtml=phases.filter(p=>p.done).map(p=>`<span class="ph-tag">${p.label||p}</span>`).join('');
+
+  // Verdict
+  const verdictColor=idea.verdict==='GO'?'var(--green)':idea.verdict==='WAIT'?'var(--amber)':'var(--muted)';
+  const verdictBg=idea.verdict==='GO'?'#dcfce7':idea.verdict==='WAIT'?'#fef3c7':'#f1f5f9';
+  const verdictText=idea.verdict==='GO'?'#166534':idea.verdict==='WAIT'?'#92400e':'#64748b';
+  const verdictLabel=idea.verdict==='GO'?`GO ${idea.verdictConf||''}%`:idea.verdict||'—';
+
+  dz.innerHTML=`<div class="coin-card fade">
+
+  <div class="cc-hd">
+    <div class="cc-hd-l">
+      <div class="cc-sym-row">
+        <span class="cc-sym" style="color:${dc};">${idea.sym.replace('USDT','')}</span>
+        <span class="cc-dir-pill" style="background:${dbg};color:${dc};border:1px solid ${dbl};">${dl}</span>
+        ${capHtml}
+      </div>
+      <div class="cc-price-row">
+        <span class="cc-price">${idea.entry>0?'$'+fmt(idea.entry):'—'}</span>
+        ${(idea.pumpPct||0)>0?`<span class="cc-ptag cc-ptag-pump">🔥 +${(idea.pumpPct||0).toFixed(1)}%</span>`:''}
+        ${(idea.pumpSpeed||0)!==0?`<span class="cc-ptag cc-ptag-speed">⚡ ${(idea.pumpSpeed||0).toFixed(1)}%/2ч</span>`:''}
+      </div>
+    </div>
+    <div class="cc-hd-r">${confRing}</div>
+  </div>
+
+  <div class="cc-levels">
+    <div class="cc-lv"><div class="cc-lv-l">Триггер</div><div class="cc-lv-v" style="color:#1e293b;">${idea.entry>0?'$'+fmt(idea.entry):'—'}</div></div>
+    <div class="cc-lv" style="border-color:${idea.sl>0?'#fca5a5':''}">
+      <div class="cc-lv-l">Стоп-лосс</div>
+      <div class="cc-lv-v" style="color:var(--red);">${idea.sl>0?'$'+fmt(idea.sl):'—'}</div>
+      ${slPct>0?`<div class="cc-lv-p" style="color:var(--red);">+${slPct.toFixed(1)}%</div>`:''}
+    </div>
+    <div class="cc-lv" style="border-color:${idea.tp1>0?'#86efac':''}">
+      <div class="cc-lv-l">Тейк-профит</div>
+      <div class="cc-lv-v" style="color:var(--green);">${idea.tp1>0?'$'+fmt(idea.tp1):'—'}</div>
+      ${tpPct>0?`<div class="cc-lv-p" style="color:var(--green);">-${tpPct.toFixed(1)}%</div>`:''}
+    </div>
+    <div class="cc-lv"><div class="cc-lv-l">R/R</div><div class="cc-lv-v" style="color:var(--blue);">${rrVal}×</div></div>
+  </div>
+
+  <div class="cc-prog">
+    <div class="cc-prog-meta">
+      <span>${idea.entry>0?'Entry $'+fmt(idea.entry):''}</span>
+      <span style="color:#3b82f6;font-weight:700;">${progress>0?'→ '+progress.toFixed(0)+'% к цели':idea.verdictReason?'Тренд сломается':''}</span>
+      <span>${idea.tp1>0?'TP $'+fmt(idea.tp1):''}</span>
+    </div>
+    <div class="cc-prog-bar"><div class="cc-prog-fill" style="width:${progress}%;background:linear-gradient(90deg,#3b82f6,${progressColor});"></div></div>
+  </div>
+
+  <div class="cc-stats">
+    <div class="cc-st"><div class="cc-st-l">Памп 8h</div><div class="cc-st-v" style="color:${(idea.pumpPct||0)>=PUMP_THRESH?'var(--red)':'var(--amber)'};">+${(idea.pumpPct||0).toFixed(1)}%</div></div>
+    <div class="cc-st"><div class="cc-st-l">Скорость</div><div class="cc-st-v" style="color:${Math.abs(idea.pumpSpeed||0)>5?'var(--orange)':'var(--muted)'};">${(idea.pumpSpeed||0).toFixed(1)}%</div></div>
+    <div class="cc-st"><div class="cc-st-l">Vol/avg</div><div class="cc-st-v" style="color:${(idea.volRatio||0)>2?'var(--amber)':'var(--muted)'};">×${(idea.volRatio||1).toFixed(1)}</div></div>
+    <div class="cc-st"><div class="cc-st-l">RSI</div><div class="cc-st-v" style="color:${(idea.rsiNow||50)>70?'var(--red)':(idea.rsiNow||50)<30?'var(--green)':'var(--muted)'};">${(idea.rsiNow||50).toFixed(0)}</div></div>
+    <div class="cc-st"><div class="cc-st-l">ATR ratio</div><div class="cc-st-v" style="color:${(idea.atrRatio||1)>1.5?'var(--red)':'var(--muted)'};">×${(idea.atrRatio||1).toFixed(2)}</div></div>
+    <div class="cc-st"><div class="cc-st-l">CVD</div><div class="cc-st-v" style="color:${idea.cvdFalling?'var(--red)':'var(--green)'};">${idea.cvdFalling?'↓':'↑'}</div></div>
+  </div>
+
+  <div class="cc-futures">
+    <div class="cc-ft">
+      <div class="cc-ft-l">Open Interest</div>
+      <div class="cc-ft-main"><span class="cc-ft-v" id="cc-oi">${S.oi?fmt(S.oi)+' конт':'—'}</span>${oiHtml}</div>
+      <div class="cc-ft-sub" id="cc-oi-sub">${S.oiChange4h!=null?(S.oiChange4h<0?'OI падает — позиции закрываются':'OI растёт — позиции наращиваются'):'загрузка...'}</div>
+    </div>
+    <div class="cc-ft">
+      <div class="cc-ft-l">Funding Rate</div>
+      <div class="cc-ft-v" id="cc-fr">${S.fr!=null?(S.fr>=0?'+':'')+S.fr.toFixed(4)+'%':'—'}</div>
+      <div class="cc-ft-sub" id="cc-fr-warn" style="color:${S.fr!=null&&S.fr>0.05?'var(--red)':S.fr!=null&&S.fr<-0.05?'var(--green)':'var(--muted)'};">${S.fr!=null&&S.fr>0.05?'лонги платят':S.fr!=null&&S.fr<-0.05?'шорты платят':''}</div>
+    </div>
+    <div class="cc-ft">
+      <div class="cc-ft-l">Taker 4ч</div>
+      <div class="cc-ft-v" style="color:${S.takerRatio!=null?(S.takerRatio>1.1?'var(--green)':S.takerRatio<0.9?'var(--red)':'var(--muted)'):'var(--muted)'};">${S.takerRatio!=null?(S.takerRatio>1.1?'агр. лонги':S.takerRatio<0.9?'агр. шорты':'нейтрально'):'—'}</div>
+      <div class="cc-ft-sub">${S.takerRatio!=null?'ratio '+S.takerRatio.toFixed(2):''}</div>
+    </div>
+  </div>
+
+  <div class="cc-row5">
+    <div class="cc-r5b">
+      <div class="cc-r5-t">CVD · 15M</div>
+      <div class="cc-cvd-row"><span class="cc-cvd-lbl">Тренд дельты</span><span id="cc-cvd-trend" class="cc-cvd-val" style="color:${idea.cvdFalling?'var(--red)':'var(--green)'};">${idea.cvdFalling?'↓ МЕДВЕЖИЙ':'↑ БЫЧИЙ'}</span></div>
+      <div class="cc-cvd-row"><span class="cc-cvd-lbl">Дивергенция</span><span id="cc-cvd-div" class="cc-cvd-val" style="color:${idea.cvdDiv?'var(--red)':'var(--muted)'};">${idea.cvdDiv?'⚠ Да':'Нет'}</span></div>
+    </div>
+    <div class="cc-r5b">
+      <div class="cc-r5-t">МТФ</div>
+      <div class="cc-mtf-pills">${mtfHtml}</div>
+      ${tf.h4?`<div style="font-size:8px;color:var(--muted);margin-top:4px;">${tf.h4==='bull'?'↑ 4h бычий':'↓ 4h медвежий'}</div>`:''}
+    </div>
+    <div class="cc-r5b">
+      <div class="cc-r5-t">Свечной анализ</div>
+      <div class="cc-candle-list">${candleHtml}</div>
+    </div>
+  </div>
+
+  <div class="cc-text-section">
+    <div class="cc-tb cc-tb-agent">
+      <div class="cc-tb-hd"><span>⚡</span><span class="cc-tb-title">Сигналы агента</span></div>
+      <div class="cc-tb-text">${idea.why||idea.sigs?.join('<br>')||'—'}</div>
+    </div>
+    <div class="cc-tb cc-tb-ai">
+      <div class="cc-tb-hd">
+        <span>✦</span><span class="cc-tb-title">AI · ${idea.verdict?idea.verdict:'анализ'}</span>
+        ${idea.verdict?`<span class="cc-vp" style="background:${verdictBg};color:${verdictText};">${verdictLabel}</span>`:''}
+      </div>
+      <div class="cc-tb-text">${idea.verdictReason||'<span style="color:var(--dim);">Нажмите + AI анализ</span>'}</div>
+    </div>
+  </div>
+
+  <div class="cc-phases">
+    <div class="cc-ph-hd">
+      <span class="cc-ph-title">Фазы истощения</span>
+      <div class="cc-ph-score">
+        ${[1,2,3].map(i=>`<div class="cc-ph-dot${i<=phaseDone?' done':''}"></div>`).join('')}
+        <span style="font-size:8px;color:var(--amber);font-weight:700;margin-left:3px;">${phaseDone}/${phaseTotal}</span>
+      </div>
+    </div>
+    <div class="cc-ph-tags">${phaseHtml}</div>
+  </div>
+
+  <div class="cc-future-slot">
+    <span class="cc-fs-label">· · · место для дополнительных данных · · ·</span>
+  </div>
+
+  <div class="cc-actions">
+    <button class="cc-act cc-act-tv" onclick="window.open('https://www.tradingview.com/chart/?symbol=BINANCE:${idea.sym}','_blank')">▼ TradingView ↗</button>
+    <button class="cc-act cc-act-ai" onclick="handleAIAnalysis()">✦ AI анализ</button>
+    <button class="cc-act cc-act-work" onclick="toggleActive('${idea.sym}')">📌 В работу</button>
+    <button class="cc-act cc-act-copy" onclick="copyForChatGPT()">📋 Копировать</button>
+  </div>
+
+</div>`;
+  fetchFutures(idea.sym);
+}
+
+
+function tfOrient(cds){
+  if(!cds||cds.length<22)return'—';
+  const c=cds.map(x=>x.close),n=c.length-1;
+  const e20=ema(c,20),e50=ema(c,50);
+  if(!e20[n]||!e50[n])return'neutral';
+  if(c[n]>e20[n]&&e20[n]>e50[n])return'bull';
+  if(c[n]<e20[n]&&e20[n]<e50[n])return'bear';
+  return'neutral';
+}
+
+// ═══════════════════════════════════════════════════════
+//  PHASE TABS → show coins of that phase in dynamic zone
+// ═══════════════════════════════════════════════════════
+function setPhase(n,el){
+  S.phase=n;
+  S.activeCardSym=null; // сбрасываем lock карточки
+  document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));
+  if(el)el.classList.add('active');
+  showPhaseContent(n);
+}
+
+function showPhaseContent(phase){
+  const dz=document.getElementById('dynamic-zone');if(!dz)return;
+  if(phase===0)return; // карточка монеты открыта — не перетираем
+  if(phase===5){showWinrates();return;}
+  const phaseNames={1:'🔴 Памп',2:'🟡 Истощение',3:'🔴 Слом структуры',4:'✅ Готов к входу'};
+  const sigNames={1:'Фаза 1: памп +15%+ от EMA20',2:'Фаза 2: признаки истощения RSI/MACD/CVD',3:'Фаза 3: слом EMA20 на 15m',4:'Все фазы пройдены — сигнал на вход'};
+  // Filter ideas by phase
+  const coins=S.ideas.filter(idea=>{
+    if(!idea.cds1h||!idea.cds15m||idea.cds1h.length<5)return false;
+    const a=analyzeFull(idea.cds1h,idea.cds15m);
+    return a&&a.phase>=phase;
+  });
+  const phaseSigs=[
+    {1:'RSI>70 — перекупленность',2:'Верхние тени — давление продаж',3:'CVD дивергенция',4:'MACD разворот'},
+    {1:'RSI дивергенция',2:'CVD ↓ — покупки иссякают',3:'Пробой EMA20 на 15m',4:'Lower highs'},
+  ];
+  dz.innerHTML=`<div class="fade">
+    <div class="phase-list-hd">${phaseNames[phase]||'Фаза '+phase} · ${sigNames[phase]||''}</div>
+    ${!coins.length?`<div style="font-size:11px;color:var(--muted);padding:8px 0;">
+      Нет монет на фазе ${phase}.<br>
+      <span style="font-size:9px;color:var(--dim);">Агент сканирует 200 монет каждые 3м.</span>
+    </div>`:''}
+    ${coins.map(idea=>{
+      const a=analyzeFull(idea.cds1h,idea.cds15m);
+      const dc=idea.dir==='LONG'?'var(--green)':'var(--red)';
+      const idx=S.ideas.indexOf(idea);
+      return `<div class="phase-coin-row" onclick="selectIdea(${idx})">
+        <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${dc};cursor:pointer;" onclick="event.stopPropagation();openSym('${idea.sym}')">${idea.sym.replace('USDT','')}</span>
+        <span style="font-size:9px;color:${dc};font-weight:700;">${idea.dir==='LONG'?'▲':'▼'} ${idea.dir}</span>
+        <span style="font-size:9px;color:var(--muted);">+${idea.pumpPct.toFixed(1)}% · RSI ${idea.rsiNow.toFixed(0)}</span>
+        ${phase===4&&a?.readyToShort?`<span style="font-size:9px;font-weight:700;color:var(--red);">📊 Entry $${fmt(a.entry)}</span>`:''}
+        <span style="margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:700;color:${idea.conf>=85?'var(--red)':'var(--muted)'};">${idea.conf.toFixed(0)}</span>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  WINRATES
+// ═══════════════════════════════════════════════════════
+
+
+function scheduleWinrateCheck(idea){
+  if(!idea.sym||!idea.entry||!idea.sl||!idea.tp1)return;
+  var _rn=Date.now();
+  if(S.winrates.find(function(w){return w.sym===idea.sym&&w.result==='pending'&&(_rn-(w.recordedAt||0))<1800000;}))return;
+  var tpPct=idea.entry>0?Math.abs((idea.tp1-idea.entry)/idea.entry*100):0;
+  var slPct=idea.entry>0?Math.abs((idea.sl-idea.entry)/idea.entry*100):0;
+  S.winrates.unshift({
+    sym:idea.sym, dir:idea.dir||'?', entry:idea.entry,
+    tp:idea.tp1, sl:idea.sl, tpPct:tpPct, slPct:slPct,
+    ts:idea.ts||_rn, recordedAt:_rn, signalTime:_rn,
+    result:'pending', pnl:null, maxPnl:null, closePrice:null, closedAt:null, elapsed:0,
+    conf:idea.conf||0, pumpPct:idea.pumpPct||0
+  });
+  if(S.winrates.length>50)S.winrates=S.winrates.slice(0,50);
+  saveWR();
+  if(S.phase===5)showWinrates();
+}
+
+// Moscow midnight reset
+function checkMidnightReset(){
+  var now=new Date();
+  var msk=new Date(now.getTime()+3*3600000);
+  if(msk.getUTCHours()!==0||msk.getUTCMinutes()>5)return;
+  var today=msk.toISOString().slice(0,10);
+  if(localStorage.getItem('wr_reset_date')===today)return;
+  localStorage.setItem('wr_reset_date',today);
+  // Check prices first, then archive
+  checkPendingWinrates().then(function(){
+    var toArchive=S.winrates.map(function(w){
+      var r=Object.assign({},w);
+      if(r.result==='pending'){r.result='expired';r.closedAt=Date.now();}
+      return r;
+    });
+    saveWRHistory(toArchive);
+    S.winrates=[];
+    saveWR();
+    if(S.phase===5)showWinrates();
+    showToast('🕛 00:00 МСК — WR сброшен, '+toArchive.length+' записей в истории');
+  });
+}
+
+async function checkPendingWinrates(){
+  checkMidnightReset();
+  var now=Date.now();
+  var active=S.winrates.filter(function(w){return w.result==='pending';});
+  if(!active.length){saveWR();return;}
+  console.log('WR check: '+active.length+' pending');
+  await Promise.allSettled(active.map(async function(rec){
+    try{
+      var lp=await Promise.race([
+        fetchPrice(rec.sym),
+        new Promise(function(_,rej){setTimeout(function(){rej(new Error('t'));},5000);})
+      ]);
+      if(!lp||lp<=0)return;
+      rec.elapsed=Math.floor((now-(rec.signalTime||rec.ts||0))/60000);
+      var curPnl=rec.dir==='SHORT'?(rec.entry-lp)/rec.entry*100:(lp-rec.entry)/rec.entry*100;
+      if(rec.maxPnl===null||rec.maxPnl===undefined||curPnl>rec.maxPnl)rec.maxPnl=curPnl;
+      var hit=null;
+      if(rec.dir==='SHORT'){if(lp<=rec.tp)hit='win';else if(lp>=rec.sl)hit='loss';}
+      else{if(lp>=rec.tp)hit='win';else if(lp<=rec.sl)hit='loss';}
+      if(hit){
+        rec.result=hit;rec.closePrice=lp;rec.pnl=curPnl;rec.closedAt=now;
+        notify(hit==='win'?'✅ TP · '+rec.sym.replace('USDT',''):'❌ SL · '+rec.sym.replace('USDT',''),
+          (curPnl>=0?'+':'')+curPnl.toFixed(2)+'% за '+fmtElapsed(rec.elapsed));
+      }
+    }catch(e){}
+  }));
+  saveWR();
+  if(S.phase===5)showWinrates();
+}
+
+function fmtElapsed(min){
+  if(!min)return '—';
+  if(min<60)return min+'м';
+  return Math.floor(min/60)+'ч'+(min%60?' '+min%60+'м':'');
+}
+
+function fmtSignalTime(ts){
+  if(!ts)return '—';
+  var d=new Date(ts);
+  var mon=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'][d.getMonth()];
+  return d.getDate()+' '+mon+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+
+async function fetchPrice(sym){try{const r=await fetch(`${FAPI}/ticker/price?symbol=${sym}`);const j=await r.json();return+j.price;}catch{return null;}}
+
+
+function wrOpenSym(sym){openSym(sym);}
+
+// Пересчитать ВСЕ монеты в WR (pending + expired с нулевым PnL)
+async function recheckAllWinrates(){
+  var now=Date.now();
+  // Restore expired-with-zero-pnl back to pending for recheck
+  S.winrates.forEach(function(w){
+    if(w.result==='expired'&&(w.pnl===0||w.pnl===null||w.pnl===undefined)){
+      w.result='pending';
+    }
+  });
+  showToast('Пересчитываю все монеты...');
+  await checkPendingWinrates();
+  showWinrates();
+  showToast('✅ Пересчёт завершён');
+}
+// Event delegation for WR table rows
+document.addEventListener('click',function(e){
+  var tr=e.target.closest('.wr-tr');
+  if(tr&&tr.dataset.sym)openSym(tr.dataset.sym);
+});
+function clearWinrates(){if(confirm('Очистить все записи?')){S.winrates=[];saveWR();showWinrates();}}
+
+function showWRInfo(){
+  var pend=S.winrates.filter(function(w){return w.result==='pending';});
+  var win=S.winrates.filter(function(w){return w.result==='win';});
+  var loss=S.winrates.filter(function(w){return w.result==='loss';});
+  var hist=loadWRHistory();
+  alert('Сегодня: '+S.winrates.length+' записей\nPending: '+pend.length+' | Win: '+win.length+' | Loss: '+loss.length+'\n\nВ истории: '+hist.length+' записей\n\nPending:\n'+pend.slice(0,8).map(function(w){return w.sym+' '+w.dir+' $'+(w.entry||0).toFixed(4)+' TP:$'+(w.tp||0).toFixed(4)+' SL:$'+(w.sl||0).toFixed(4);}).join('\n'));
+}
+function _showWRInfoOld(){
+  var pend=S.winrates.filter(function(w){return w.result==='pending';});
+  var win=S.winrates.filter(function(w){return w.result==='win';});
+  var loss=S.winrates.filter(function(w){return w.result==='loss';});
+  alert('Всего: '+S.winrates.length+'\nPending: '+pend.length+' | Win: '+win.length+' | Loss: '+loss.length+'\n\n'+
+    pend.slice(0,10).map(function(w){return w.sym+' '+w.dir+' entry:'+(w.entry||0).toFixed(4)+' ('+Math.floor((Date.now()-(w.recordedAt||w.ts||0))/60000)+'м)';}).join('\n'));
+}
+
+function showWinrates(){
+  var dz=document.getElementById('dynamic-zone');if(!dz)return;
+  if(!window._wrTab)window._wrTab='today';
+  var _wrTab=window._wrTab;
+  var now2=Date.now();
+
+  // Merge history
+  var histData=[];
+  if(_wrTab!=='today'){
+    var hist=loadWRHistory();
+    var cutoff=_wrTab==='week'?now2-7*86400000:_wrTab==='month'?now2-30*86400000:0;
+    histData=hist.filter(function(w){return(w.signalTime||w.ts||0)>=cutoff;});
+  }
+  var allData=S.winrates.concat(histData);
+  var wins=allData.filter(function(w){return w.result==='win';});
+  var losses=allData.filter(function(w){return w.result==='loss';});
+  var pend=allData.filter(function(w){return w.result==='pending';});
+  var total=wins.length+losses.length;
+  var wr=total>0?(wins.length/total*100).toFixed(0):'—';
+  var avgW=wins.length>0?wins.reduce(function(s,w){return s+(w.pnl||0);},0)/wins.length:0;
+  var avgL=losses.length>0?losses.reduce(function(s,w){return s+(w.pnl||0);},0)/losses.length:0;
+  var maxPnlAll=allData.reduce(function(m,w){return Math.max(m,w.maxPnl||0);},0);
+  var sorted=[].concat(allData).sort(function(a,b){
+    if(a.result==='pending'&&b.result!=='pending')return -1;
+    if(a.result!=='pending'&&b.result==='pending')return 1;
+    return(b.signalTime||b.ts||0)-(a.signalTime||a.ts||0);
+  });
+
+  function tabBtn(tab,label){
+    var active=_wrTab===tab;
+    return '<button onclick="window._wrTab=\''+tab+'\';showWinrates();" style="font-size:8px;padding:2px 7px;border-radius:3px;cursor:pointer;font-family:inherit;'+(active?'background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);':'background:var(--s3);border:1px solid var(--border);color:var(--muted);')+'">'+label+'</button>';
+  }
+
+  dz.innerHTML='<div class="fade" style="font-size:12px;">'
+    +'<div class="phase-list-hd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">'
+    +'<div style="display:flex;gap:3px;">'+tabBtn('today','Сегодня')+tabBtn('week','Неделя')+tabBtn('month','Месяц')+tabBtn('all','Всё время')+'</div>'
+    +'<div style="display:flex;gap:3px;">'
+    +'<button onclick="checkPendingWinrates().then(function(){showWinrates();})" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;" title="Проверить pending">↻</button>'
+    +'<button onclick="recheckAllWinrates()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;" title="Пересчитать все монеты">⟳ Все</button>'
+    +'<button onclick="clearWinrates()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🗑</button>'
+    +'<button onclick="showWRInfo()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">🔍</button>'
+    +'</div></div>'
+    +'<div class="wr-grid4" style="margin-bottom:6px;">'
+    +'<div class="wr-box"><div class="wr-v" style="color:'+(parseFloat(wr)>=50?'var(--green)':'var(--red)')+';">'+wr+'%</div><div class="wr-l">Winrate</div></div>'
+    +'<div class="wr-box"><div class="wr-v" style="color:var(--green);">'+wins.length+'</div><div class="wr-l">✅ TP</div></div>'
+    +'<div class="wr-box"><div class="wr-v" style="color:var(--red);">'+losses.length+'</div><div class="wr-l">❌ SL</div></div>'
+    +'<div class="wr-box"><div class="wr-v" style="color:var(--amber);">'+pend.length+'</div><div class="wr-l">⏳ Ожидают</div></div>'
+    +'</div>'
+    +(total>0
+      ?'<div style="display:flex;gap:12px;font-size:9px;color:var(--muted);margin-bottom:6px;">'
+       +'<span>Ср. прибыль: <b style="color:var(--green);">+'+avgW.toFixed(2)+'%</b></span>'
+       +'<span>Ср. убыток: <b style="color:var(--red);">'+avgL.toFixed(2)+'%</b></span>'
+       +'<span>Макс PnL: <b style="color:var(--blue);">+'+maxPnlAll.toFixed(2)+'%</b></span>'
+       +'</div>'
+       +'<div style="height:4px;background:var(--s3);border-radius:2px;margin-bottom:8px;">'
+       +'<div style="height:100%;width:'+(wr==='—'?0:wr)+'%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:2px;"></div></div>'
+      :'')
+    +(sorted.length===0
+      ?'<div style="font-size:11px;color:var(--muted);padding:12px 0;">Нет данных. Сигналы GO автоматически попадают сюда.</div>'
+      :'<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+       +'<thead><tr style="border-bottom:2px solid var(--border);color:var(--dim);font-size:8px;text-transform:uppercase;">'
+       +'<th style="text-align:left;padding:4px 3px;">Монета</th>'
+       +'<th style="text-align:left;padding:4px 3px;">Напр.</th>'
+       +'<th style="text-align:right;padding:4px 3px;">Entry</th>'
+       +'<th style="text-align:right;padding:4px 3px;">TP $</th>'
+       +'<th style="text-align:right;padding:4px 3px;">SL $</th>'
+       +'<th style="text-align:right;padding:4px 3px;">PnL</th>'
+       +'<th style="text-align:right;padding:4px 3px;">Макс</th>'
+       +'<th style="text-align:right;padding:4px 3px;">Сигнал</th>'
+       +'<th style="text-align:right;padding:4px 3px;">Итог</th>'
+       +'</tr></thead><tbody>'
+       +sorted.map(function(w){
+         var isPend=w.result==='pending';
+         var isWin=w.result==='win';
+         var rowBg=isWin?'var(--green-bg)':w.result==='loss'?'var(--red-bg)':w.result==='expired'?'var(--s2)':'transparent';
+         var dirC=w.dir==='LONG'?'var(--green)':'var(--red)';
+         var pnlC=(w.pnl||0)>=0?'var(--green)':'var(--red)';
+         var tpPct=w.entry>0?Math.abs((w.tp-w.entry)/w.entry*100).toFixed(1):'?';
+         var slPct=w.entry>0?Math.abs((w.sl-w.entry)/w.entry*100).toFixed(1):'?';
+         var elapsed=w.elapsed&&!isPend?fmtElapsed(w.elapsed):'';
+         var statusHtml=isPend?'<span style="color:var(--amber);">⏳</span>'
+           :isWin?'<span style="color:var(--green);font-weight:700;">✅ TP</span>'
+           :w.result==='loss'?'<span style="color:var(--red);font-weight:700;">❌ SL</span>'
+           :'<span style="color:var(--dim);">exp</span>';
+         return '<tr data-sym="'+w.sym+'" class="wr-tr" style="cursor:pointer;border-bottom:1px solid var(--border);background:'+rowBg+';">'
+           +'<td style="padding:5px 3px;font-family:var(--mono);font-weight:700;">'+w.sym.replace('USDT','')+'</td>'
+           +'<td style="padding:5px 3px;"><span style="font-size:9px;font-weight:700;color:'+dirC+';">'+(w.dir==='LONG'?'▲ L':'▼ S')+'</span></td>'
+           +'<td style="padding:5px 3px;text-align:right;color:var(--text2);">$'+fmt(w.entry)+'</td>'
+           +'<td style="padding:5px 3px;text-align:right;"><span style="color:var(--green);">$'+fmt(w.tp)+'</span><span style="color:var(--dim);font-size:8px;"> +'+tpPct+'%</span></td>'
+           +'<td style="padding:5px 3px;text-align:right;"><span style="color:var(--red);">$'+fmt(w.sl)+'</span><span style="color:var(--dim);font-size:8px;"> -'+slPct+'%</span></td>'
+           +'<td style="padding:5px 3px;text-align:right;font-family:var(--mono);font-weight:700;color:'+pnlC+';">'+(w.pnl!=null?(w.pnl>=0?'+':'')+w.pnl.toFixed(2)+'%':'—')+'</td>'
+           +'<td style="padding:5px 3px;text-align:right;color:var(--blue);">'+(w.maxPnl!=null?(w.maxPnl>=0?'+':'')+w.maxPnl.toFixed(2)+'%':'—')+'</td>'
+           +'<td style="padding:5px 3px;text-align:right;color:var(--dim);white-space:nowrap;">'+fmtSignalTime(w.signalTime||w.ts)+(elapsed?' · '+elapsed:'')+'</td>'
+           +'<td style="padding:5px 3px;text-align:right;">'+statusHtml+'</td>'
+           +'</tr>';
+       }).join('')+'</tbody></table>')
+    +'</div>';
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  GEMINI AI
+// ═══════════════════════════════════════════════════════
+function getApiKey(){return localStorage.getItem('gemini_api_key')||'';}
+
+async function checkGeminiModels(){
+  const key = getApiKey();
+  if(!key){ alert('Сначала введи API ключ (кнопка 🔑 AI)'); return; }
+  const current = localStorage.getItem('gemini_model_override') || 'не выбрана';
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+    const j = await r.json();
+    if(j.error){ alert('Ошибка API: ' + j.error.message); return; }
+    const models = (j.models||[])
+      .filter(m=>m.supportedGenerationMethods?.includes('generateContent'))
+      .map(m=>m.name.replace('models/',''));
+    if(!models.length){ alert('Нет доступных моделей'); return; }
+    const choice = prompt(
+      'Текущая модель: ' + current + '\n\nДоступные модели:\n' + models.join('\n') + '\n\nВведи название:',
+      current !== 'не выбрана' ? current : models[0]
+    );
+    if(choice && choice.trim()){
+      localStorage.setItem('gemini_model_override', choice.trim());
+      updateGeminiBtn(true);
+      showToast('✅ Модель: ' + choice.trim());
+    }
+  } catch(e) {
+    alert('Ошибка: ' + e.message);
+  }
+}
+
+
+function promptClaudeKey(){
+  const key=prompt('Claude API Key (console.anthropic.com):',getClaudeKey());
+  if(key!==null){
+    localStorage.setItem('claude_api_key',key.trim());
+    const btn=document.getElementById('claude-btn');
+    if(btn){btn.style.color=key.trim()?'#4ade80':'var(--muted)';}
+    showToast(key.trim()?'✅ Claude подключён':'Claude ключ удалён');
+  }
+}
+
+function promptApiKey(){
+  const key=prompt('Google Gemini API ключ\n\nПолучите бесплатно: aistudio.google.com → Get API Key\n(После пополнения баланса лимиты снимаются)',getApiKey());
+  if(key&&key.length>20){
+    localStorage.setItem('gemini_api_key',key.trim());
+    updateGeminiBtn(true);
+    showToast('✓ Gemini AI подключён');
+  }
+}
+
+function updateGeminiBtn(ok){
+  const btn=document.getElementById('gemini-btn');
+  const status=document.getElementById('chat-status');
+  if(btn){
+    if(ok===true){btn.className='';btn.textContent='✦ Gemini ●';btn.style.color='#4ade80';}
+    else if(ok==='working'){btn.style.color='#f59e0b';}
+    else{btn.className='off';btn.textContent='🔑 AI';btn.style.color='#f87171';}
+  }
+  if(status){status.textContent=ok===true?'подключён':ok==='working'?'думает...':'не подключён';status.style.color=ok===true?'var(--green)':ok==='working'?'var(--amber)':'var(--dim)';}
+}
+
+function showToast(msg){
+  const t=document.createElement('div');
+  t.style.cssText='position:fixed;bottom:20px;right:20px;background:#1e293b;color:#f8fafc;padding:8px 14px;border-radius:6px;font-size:11px;font-weight:600;z-index:9999;';
+  t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);
+}
+
+// Auto-detect working Gemini model
+let _workingModel = null;
+const GEMINI_MODELS_TRY = [
+  'gemini-2.0-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-2.5-flash',
+];
+
+async function getWorkingModel(key) {
+  return localStorage.getItem('gemini_model_override') || 'gemini-2.0-flash-lite';
+}
+
+async function callGemini(prompt,maxTokens=800){
+  const key=getApiKey();if(!key)return null;
+  const model = await getWorkingModel(key);
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  const body={
+    contents:[{parts:[{text:prompt}]}],
+    generationConfig:{maxOutputTokens:maxTokens,temperature:0.2},
+  };
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){
+    const err=await r.json().catch(()=>({}));
+    const msg=err?.error?.message||`HTTP ${r.status}`;
+    if(r.status===429){
+      await new Promise(r=>setTimeout(r,15000));
+      const r2=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(!r2.ok)throw new Error('Лимит запросов. Подождите минуту.');
+      const d2=await r2.json();updateGeminiBtn(true);return d2?.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    }
+    updateGeminiBtn(false);throw new Error(msg);
+  }
+  const data=await r.json();
+  updateGeminiBtn(true);
+  const candidate = data?.candidates?.[0];
+  const text = candidate?.content?.parts?.[0]?.text || '';
+  const finishReason = candidate?.finishReason;
+  // If truncated by token limit, add note
+  // finishReason check removed - just return text as-is
+  return text;
+}
+
+// ═══════════════════════════════════════════════════════
+//  GEMINI VERDICT: GO / SKIP / WAIT
+// ═══════════════════════════════════════════════════════
+async function getGeminiVerdict(idea) {
+  if (!getApiKey()) return null;
+  const a = idea.cds1h && idea.cds15m ? analyzeFull(idea.cds1h, idea.cds15m) : null;
+  // Same full context as AI analysis button
+  const prompt = `${idea.sym} | ${idea.dir} | ${idea.conf?.toFixed(0)||0}/100
+Pump: +${(idea.pumpPct||0).toFixed(1)}% | EMA: ${(idea.dist||0).toFixed(1)}% | RSI: ${idea.rsiNow?.toFixed(0)||50} | Vol x${idea.volRatio?.toFixed(1)||1} | CVD: ${idea.cvdFalling?'falling':'rising'}${idea.cvdDiv?' + divergence':''}
+ATR x${(idea.atrRatio||1).toFixed(2)} | 4h: ${idea.trend4h||'neutral'}
+Signals: ${(idea.sigs||[]).join(' | ')}
+${a?'Phase: '+a.phase+'/3 | Ready: '+(a.readyToShort?'YES':'NO')+' | Exhaustion: '+(a.exSigs?.map(s=>s.t).join(', ')||'none')+' | Breakdown: '+(a.bkSigs?.map(s=>s.t).join(', ')||'none'):''}
+${idea.entry?'Entry: $'+fmt(idea.entry)+' | SL: $'+fmt(idea.sl)+' | TP: $'+fmt(idea.tp1):''}
+Candle patterns: ${(idea.allPatterns||[]).map(p=>p.name+' '+p.tf).join(', ')||'none'}
+
+Reply ONLY with JSON (no markdown):
+{"verdict":"GO","confidence":80,"reason":"1 sentence in Russian"}
+GO=enter now, SKIP=pass, WAIT=need confirmation
+Rules: GO only if 4h trend aligns AND volume >1.5x avg AND RSI in normal range. WAIT if trend neutral or 1 signal conflicts. SKIP if 4h opposes direction, or ATR>1.8, or pump already >15%. Be selective — target 1-2 GO per scan, not all signals.`;
+
+  try {
+    const model = localStorage.getItem('gemini_model_override') || 'gemini-2.0-flash-lite';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${getApiKey()}`;
+    const r = await fetch(url, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        contents:[{parts:[{text:prompt}]}],
+        generationConfig:{maxOutputTokens:200, temperature:0.2},
+        systemInstruction:{parts:[{text:'You are a disciplined intraday crypto trader with a strict filter. CRITICAL RULES: (1) NEVER give GO for LONG if 4h trend is bearish — only SKIP or WAIT. (2) NEVER give GO for SHORT if 4h trend is bullish — only SKIP or WAIT. (3) GO only if: 4h trend aligns with direction AND 1h trend aligns AND volume >1.5x avg AND RSI not overextended. (4) WAIT if trend neutral or 1 signal conflicts. (5) SKIP if trends oppose direction. Target 20-30% GO rate. Reply ONLY valid JSON. No markdown.'}]}
+      })
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!raw) return null;
+    const clean = raw.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+    const start = clean.indexOf('{'), end2 = clean.lastIndexOf('}');
+    if (start >= 0 && end2 > start) {
+      try {
+        const parsed = JSON.parse(clean.slice(start, end2+1));
+        if (parsed.verdict) return parsed;
+      } catch(e2) {}
+    }
+    // Fallback
+    const upper = raw.toUpperCase();
+    const verdict = upper.includes('"GO"')?'GO':upper.includes('"SKIP"')?'SKIP':upper.includes('"WAIT"')?'WAIT':null;
+    if (verdict) {
+      // Extract just the reason text, remove JSON structure
+      const reasonMatch = clean.match(/"reason"\s*:\s*"([^"]+)"/);
+      const reason = reasonMatch ? reasonMatch[1] : clean.replace(/[{}"\n,]/g,' ').replace(/verdict\s*:\s*\w+/gi,'').replace(/confidence\s*:\s*\d+/gi,'').trim().substring(0,150);
+      return {verdict, confidence:70, reason};
+    }
+    return null;
+  } catch(e) { return null; }
+}
+
+
+async function askAIAboutIdea(sym){
+  // Find by sym — immune to list reorders during scan
+  let idea=S.ideas.find(i=>i.sym===sym);
+  // Fallback to active track if not in ideas list
+  if(!idea){ const rec=S.activeTrack.find(t=>t.sym===sym); if(rec) idea={...rec,sigs:[],why:'',conf:rec.conf||70}; }
+  if(!idea)return;
+  const tid='t'+Date.now(); appendThinking(tid);
+  // If we already have a verdict, explain it — don't re-evaluate
+  if(idea.verdict && idea.verdictReason){
+    document.getElementById(tid)?.remove();
+    const a=S.analysis;
+    const detailPrompt=`${idea.sym} | ${idea.dir} | вердикт: ${idea.verdict}
+Причина вердикта: ${idea.verdictReason}
+Данные: +${(idea.pumpPct||0).toFixed(1)}% памп | EMA ${(idea.dist||0).toFixed(1)}% | RSI ${idea.rsiNow?.toFixed(0)||50} | Vol×${idea.volRatio?.toFixed(1)||1} | CVD:${idea.cvdFalling?'↓':'↑'} | 4h:${idea.trend4h||'?'}
+${a?'Фаза '+a.phase+'/3. '+( a.exSigs?.map(s=>s.t).join(', ')||''):''}
+${idea.entry?'Entry $'+fmt(idea.entry)+' · SL $'+fmt(idea.sl)+' · TP $'+fmt(idea.tp1)+' · R/R '+idea.rr:''}
+
+Вердикт: ${idea.verdict}. Данные выше.`;
+    if(!getApiKey()){appendMsg('ai','⚠️ Нужен Gemini API ключ.');return;}
+    updateGeminiBtn('working');
+    try{
+      const reply=await callGemini(detailPrompt,600);
+      if(reply) appendMsg('ai',`[${idea.sym} · ${idea.verdict}] ${reply}`);
+    }catch(e){appendMsg('ai','❌ '+e.message);}
+    return;
+  }
+  const a=S.analysis;
+  const prompt=`Данные монеты:\n${idea.sym} | ${idea.dir} | conf:${(idea.conf||0).toFixed(0)}/100
+Памп: +${(idea.pumpPct||0).toFixed(1)}% | Скорость: +${idea.pumpSpeed?.toFixed(1)||0}%/2ч | EMA20: ${(idea.dist||0).toFixed(1)}%
+Vol×${idea.volRatio?.toFixed(1)||1} | RSI: ${idea.rsiNow?.toFixed(0)||50} | CVD: ${idea.cvdFalling?'↓':'↑'}${idea.cvdDiv?' +div':''} | ATR×${(idea.atrRatio||1).toFixed(2)} | 4h: ${idea.trend4h||'neutral'}
+${a?`Фаза: ${a.phase}/3 | Вход: ${a.readyToShort?'ДА':'НЕТ'} | Истощение: ${a.exSigs?.map(s=>s.t).join(',')||'нет'} | Слом: ${a.bkSigs?.map(s=>s.t).join(',')||'нет'}`:''}
+${idea.entry?`Entry:$${fmt(idea.entry)} SL:$${fmt(idea.sl)} TP:$${fmt(idea.tp1)} RR:${(idea.rr||0).toFixed(1)||'?'}`:''}
+Сигналы: ${idea.sigs?.join(', ')||'—'}
+
+Ответь БЕЗ markdown, БЕЗ звёздочек, только текст:
+СИГНАЛ: подтверждён / слабый / опровергнут
+ЧТО ПРОИСХОДИТ: 1-2 предложения
+РИСКИ: одна фраза
+ДЕЙСТВИЕ: входить / ждать / пропустить`;
+  try{
+    updateGeminiBtn('working');
+    if (!getApiKey()) {
+      document.getElementById(tid)?.remove();
+      appendMsg('ai','⚠️ Нужен Gemini API ключ. Нажмите ✦ Gemini в топбаре.');
+      return;
+    }
+    updateGeminiBtn('working');
+    const reply=await callGemini(prompt,800);
+    document.getElementById(tid)?.remove();
+    if (!reply) { appendMsg('ai','⚠️ Gemini не ответил. Попробуйте снова.'); return; }
+    appendMsg('ai',`[${idea.sym}] ${reply}`);
+  }catch(e){
+    document.getElementById(tid)?.remove();
+    appendMsg('ai','❌ Ошибка: '+(e.message||'неизвестная'));
+    updateGeminiBtn(false);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHAT
+// ═══════════════════════════════════════════════════════
+let chatHistory=[];
+
+function buildContext(){
+  const a=S.analysis,lp=S.prices[S.sym]?.price;
+  let ctx=`[Рынок · ${new Date().toLocaleTimeString()}]\nМонета: ${S.sym} | Цена: $${fmt(lp)}\n`;
+  if(a)ctx+=`Памп: +${a.pumpPct?.toFixed(1)||0}% | EMA dist: ${a.distE20?.toFixed(1)||0}%\nФаза: ${a.phase}/3 | ${a.readyToShort?'✅ ГОТОВ К ВХОДУ':'⏳ Ждём'}\nCVD: ${a.cvdFalling?'↓':'↑'}${a.cvdDiv?' (дивергенция)':''} | RSI: ${a.rsiNow?.toFixed(0)||'?'}\n`;
+  return ctx;
+}
+
+async function sendChat(userMsg){
+  const inp=document.getElementById('chat-input');
+  const msg=userMsg||inp?.value?.trim();if(!msg)return;
+  if(inp&&!userMsg)inp.value='';
+  appendMsg('user',msg);
+  const tid='t'+Date.now();appendThinking(tid);
+  try{
+    if(!getApiKey()){
+      document.getElementById(tid)?.remove();
+      appendMsg('ai','⚠️ Нужен Gemini API ключ.\nНажмите кнопку 🔑 AI в топбаре.\nКлюч бесплатно: aistudio.google.com → Get API Key');
+      return;
+    }
+    // Detect coin in message
+    const coinMatch=msg.match(/^([A-Z]{2,10})(USDT?)?\\s*[?!]?$/i)||msg.match(/(?:анализ|посмотри|что с|как)\\s+([A-Z]{2,10})/i);
+    let extra='';
+    if(coinMatch){
+      let sym=(coinMatch[1]||'').toUpperCase();if(!sym.endsWith('USDT'))sym+='USDT';
+      try{
+        const res=await scoreForIdea(sym);
+        if(res)extra=`\n\n[Данные ${sym}]\nЦена: $${fmt(res.price)} | Сетап: ${res.bestDir||'нет'} (${res.bestConf?.toFixed(0)||0}/100)\nПамп: +${res.pumpPct?.toFixed(1)||0}% | RSI: ${res.rsiNow?.toFixed(0)||50} | Vol×${res.volRatio?.toFixed(1)||1}\nCVD: ${res.cvdFalling?'↓':'↑'} | 4h: ${res.trend4h||'neutral'}`;
+      }catch{}
+    }
+    updateGeminiBtn('working');
+    const hist=chatHistory.slice(-4).map(m=>`${m.role}: ${m.content.substring(0,100)}`).join('\n');
+    const fullPrompt=buildContext()+extra+(hist?'\n\n[История]\n'+hist:'')+'\n\n---\nВопрос: '+msg;
+    const reply=await callGemini(fullPrompt,2048);
+    document.getElementById(tid)?.remove();
+    if(!reply){appendMsg('ai','⚠️ Gemini не ответил. Попробуйте снова.');return;}
+    appendMsg('ai',reply);
+    chatHistory.push({role:'user',content:msg},{role:'assistant',content:reply});
+    if(chatHistory.length>12)chatHistory=chatHistory.slice(-12);
+  }catch(e){
+    document.getElementById(tid)?.remove();
+    if(e.message?.includes('429')||e.message?.includes('лимит'))
+      appendMsg('ai','⏳ Лимит Gemini (15 запросов/мин). Подождите минуту.');
+    else appendMsg('ai','❌ Ошибка: '+(e.message||'неизвестная'));
+  }
+}
+
+function askQuick(q){sendChat(q);}
+
+function renderMarkdown(text) {
+  // Use textContent approach - safe from HTML injection
+  // Just convert newlines and basic markdown without regex tricks
+  let lines = String(text).split('\n');
+  let html = lines.map(line => {
+    // Escape HTML
+    let s = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // Headers
+    if(s.startsWith('### ')) return '<div style="font-weight:700;color:var(--text2);margin:5px 0 2px;">' + s.slice(4) + '</div>';
+    if(s.startsWith('## '))  return '<div style="font-weight:700;color:var(--text);margin:5px 0 2px;">' + s.slice(3) + '</div>';
+    if(s.startsWith('# '))   return '<div style="font-weight:800;color:var(--text);margin:5px 0 2px;">' + s.slice(2) + '</div>';
+    // Horizontal rule
+    if(s.trim()==='---'||s.trim()==='***') return '<hr style="border:none;border-top:1px solid var(--border);margin:6px 0;">';
+    // Bullet
+    if(s.match(/^[\-\*•] /)) return '<div style="padding-left:10px;margin:1px 0;">• ' + s.slice(2) + '</div>';
+    // Numbered
+    if(s.match(/^\d+\. /)) return '<div style="padding-left:10px;margin:1px 0;">' + s + '</div>';
+    // Bold: replace **text** safely
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    return s || '<br>';
+  }).join('<br>');
+  return html;
+}
+
+function appendMsg(role,text){
+  const msgs=document.getElementById('chat-messages');if(!msgs)return;
+  const div=document.createElement('div');
+  if(role==='user'){
+    div.className='msg-user';
+    div.textContent=text;
+  } else {
+    div.className='msg-ai';
+    div.innerHTML=`<div class="msg-ai-hd">✦ Gemini · ${new Date().toLocaleTimeString()}</div>${renderMarkdown(text)}`;
+  }
+  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
+}
+
+function appendThinking(id){
+  const msgs=document.getElementById('chat-messages');if(!msgs)return;
+  const div=document.createElement('div');div.className='msg-thinking';div.id=id;div.textContent='● думаю...';
+  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════
+//  DATA FETCHING
+// ═══════════════════════════════════════════════════════
+async function fetchCds(sym,iv,limit=120){
+  try{const r=await fetch(`${FAPI}/klines?symbol=${sym}&interval=${iv}&limit=${limit}`);const raw=await r.json();if(Array.isArray(raw)&&raw.length>0)return raw.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));}catch{}
+  return[];
+}
+
+function getCapLabel(v){
+  if(v>500e6)return {label:'Высокая',color:'var(--green)',icon:'🟢'};
+  if(v>50e6) return {label:'Средняя',color:'var(--amber)',icon:'🟡'};
+  if(v>5e6)  return {label:'Низкая', color:'var(--orange)',icon:'🟠'};
+  return           {label:'Мелкая', color:'var(--red)',   icon:'🔴'};
+}
+async function fetchFutures(sym){
+  try{const r=await fetch(`${FAPI}/openInterest?symbol=${sym}`);const j=await r.json();if(j.openInterest)S.oi=+j.openInterest;}catch{S.oi=null;}
+  try{const r=await fetch(`${FAPI}/fundingRate?symbol=${sym}&limit=1`);const j=await r.json();if(Array.isArray(j)&&j[0])S.fr=+j[0].fundingRate*100;}catch{S.fr=null;}
+  updateFuturesDisplay();
+}
+
+function updateFuturesDisplay(){
+  // Mini topbar indicator
+  const el=document.getElementById('oi-fr');
+  if(el)el.textContent=S.fr!=null?`FR: ${S.fr>0?'+':''}${S.fr.toFixed(4)}%`:'—';
+  // Coin card fields
+  const ccOI=document.getElementById('cc-oi');
+  if(ccOI)ccOI.textContent=S.oi!=null?fmt(S.oi)+' контр':'—';
+  const ccFR=document.getElementById('cc-fr');
+  if(ccFR){
+    ccFR.textContent=S.fr!=null?`${S.fr>0?'+':''}${S.fr.toFixed(4)}%`:'—';
+    if(ccFR)ccFR.style.color=S.fr!=null?(S.fr>0?'var(--red)':'var(--green)'):'var(--muted)';
+  }
+  const ccWarn=document.getElementById('cc-fr-warn');
+  if(ccWarn){
+    if(S.fr!=null&&Math.abs(S.fr)>0.05){
+      ccWarn.style.display='block';
+      ccWarn.textContent=S.fr>0?'⚠ Лонги перегреты — фаворизирует шорт':'⚠ Шорты перегреты';
+      ccWarn.style.cssText=`display:block;font-size:9px;padding:3px 5px;border-radius:2px;margin-top:3px;font-weight:600;background:${S.fr>0?'var(--red-bg)':'var(--green-bg)'};color:${S.fr>0?'var(--red)':'var(--green)'};`;
+    } else ccWarn.style.display='none';
+  }
+  // CVD fields
+  const cvdFall=S.cvdData.length>10&&S.cvdData[S.cvdData.length-1]<S.cvdData[Math.max(0,S.cvdData.length-10)];
+  const cvdDiv=S.analysis?.cvdDiv;
+  const ccCVD=document.getElementById('cc-cvd-trend');
+  if(ccCVD){ccCVD.textContent=cvdFall?'↓ МЕДВЕЖИЙ':'↑ БЫЧИЙ';ccCVD.style.color=cvdFall?'var(--red)':'var(--green)';}
+  const ccCVDdiv=document.getElementById('cc-cvd-div');
+  if(ccCVDdiv){ccCVDdiv.textContent=cvdDiv?'⚠ Дивергенция':'Нет';ccCVDdiv.style.color=cvdDiv?'var(--red)':'var(--muted)';}
+}
+
+// ═══════════════════════════════════════════════════════
+//  WEBSOCKET
+// ═══════════════════════════════════════════════════════
+function connectWS(){
+  const syms=['SOLUSDT','AVAXUSDT','INJUSDT','SUIUSDT','ARBUSDT','WIFUSDT','NEARUSDT','APTUSDT','LINKUSDT','DOTUSDT','RUNEUSDT','LDOUSDT','STXUSDT','ORDIUSDT','PENDLEUSDT','ENAUSDT','MATICUSDT','SEIUSDT','OPUSDT','FETUSDT'];
+  const streams=syms.map(s=>`${s.toLowerCase()}@miniTicker`).join('/');
+  let retries=0;
+  const connect=()=>{
+    const ws=new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+    ws.onopen=()=>setLiveStatus('live');
+    ws.onmessage=e=>{try{const{data:d}=JSON.parse(e.data);if(d){S.prices[d.s]={price:+d.c,change:+d.P||0};updateTopbar();}}catch{}};
+    ws.onclose=()=>{if(retries<5){setTimeout(connect,3000);retries++;}};
+    ws.onerror=()=>{};
+  };
+  connect();
+}
+
+// ═══════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════
+function setLiveStatus(s){
+  const dot=document.getElementById('live-dot'),txt=document.getElementById('live-text');
+  if(!dot||!txt)return;
+  if(s==='live'){dot.className='';dot.style.background='#4ade80';txt.textContent='LIVE';txt.className='';txt.style.color='#4ade80';}
+  else if(s==='scanning'){dot.className='scanning';txt.textContent='SCAN';txt.className='scanning';}
+}
+
+function updateTopbar(){
+  const t=S.prices[S.sym];
+  if(t){
+    const pd=document.getElementById('price-display');if(pd)pd.textContent='$'+fmt(t.price);
+    const cd=document.getElementById('change-display');
+    if(cd){const chg=t.change||0;cd.textContent=(chg>=0?'▲':'▼')+Math.abs(chg).toFixed(2)+'%';cd.style.color=chg>=0?'#4ade80':'#f87171';}
+  }
+  const sec=Math.max(0,Math.round((S.nextRefresh-Date.now())/1000));
+  const rt=document.getElementById('refresh-timer');if(rt){rt.textContent=`↻${sec}с`;rt.style.color=sec<5?'#f59e0b':'#475569';}
+}
+
+function notify(title,body){
+  if(typeof Notification==='undefined'||Notification.permission!=='granted')return;
+  try{new Notification(title,{body});}catch{}
+}
+
+function resetToDefaults(){
+  renderIdeas();
+}
+
+let _darkTheme = false;
+function toggleTheme(){
+  _darkTheme = !_darkTheme;
+  const root = document.documentElement;
+  const btn = document.getElementById('theme-toggle');
+  if(_darkTheme){
+    root.style.setProperty('--bg','#0f1117');
+    root.style.setProperty('--s1','#16181f');
+    root.style.setProperty('--s2','#1c1f28');
+    root.style.setProperty('--s3','#252830');
+    root.style.setProperty('--border','#2d3142');
+    root.style.setProperty('--text','#f8fafc');
+    root.style.setProperty('--text2','#cbd5e1');
+    root.style.setProperty('--muted','#64748b');
+    root.style.setProperty('--dim','#334155');
+    if(btn){btn.textContent='🌙';btn.style.color='#f59e0b';}
+  } else {
+    root.style.removeProperty('--bg');
+    root.style.removeProperty('--s1');
+    root.style.removeProperty('--s2');
+    root.style.removeProperty('--s3');
+    root.style.removeProperty('--border');
+    root.style.removeProperty('--text');
+    root.style.removeProperty('--text2');
+    root.style.removeProperty('--muted');
+    root.style.removeProperty('--dim');
+    if(btn){btn.textContent='☀';btn.style.color='';}
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  ACTIVE TRACK — монеты "В работе" (выбраны пользователем)
+// ═══════════════════════════════════════════════════════
+
+function isActiveTrack(sym){ return S.activeTrack.some(t=>t.sym===sym); }
+
+function toggleActive(sym){
+  if(isActiveTrack(sym)){
+    S.activeTrack = S.activeTrack.filter(t=>t.sym!==sym);
+    saveActive();
+    showToast('Удалено из «В работе»');
+  } else {
+    const idea = S.ideas.find(i=>i.sym===sym);
+    const rec = {
+      sym, dir: idea?.dir||'?',
+      entry: idea?.entry||S.prices[sym]?.price||0,
+      sl: idea?.sl||0, tp1: idea?.tp1||0, rr: idea?.rr||0,
+      addedAt: Date.now(), lastPrice: 0,
+      alerts: [], pnlPct: 0,
+      pumpPct: idea?.pumpPct||0, rsiNow: idea?.rsiNow||0,
+    };
+    S.activeTrack.unshift(rec);
+    saveActive();
+    showToast('⚡ Добавлено в «В работе»');
+    // Немедленно запускаем первую проверку
+    setTimeout(()=>runActiveMonitor(), 500);
+    scheduleWinrateCheck(idea||rec);
+  }
+  updateTabCounts();
+  if(ideasTab==='active') renderIdeas();
+  // refresh coin card button state
+  const idea2 = S.ideas.find(i=>i.sym===sym);
+  if(idea2 && S.activeIdea===S.ideas.indexOf(idea2)){
+    const a=analyzeFull(idea2.cds1h||[],idea2.cds15m||[]);
+    showCoinCard(idea2,a);
+  }
+}
+
+function removeActiveTrack(sym){
+  S.activeTrack = S.activeTrack.filter(t=>t.sym!==sym);
+  saveActive();
+  updateTabCounts();
+  if(ideasTab==='active') renderIdeas();
+}
+
+async function runActiveMonitor(){
+  if(!S.activeTrack.length) return;
+  const now = Date.now();
+  await Promise.allSettled(S.activeTrack.map(async rec => {
+    try {
+      const lp = await fetchPrice(rec.sym);
+      if(!lp||lp<=0) return;
+      const prevPrice = rec.lastPrice||lp;
+      rec.lastPrice = lp;
+      rec.lastCheck = now;
+
+      // PnL от точки входа
+      if(rec.entry>0){
+        rec.pnlPct = rec.dir==='SHORT'
+          ? (rec.entry-lp)/rec.entry*100
+          : (lp-rec.entry)/rec.entry*100;
+      }
+
+      // Прогресс к TP (0-100%)
+      if(rec.entry>0 && rec.tp1>0){
+        rec.progress = rec.dir==='LONG'
+          ? Math.max(0, Math.min(100, (lp-rec.entry)/(rec.tp1-rec.entry)*100))
+          : Math.max(0, Math.min(100, (rec.entry-lp)/(rec.entry-rec.tp1)*100));
+      }
+
+      // Изменение с прошлой проверки
+      const chgPct = prevPrice>0?(lp-prevPrice)/prevPrice*100:0;
+      rec.chgPct = chgPct;
+
+      const newAlerts = [];
+
+      // 1. SL пробит — критично
+      if(rec.sl>0){
+        const slHit = rec.dir==='SHORT'?lp>=rec.sl:lp<=rec.sl;
+        if(slHit){
+          newAlerts.push({type:'danger', msg:`🚨 SL ПРОБИТ! Цена $${fmt(lp)}`});
+          notify(`🚨 SL · ${rec.sym.replace('USDT','')}`, `Цена пробила стоп $${fmt(lp)}`);
+          playAlert();
+          rec.slHit = true;
+        } else {
+          // Дистанция до SL
+          const distToSL = rec.dir==='SHORT'
+            ? (lp-rec.sl)/lp*100
+            : (rec.sl-lp)/lp*100;
+          if(distToSL>0 && distToSL<1.0){
+            const urgency = distToSL<0.3?'danger':'warn';
+            newAlerts.push({type:urgency, msg:`⛔ SL близко: ${distToSL.toFixed(2)}% (${fmt(rec.sl)})`});
+            if(distToSL<0.5&&!rec._slWarnedAt||(now-(rec._slWarnedAt||0))>60000){
+              notify(`⛔ ${rec.sym.replace('USDT','')} SL близко!`, `${distToSL.toFixed(2)}% до стопа`);
+              rec._slWarnedAt = now;
+            }
+          }
+        }
+      }
+
+      // 2. TP достигнут
+      if(rec.tp1>0){
+        const tpHit = rec.dir==='SHORT'?lp<=rec.tp1:lp>=rec.tp1;
+        if(tpHit){
+          newAlerts.push({type:'success', msg:`🎯 TP ДОСТИГНУТ! +${rec.pnlPct?.toFixed(2)}%`});
+          notify(`🎯 TP · ${rec.sym.replace('USDT','')}`, `+${rec.pnlPct?.toFixed(2)}% — цель достигнута!`);
+          playAlert();
+        } else {
+          const distToTP = rec.dir==='SHORT'
+            ? (rec.tp1-lp)/lp*100
+            : (lp-rec.tp1)/lp*100;
+          if(distToTP>0 && distToTP<1.0){
+            newAlerts.push({type:'success', msg:`🎯 TP близко: ${distToTP.toFixed(2)}% (${fmt(rec.tp1)})`});
+          }
+        }
+      }
+
+      // 3. Резкое движение против позиции за 15 сек
+      if(Math.abs(chgPct)>1.0){
+        const isAgainst = rec.dir==='SHORT' ? chgPct>0 : chgPct<0;
+        if(isAgainst){
+          newAlerts.push({type:'warn', msg:`⚠️ Движение против позиции: ${chgPct>0?'+':''}${chgPct.toFixed(2)}%`});
+          notify(`⚠️ ${rec.sym.replace('USDT','')} — разворот?`, `${chgPct>0?'+':''}${chgPct.toFixed(2)}% за последний интервал`);
+        }
+      }
+      // 4. Strong momentum with position
+      if(Math.abs(chgPct)>0.8){
+        const isFor = rec.dir==='SHORT' ? chgPct<0 : chgPct>0;
+        if(isFor) newAlerts.push({type:'ok', msg:`✅ Движение в сторону позиции: ${chgPct>0?'+':''}${chgPct.toFixed(2)}%`});
+      }
+
+      // 5. Глубокий анализ — CVD, EMA20, объём, свечи (каждые 2 мин)
+      const _deepInterval = 2*60*1000;
+      if(!rec._lastDeepCheck || (now-rec._lastDeepCheck) > _deepInterval) {
+        rec._lastDeepCheck = now;
+        try {
+          const [c15m, c1h] = await Promise.all([fetchCds(rec.sym,'15m',30), fetchCds(rec.sym,'1h',20)]);
+          if(c15m.length>=10) {
+            const closes = c15m.map(c=>c.close);
+            const vols = c15m.map(c=>c.volume);
+            const e20 = ema(closes,20);
+            const e20n = e20[e20.length-1];
+            const lastC = c15m[c15m.length-1];
+            const prevC = c15m[c15m.length-2];
+            const prevC2 = c15m[c15m.length-3];
+            const avgVol = vols.slice(-20,-1).reduce((s,v)=>s+v,0)/19;
+            const curVol = lastC.volume;
+
+            // CVD разворот
+            let cvd=0;
+            const cvdArr=c15m.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cvd+=b/r*c.volume;return cvd;});
+            const cvdNow=cvdArr[cvdArr.length-1];
+            const cvdPrev=cvdArr[Math.max(0,cvdArr.length-4)];
+            const cvdDrop = rec.dir==='LONG' ? cvdNow<cvdPrev*0.85 : cvdNow>cvdPrev*1.15;
+            if(cvdDrop){if(rec._cvdPending){newAlerts.push({type:'danger',msg:'🔴 CVD разворот против позиции (подтверждено)'});if(!rec._cvdWarnAt||(now-rec._cvdWarnAt)>3*60*1000){rec._cvdWarnAt=now;notify('🔴 '+rec.sym.replace('USDT','')+' CVD разворот','Подтверждено');playAlert();}rec._cvdPending=false;}else{rec._cvdPending=true;}}else{rec._cvdPending=false;}
+
+            // EMA20 пробита против позиции
+            const emaBroken = rec.dir==='LONG' ? lastC.close<e20n && prevC.close>e20[e20.length-2]
+                                                : lastC.close>e20n && prevC.close<e20[e20.length-2];
+            if(emaBroken){if(rec._emaPending){newAlerts.push({type:'danger',msg:'🔴 EMA20 пробита против позиции ($'+fmt(e20n)+')'});if(!rec._emaWarnAt||(now-rec._emaWarnAt)>3*60*1000){rec._emaWarnAt=now;notify('🔴 '+rec.sym.replace('USDT','')+' EMA20 пробита','Подтверждено');playAlert();}rec._emaPending=false;}else{rec._emaPending=true;}}else{rec._emaPending=false;}
+
+            // Объём ×2+ при движении против позиции
+            const volSpike = curVol > avgVol*2;
+            const priceAgainst = rec.dir==='LONG' ? lastC.close<lastC.open : lastC.close>lastC.open;
+            if(volSpike && priceAgainst) {
+              newAlerts.push({type:'danger', msg:`🔴 Объём ×${(curVol/avgVol).toFixed(1)} против позиции`});
+              if(!rec._volWarnAt||(now-rec._volWarnAt)>3*60*1000) {
+                rec._volWarnAt=now;
+                notify(`🔴 ${rec.sym.replace('USDT','')} — всплеск объёма`, `Объём ×${(curVol/avgVol).toFixed(1)} при движении против`);
+                playAlert();
+              }
+            }
+
+            // 2 свечи подряд против позиции с телом >0.5%
+            const bodyPrev = Math.abs(prevC.close-prevC.open)/prevC.open*100;
+            const bodyPrev2 = Math.abs(prevC2.close-prevC2.open)/prevC2.open*100;
+            const candleAgainst1 = rec.dir==='LONG' ? prevC.close<prevC.open : prevC.close>prevC.open;
+            const candleAgainst2 = rec.dir==='LONG' ? prevC2.close<prevC2.open : prevC2.close>prevC2.open;
+            if(candleAgainst1 && candleAgainst2 && bodyPrev>0.5 && bodyPrev2>0.5) {
+              newAlerts.push({type:'warn', msg:`⚠️ 2 свечи против позиции (${bodyPrev2.toFixed(1)}%, ${bodyPrev.toFixed(1)}%)`});
+              if(!rec._candleWarnAt||(now-rec._candleWarnAt)>5*60*1000) {
+                rec._candleWarnAt=now;
+                notify(`⚠️ ${rec.sym.replace('USDT','')} — свечи против`, '2 свечи подряд против позиции');
+              }
+            }
+
+            // Цена упала/выросла >2% за 5 последних свечей 15m
+            const price5ago = c15m[c15m.length-6]?.close||lp;
+            const move5 = (lp-price5ago)/price5ago*100;
+            const move5against = rec.dir==='LONG' ? move5<-2 : move5>2;
+            if(move5against) {
+              newAlerts.push({type:'danger', msg:`🔴 Движение ${move5.toFixed(1)}% за 5 свечей 15m против позиции`});
+              if(!rec._move5WarnAt||(now-rec._move5WarnAt)>5*60*1000) {
+                rec._move5WarnAt=now;
+                notify(`🔴 ${rec.sym.replace('USDT','')} — резкое движение`, `${move5.toFixed(1)}% за 75 минут против позиции`);
+                playAlert();
+              }
+            }
+
+            // AI анализ каждые 15 мин если есть ключ
+            const _aiInterval = 15*60*1000;
+            if(getApiKey() && (!rec._lastAiCheck||(now-rec._lastAiCheck)>_aiInterval)) {
+              rec._lastAiCheck = now;
+              const dangerSignals = newAlerts.filter(a=>a.type==='danger');
+              if(dangerSignals.length>=2) {
+                // Запускаем AI анализ при 2+ опасных сигналах
+                const prompt = `СРОЧНО. Монета ${rec.sym}, ${rec.dir} позиция.
+Entry: $${fmt(rec.entry)}, текущая цена: $${fmt(lp)}, PnL: ${rec.pnlPct?.toFixed(2)}%
+SL: $${fmt(rec.sl)}, TP: $${fmt(rec.tp1)}
+Опасные сигналы: ${dangerSignals.map(a=>a.msg).join('; ')}
+EMA20: $${fmt(e20n)}, цена ${lp>e20n?'выше':'ниже'} EMA20
+CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
+Объём: ×${(curVol/avgVol).toFixed(1)} от среднего
+Оцени опасность для позиции. Нужно ли срочно закрывать?`;
+                callGemini(prompt, 300).then(reply => {
+                  if(!reply) return;
+                  rec.aiWarning = reply;
+                  // Если AI говорит закрывать — критичный алерт
+                  const urgentWords = ['закрыть','закрывать','выйти','стоп','опасно','срочно'];
+                  const isUrgent = urgentWords.some(w=>reply.toLowerCase().includes(w));
+                  if(isUrgent) {
+                    notify(`🤖 AI: ${rec.sym.replace('USDT','')} — ЗАКРЫТЬ?`, reply.slice(0,100));
+                    playAlert();
+                  }
+                  if(ideasTab==='active') renderIdeas();
+                });
+              }
+            }
+          }
+        } catch(e) { console.warn('Deep check error:', rec.sym, e.message); }
+      }
+
+      if(newAlerts.length) rec.alerts = [...newAlerts, ...(rec.alerts||[])].slice(0,8);
+    } catch(e){}
+  }));
+  saveActive();
+  if(ideasTab==='active') renderIdeas();
+}
+
+// ═══════════════════════════════════════════════════════
+//  COPY FOR CHATGPT
+// ═══════════════════════════════════════════════════════
+async function copyForChatGPT(sym){
+  const idea = S.ideas.find(i=>i.sym===sym) || S.activeTrack.find(t=>t.sym===sym);
+  const a = S.analysis;
+  const lp = S.prices[sym]?.price || idea?.entry || 0;
+  const phase = a ? "ФАЗЫ ИСТОЩЕНИЯ: " + a.phase + "/3\n  Истощение: " + ((a.exSigs||[]).map(s=>s.t).join(", ")||"нет") + "\n  Слом: " + ((a.bkSigs||[]).map(s=>s.t).join(", ")||"нет") : "";
+  const sigsText = (idea?.sigs||[]).map(s=>"  * " + s).join("\n");
+  const prompt = [
+    "Проанализируй торговый сетап для " + sym + ":",
+    "",
+    "НАПРАВЛЕНИЕ: " + (idea?.dir||"?") + " | Уверенность: " + (idea?.conf?.toFixed(0)||"?") + "/100",
+    "Цена: $" + fmt(lp) + " | Памп 8h: +" + (idea?.pumpPct?.toFixed(1)||0) + "%",
+    "",
+    "УРОВНИ:",
+    "  Entry:  $" + fmt(idea?.entry||0),
+    "  Stop:   $" + fmt(idea?.sl||0),
+    "  Target: $" + fmt(idea?.tp1||0),
+    "  R/R:    " + (idea?.rr?.toFixed(1)||"?"),
+    "",
+    "ТЕХНИЧЕСКИЕ ДАННЫЕ:",
+    "  RSI 1h:   " + (idea?.rsiNow?.toFixed(0)||"?"),
+    "  Vol/avg:  x" + (idea?.volRatio?.toFixed(1)||"?"),
+    "  CVD:      " + (idea?.cvdFalling ? "медвежий" : "бычий") + (idea?.cvdDiv ? " + дивергенция" : ""),
+    "  ATR ratio: x" + (idea?.atrRatio?.toFixed(2)||"?"),
+    "  4h тренд: " + (idea?.trend4h||"neutral"),
+    "",
+    "СИГНАЛЫ:",
+    sigsText,
+    phase ? "\n" + phase : "",
+    "",
+    "Дай конкретный анализ: надёжен ли сетап, главные риски, рекомендация.",
+  ].join("\n");
+
+  // Захватываем canvas графика
+  try {
+    const chartEl = document.getElementById("chart1h");
+    const canvas = chartEl ? chartEl.querySelector("canvas") : null;
+    if (canvas) {
+      const imgUrl = canvas.toDataURL("image/png");
+      await navigator.clipboard.writeText(prompt).catch(()=>{});
+      const win = window.open("","_blank");
+      if (win) {
+        win.document.write("<html><head><title>Chart " + sym + "</title><style>body{margin:0;background:#0f172a;padding:20px;font-family:monospace;color:#94a3b8;}img{border:1px solid #334155;border-radius:6px;max-width:100%;}pre{background:#1e293b;padding:16px;border-radius:6px;white-space:pre-wrap;font-size:12px;line-height:1.6;margin-top:16px;}h3{color:#f1f5f9;}</style></head><body><h3>Chart " + sym + "</h3><img src='" + imgUrl + "'/><h3>Промпт (скопирован в буфер):</h3><pre>" + prompt.replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre></body></html>");
+        win.document.close();
+      }
+      showToast("Скриншот открыт, данные скопированы!");
+      return;
+    }
+  } catch(e){}
+
+  // Fallback — просто копируем текст
+  try {
+    await navigator.clipboard.writeText(prompt);
+    showToast("Данные скопированы! Вставьте в ChatGPT (Ctrl+V)");
+  } catch(e) {
+    const modal = document.createElement("div");
+    modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;";
+    modal.innerHTML = "<div style='background:#1e293b;border-radius:8px;padding:20px;max-width:500px;width:90%;max-height:80vh;overflow-y:auto;'><div style='display:flex;justify-content:space-between;margin-bottom:12px;'><b style='color:#f1f5f9;'>Скопируйте для ChatGPT</b><button onclick=\"this.closest('[style]').remove()\" style='background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px;'>x</button></div><textarea style='width:100%;height:300px;background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:8px;font-size:11px;font-family:monospace;' onclick='this.select()'>" + prompt + "</textarea></div>";
+    document.body.appendChild(modal);
+  }
+}
+
+// ══════ SEARCH & ANALYZE TAB ══════
+function renderSearchTab(list){
+  list.innerHTML='<div style="padding:8px;">'
+    +'<div style="font-size:9px;color:var(--muted);margin-bottom:6px;">Введите название монеты:</div>'
+    +'<div style="display:flex;gap:4px;margin-bottom:8px;">'
+    +'<input id="search-sym-input" placeholder="BTC, ETH, SOL..." style="flex:1;padding:5px 8px;border-radius:4px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-family:var(--mono);font-size:11px;" onkeydown="if(event.keyCode==13)analyzeManual()">'
+    +'<button onclick="analyzeManual()" style="padding:5px 10px;border-radius:4px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;">Анализ</button>'
+    +'</div><div id="search-result"></div></div>';
+}
+
+async function analyzeManual(){
+  var inp=document.getElementById('search-sym-input');
+  if(!inp)return;
+  var sym=inp.value.trim().toUpperCase();
+  if(!sym)return;
+  if(!sym.endsWith('USDT'))sym=sym+'USDT';
+  var res=document.getElementById('search-result');
+  if(res)res.innerHTML='<div style="padding:8px;font-size:11px;color:var(--muted);">⏳ Загружаю данные для '+sym+'...</div>';
+  try{
+    // Always fetch candles and show card, regardless of setup
+    const[c1h,c15m]=await Promise.all([fetchCds(sym,'1h',120),fetchCds(sym,'15m',80)]);
+    if(!c1h.length){if(res)res.innerHTML='<div style="padding:8px;color:var(--red);font-size:11px;">Монета не найдена: '+sym+'</div>';return;}
+    const lp=c1h[c1h.length-1].close;
+    // Try to find setup
+    const r=await scoreForIdea(sym).catch(()=>null);
+    var idea;
+    if(r&&r.bestDir){
+      idea={sym,dir:r.bestDir,conf:r.bestConf,sigs:r.bestSigs||[],why:r.why||'',
+        entry:r.entry,sl:r.sl,tp1:r.tp1,tp2:r.tp2,rr:r.rr,atrv:r.atrv,
+        pumpPct:r.pumpPct,pumpSpeed:r.pumpSpeed,dist:r.dist,
+        volRatio:r.volRatio,rsiNow:r.rsiNow,trend4h:r.trend4h,
+        cvdFalling:r.cvdFalling,cvdDiv:r.cvdDiv,atrRatio:r.atrRatio,
+        cds1h:r.cds1h,cds15m:r.cds15m,ts:Date.now(),quoteVol24h:0,manual:true};
+      if(res)res.innerHTML='<div style="padding:4px 0;font-size:10px;color:var(--green);">✅ Сетап найден: '+r.bestDir+' ('+r.bestConf.toFixed(0)+'/100)</div>';
+    } else {
+      idea={sym,dir:'?',conf:0,sigs:[],why:'Сетап не обнаружен',
+        entry:lp,sl:0,tp1:0,tp2:0,rr:0,atrv:0,
+        pumpPct:0,pumpSpeed:0,dist:0,volRatio:1,rsiNow:50,trend4h:'neutral',
+        cvdFalling:false,cvdDiv:false,atrRatio:1,
+        cds1h:c1h,cds15m:c15m,ts:Date.now(),quoteVol24h:0,manual:true};
+      if(res)res.innerHTML='<div style="padding:4px 0;font-size:10px;color:var(--amber);">⚠️ Сетап не обнаружен — показываю карточку монеты</div>';
+    }
+    S.sym=sym;S.cds1h=idea.cds1h;S.cds15m=idea.cds15m;
+    S.cvdData=cvdFromCandles(idea.cds15m.slice(-80));
+    S.analysis=analyzeFull(idea.cds1h,idea.cds15m);S.phase=0;
+    ['sym-label','ctf1h','ctf15m'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el)el.textContent=id==='sym-label'?sym.replace('USDT',''):id==='ctf1h'?'1H · '+sym.replace('USDT',''):'15M · '+sym.replace('USDT','');
+    });
+    redrawCharts();fetchFutures(sym);
+    showCoinCard(idea,S.analysis||{});
+    // AI анализ
+    if(getApiKey()||(typeof getClaudeKey!=='undefined'&&getClaudeKey())){
+      var aiFn=typeof getAIVerdict!=='undefined'?getAIVerdict:getGeminiVerdict;
+      aiFn(idea).then(function(v){
+        if(!v||!res)return;
+        idea.verdict=v.verdict;idea.verdictReason=v.reason;idea.verdictConf=v.confidence;
+        showCoinCard(idea,S.analysis||{});
+        var vc=v.verdict==='GO'?'var(--green)':v.verdict==='WAIT'?'var(--amber)':'var(--muted)';
+        var vi=v.verdict==='GO'?'✅':v.verdict==='WAIT'?'⏳':'⏭';
+        res.innerHTML+='<div style="font-size:10px;color:'+vc+';padding:3px 0;">'+vi+' AI: '+v.verdict+' ('+v.confidence+'%) — '+v.reason+'</div>';
+      });
+    }
+  }catch(e){if(res)res.innerHTML='<div style="padding:8px;color:var(--red);font-size:11px;">Ошибка: '+e.message+'</div>';}
+}
+
+async function openActiveCard(sym){
+  S._openingCard = sym;
+  const rec = S.activeTrack.find(t=>t.sym===sym);
+  const [c1h, c15m] = await Promise.all([
+    fetchCds(sym,'1h',120),
+    fetchCds(sym,'15m',80),
+  ]);
+  if(S._openingCard !== sym) return; // другая монета запрошена пока грузились
+  let idea = S.ideas.find(i=>i.sym===sym);
+  if(!idea){
+    idea = {sym, dir:rec?.dir||'?', entry:rec?.entry||0, sl:rec?.sl||0,
+            tp1:rec?.tp1||0, tp2:rec?.tp1||0, rr:rec?.rr||0, conf:rec?.conf||70,
+            pumpPct:rec?.pumpPct||0, rsiNow:rec?.rsiNow||50,
+            sigs:[], why:'', ts:rec?.addedAt||Date.now(),
+            cds1h:c1h, cds15m:c15m};
+  } else {
+    idea = {...idea, cds1h:c1h, cds15m:c15m};
+  }
+  S.sym=sym; S.cds1h=c1h; S.cds15m=c15m;
+  S.cvdData=cvdFromCandles(c15m.slice(-80));
+  S.analysis=analyzeFull(c1h,c15m);
+  S.phase=0;
+  const sname=sym.replace('USDT','');
+  ['sym-label','ctf1h','ctf15m'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.textContent=id==='sym-label'?sname:id==='ctf1h'?`1H · ${sname}`:`15M · ${sname}`;
+  });
+  redrawCharts();
+  fetchFutures(sym);
+  // Рендерим карточку и через 200мс перерендериваем — на случай если что-то перетёрло
+  showCoinCard(idea, S.analysis||{});
+  setTimeout(()=>{
+    if(S._openingCard===sym) showCoinCard(idea, S.analysis||{});
+  }, 250);
+}
+
+function renderActiveTab(list){
+  // Don't overwrite coin card in dynamic-zone — only update ideas-list
+  if(!S.activeTrack.length){
+    list.innerHTML='<div style="padding:16px;text-align:center;font-size:11px;color:var(--muted);">Нет монет в работе.<br><span style="font-size:9px;color:var(--dim);">Нажмите 📌 В работе на карточке монеты.</span></div>';
+    return;
+  }
+  list.innerHTML = S.activeTrack.map(rec => {
+    const pnlColor = rec.pnlPct>0?'var(--green)':rec.pnlPct<0?'var(--red)':'var(--muted)';
+    const bc = rec.dir==='LONG'?'var(--green)':rec.dir==='SHORT'?'var(--red)':'var(--amber)';
+    const latestAlert = rec.alerts?.[0];
+    const alertColor = latestAlert?.type==='danger'?'var(--red)':latestAlert?.type==='warn'?'var(--amber)':latestAlert?.type==='success'?'var(--green)':'var(--muted)';
+    const tpPct = rec.entry>0&&rec.tp1>0 ? Math.abs((rec.tp1-rec.entry)/rec.entry*100).toFixed(1) : '?';
+    const slPct = rec.entry>0&&rec.sl>0 ? Math.abs((rec.sl-rec.entry)/rec.entry*100).toFixed(1) : '?';
+    return `<div class="idea-card" style="border-left:3px solid ${bc};position:relative;" onclick="openActiveCard('${rec.sym}')">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-family:var(--mono);font-size:13px;font-weight:800;color:${bc};">${rec.sym.replace('USDT','')}</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <span style="font-size:8px;padding:1px 5px;border-radius:2px;font-weight:700;background:${rec.dir==='LONG'?'var(--green-bg)':'var(--red-bg)'};color:${bc};border:1px solid ${rec.dir==='LONG'?'var(--green-b)':'var(--red-b)'};">${rec.dir==='LONG'?'▲':'▼'} ${rec.dir}</span>
+          <button onclick="event.stopPropagation();removeActiveTrack('${rec.sym}')" style="font-size:9px;padding:1px 6px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;">✕</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin:4px 0;font-size:9px;color:var(--muted);">
+        ${rec.entry>0?`<span>Entry <b style="color:var(--text2);">$${fmt(rec.entry)}</b></span>`:''}
+        ${rec.sl>0?`<span>SL <b style="color:var(--red);">-${slPct}%</b></span>`:''}
+        ${rec.tp1>0?`<span>TP <b style="color:var(--green);">+${tpPct}%</b></span>`:''}
+        ${rec.rr>0?`<span>R/R <b>${rec.rr.toFixed(1)}</b></span>`:''}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${latestAlert?'4px':'0'};">
+        <span style="font-size:9px;color:var(--dim);">Цена: <b style="color:var(--text2);font-family:var(--mono);">${rec.lastPrice?'$'+fmt(rec.lastPrice):'—'}</b>${rec.lastCheck?` <span style="font-size:8px;color:var(--dim);">${Math.floor((Date.now()-rec.lastCheck)/1000)}с</span>`:''}</span>
+        <span style="font-family:var(--mono);font-size:12px;font-weight:800;color:${pnlColor};">${rec.pnlPct!=null&&rec.entry>0?(rec.pnlPct>=0?'+':'')+rec.pnlPct.toFixed(2)+'%':'—'}</span>
+      </div>
+      <div style="height:5px;background:var(--s3);border-radius:3px;margin:3px 0;overflow:hidden;">
+        <div style="height:100%;width:${Math.min(100,rec.progress||0)}%;background:${(rec.progress||0)>70?'var(--green)':'var(--blue)'};border-radius:3px;transition:width .3s;"></div>
+      </div>
+      ${latestAlert?`<div style="font-size:9px;padding:3px 6px;border-radius:3px;background:var(--s2);border-left:2px solid ${alertColor};color:${alertColor};margin-top:2px;">${latestAlert.msg}</div>`:''}
+      ${rec.aiWarning?`<div style="font-size:9px;padding:4px 6px;border-radius:3px;background:var(--blue-bg);border-left:2px solid var(--blue);color:var(--blue);margin-top:3px;line-height:1.4;">🤖 AI: ${rec.aiWarning.slice(0,120)}${rec.aiWarning.length>120?'…':''}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  WATCH LIST — монеты на перепроверке (WAIT от Gemini)
+// ═══════════════════════════════════════════════════════
+const WATCH_LIST = {}; // {sym: {idea, addedAt, checks, maxChecks}}
+const WATCH_INTERVAL_MS = 5 * 60 * 1000; // перепроверка каждые 5 мин
+const WATCH_MAX_TIME = 2 * 60 * 60 * 1000; // макс 2 часа
+
+function addToWatch(idea) {
+  if (WATCH_LIST[idea.sym]) return; // уже наблюдаем
+  WATCH_LIST[idea.sym] = {
+    idea: {...idea}, // копия на момент добавления
+    addedAt: Date.now(),
+    checks: 0,
+    maxChecks: 24, // 24 × 5мин = 2 часа
+  };
+  showToast(`👁 ${idea.sym.replace('USDT','')} → Наблюдение`);
+  renderWatchBadge();
+}
+
+function removeFromWatch(sym, reason) {
+  if (!WATCH_LIST[sym]) return;
+  delete WATCH_LIST[sym];
+  renderWatchBadge();
+}
+
+function renderWatchBadge() {
+  updateTabCounts();
+  renderIdeas();
+}
+
+async function runWatchChecks() {
+  const syms = Object.keys(WATCH_LIST);
+  if (!syms.length || !getApiKey()) return;
+
+  for (const sym of syms) {
+    const w = WATCH_LIST[sym];
+    if (!w) continue;
+
+    // Превысили лимит времени?
+    if (Date.now() - w.addedAt > WATCH_MAX_TIME || w.checks >= w.maxChecks) {
+      removeFromWatch(sym, 'timeout');
+      showToast(`⏱ ${sym.replace('USDT','')} — время наблюдения истекло`);
+      continue;
+    }
+
+    w.checks++;
+
+    // Получаем свежие данные
+    try {
+      const fresh = await scoreForIdea(sym);
+      if (!fresh || !fresh.bestDir) {
+        removeFromWatch(sym, 'no setup');
+        continue;
+      }
+
+      // Обновляем идею свежими данными
+      w.idea = {...w.idea, ...fresh,
+        dir: fresh.bestDir, conf: fresh.bestConf,
+        sigs: fresh.bestSigs, why: fresh.why,
+        pumpPct: fresh.pumpPct, pumpSpeed: fresh.pumpSpeed,
+        dist: fresh.dist, volRatio: fresh.volRatio,
+        rsiNow: fresh.rsiNow, cvdFalling: fresh.cvdFalling,
+      };
+
+      // Перепрашиваем Gemini
+      const verdict = await getGeminiVerdict(w.idea);
+      if (!verdict) continue;
+
+      if (verdict.verdict === 'GO') {
+        // Сигнал подтверждён!
+        w.idea.verdict = 'GO';
+        w.idea.verdictReason = verdict.reason;
+        w.idea.verdictConf = verdict.confidence;
+        // Добавляем в основной список сигналов
+        if (!S.ideas.find(i => i.sym === sym)) {
+          S.ideas.unshift(w.idea);
+        }
+        notify(`✅ GO · ${sym.replace('USDT','')}`, verdict.reason || 'Сигнал подтверждён');
+        showToast(`✅ ${sym.replace('USDT','')} → GO!`);
+        removeFromWatch(sym, 'confirmed');
+        // ✅ FIX: Track winrate for WAIT→GO signals too
+        if (w.idea.entry && w.idea.sl && w.idea.tp1) scheduleWinrateCheck(w.idea);
+        renderIdeas();
+
+      } else if (verdict.verdict === 'SKIP') {
+        removeFromWatch(sym, 'skipped');
+        showToast(`⏭ ${sym.replace('USDT','')} — пропускаем`);
+      }
+      // WAIT — продолжаем наблюдать
+    } catch(e) { /* skip on error */ }
+
+    // Пауза между запросами
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  renderWatchBadge();
+}
+
+// Sound alert
+let _alertCtx = null;
+function playAlert() {
+  try {
+    _alertCtx = _alertCtx || new (window.AudioContext||window.webkitAudioContext)();
+    [880, 1100, 880, 1320].forEach((f, i) => {
+      const o = _alertCtx.createOscillator(), g = _alertCtx.createGain();
+      o.connect(g); g.connect(_alertCtx.destination);
+      o.frequency.value = f; o.type = 'sine';
+      const t = _alertCtx.currentTime + i * 0.15;
+      g.gain.setValueAtTime(0.3, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+      o.start(t); o.stop(t + 0.22);
+    });
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+// Check API key status
+if(getApiKey())updateGeminiBtn(true);
+
+// BTC Monitor
+const BTC_STATE = {price:0, prev1h:0, change1h:0, trend:'neutral', lastCheck:0, history:[]};
+async function checkBTC(){
+  try{
+    var r=await fetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=2');
+    var j=await r.json();
+    if(!Array.isArray(j)||j.length<2)return;
+    var lp=parseFloat(j[j.length-1][4]); // current close
+    var lp1h=parseFloat(j[0][4]); // 1h ago close
+    if(!lp||!lp1h)return;
+    BTC_STATE.price=lp;
+    BTC_STATE.prev1h=lp1h;
+    BTC_STATE.change1h=(lp-lp1h)/lp1h*100;
+    BTC_STATE.trend=BTC_STATE.change1h>0.5?'bull':BTC_STATE.change1h<-0.5?'bear':'neutral';
+    BTC_STATE.lastCheck=Date.now();
+    updateBTCBanner();
+  }catch(e){}
+}
+function updateBTCBanner(){
+  var price=BTC_STATE.price||0;
+  var ch=BTC_STATE.change1h||0;
+  var abs=Math.abs(ch);
+  var pEl=document.getElementById('btc-price-main');
+  var cEl=document.getElementById('btc-change-main');
+  var tEl=document.getElementById('btc-trend-main');
+  if(!pEl)return;
+  pEl.textContent=price>0?'$'+price.toFixed(0):'—';
+  var dir=ch>0?'↑':ch<0?'↓':'→';
+  var color=abs>=2?ch>0?'var(--green)':'var(--red)':abs>=0.5?ch>0?'#4ade80':'#f87171':'#94a3b8';
+  cEl.textContent=(ch>=0?'+':'')+ch.toFixed(2)+'%';
+  cEl.style.color=color;
+  if(tEl){
+    if(BTC_STATE.trend==='bull'){tEl.textContent='1ч ▲';tEl.style.background='var(--green-bg)';tEl.style.color='var(--green)';}
+    else if(BTC_STATE.trend==='bear'){tEl.textContent='1ч ▼';tEl.style.background='var(--red-bg)';tEl.style.color='var(--red)';}
+    else{tEl.textContent='1ч →';tEl.style.background='transparent';tEl.style.color='#94a3b8';}
+  }
+  if(abs>=2&&(!BTC_STATE._notified||(Date.now()-BTC_STATE._notified)>30*60*1000)){
+    BTC_STATE._notified=Date.now();
+    notify('⚡ BTC '+dir+' '+(ch>=0?'+':'')+ch.toFixed(2)+'% за 1ч','Проверьте позиции');
+  }
+}
+setInterval(checkBTC, 5*60*1000);
+setTimeout(checkBTC, 3000);
+
+// Connect WS
+connectWS();
+
+// Load initial symbol
+loadSym('SOLUSDT');
+
+// Start scan
+setTimeout(()=>runIdeas(false),2000);
+
+// Timers
+setInterval(updateTopbar,1000);
+setInterval(()=>{
+  if(S.sym){
+    fetchCds(S.sym,'1h',120).then(c=>{if(c.length){S.cds1h=c;if(S.cds1h.length)drawCandles('chart1h',S.cds1h,null);if(S.cds1h.length)drawVolume(S.cds1h);}}).catch(()=>{});
+    fetchCds(S.sym,'15m',80).then(c=>{if(c.length){S.cds15m=c;S.cvdData=cvdFromCandles(c.slice(-80));drawCandles('chart15m',S.cds15m,null);drawCVD(S.cvdData);}}).catch(()=>{});
+    fetchFutures(S.sym);
+  }
+  S.nextRefresh=Date.now()+REFRESH_INTERVAL;
+},REFRESH_INTERVAL);
+setInterval(()=>runIdeas(false),IDEAS_INTERVAL);
+setInterval(function(){
+  var now=Date.now();
+  var before=S.ideas.length;
+  S.ideas=S.ideas.filter(function(idea){
+    // Удаляем GO через 15 мин если не в работе
+    if(idea.verdict==='GO'&&idea.goAt&&!isActiveTrack(idea.sym)){
+      if(now-idea.goAt>15*60*1000){
+        showToast('⏱ '+idea.sym.replace('USDT','')+' GO истёк (15м)');
+        return false;
+      }
+    }
+    // Удаляем SKIP через 15 мин
+    if(idea.verdict==='SKIP'&&idea.skipAt){
+      if(now-idea.skipAt>15*60*1000)return false;
+    }
+    return true;
+  });
+  if(S.ideas.length!==before)renderIdeas();
+},60*1000); // expiry check every 1 min
+setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
+setInterval(function(){checkPendingWinrates();checkMidnightReset();}, 15*60*1000); // WR check every 15 min
+setInterval(()=>runActiveMonitor(), 15*1000); // Active track monitor every 15 sec
+setTimeout(()=>runActiveMonitor(), 5000); // Initial active monitor check
+// Initial check on load
+// Clean up winrates with bad TP/SL (<1% range)
+S.winrates = S.winrates.filter(w => {
+  if (w.result !== 'pending') return true;
+  const tpPct = w.entry > 0 ? Math.abs(w.tp - w.entry) / w.entry * 100 : 0;
+  return tpPct >= 1.0; // keep only if TP is at least 1% away
+});
+saveWR();
+setTimeout(()=>checkPendingWinrates(), 10000);
+setInterval(()=>{
+  fetch(`${FAPI}/ticker/24hr`).then(r=>r.json()).then(t=>{
+    if(!Array.isArray(t))return;
+    const top=t.filter(x=>x.symbol.endsWith('USDT')&&!x.symbol.includes('_'))
+      .map(x=>({sym:x.symbol,chgPct:Math.abs(+x.priceChangePercent),vol:+x.quoteVolume,score:Math.abs(+x.priceChangePercent)*2.5+(+x.quoteVolume>100e6?4:+x.quoteVolume>30e6?2:1)}))
+      .filter(x=>x.vol>1e6).sort((a,b)=>b.score-a.score).slice(0,10);
+    renderVolatility(top);
+  }).catch(()=>{});
+},VOL_INTERVAL);
+
+// Notification permission
+if(typeof Notification!=='undefined'&&Notification.permission==='default'){Notification.requestPermission();}
+</script>
 </body>
 </html>
