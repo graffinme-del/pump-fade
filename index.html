@@ -200,48 +200,36 @@ button:hover{opacity:.85;}
 #chat-input{flex:1;background:var(--s1);border:1px solid var(--border);border-radius:3px;padding:6px 8px;font-size:11px;font-family:inherit;color:var(--text);resize:none;height:48px;outline:none;}
 .chat-send{background:var(--red);color:white;border-radius:3px;padding:0 12px;font-size:15px;font-weight:700;align-self:stretch;}
 
-/* ══════════════════════════════════════════════
-   COIN CARD — новый дизайн
-══════════════════════════════════════════════ */
-.coin-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+/* ══ COIN CARD NEW ══ */
 .cc-hd{display:flex;justify-content:space-between;align-items:flex-start;padding:8px 12px;border-bottom:1px solid var(--border);}
-.cc-hd-l{display:flex;flex-direction:column;gap:4px;}
-.cc-sym-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.cc-sym-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
 .cc-sym{font-family:var(--mono);font-size:20px;font-weight:900;}
-.cc-dir-pill{padding:2px 9px;border-radius:20px;font-size:9px;font-weight:800;}
-.cap-badge{display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);font-weight:600;}
-.cap-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.cc-dir{padding:2px 9px;border-radius:20px;font-size:9px;font-weight:800;}
+.cc-cap{display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);font-weight:600;}
+.cap-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;display:inline-block;}
 .cc-price-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 .cc-price{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text2);}
-.cc-ptag{font-size:7px;padding:1px 4px;border-radius:2px;font-weight:700;}
-.cc-ptag-pump{background:#fef3c7;color:#92400e;}
-.cc-ptag-speed{background:var(--s2);color:var(--muted);}
-.cc-hd-r{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
+.cc-tag{font-size:7px;padding:1px 4px;border-radius:2px;font-weight:700;}
+.cc-tag-pump{background:#fef3c7;color:#92400e;}
+.cc-tag-muted{background:var(--s2);color:var(--muted);}
+.cc-conf{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
 .conf-ring{position:relative;width:40px;height:40px;flex-shrink:0;}
 .conf-ring svg{position:absolute;top:0;left:0;}
 .conf-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:900;}
-
-/* Levels */
 .cc-levels{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);}
 .cc-lv{background:var(--s1);border:1px solid var(--border);border-radius:6px;padding:6px 8px;}
 .cc-lv-l{font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;}
-.cc-lv-v{font-family:var(--mono);font-size:13px;font-weight:800;}
+.cc-lv-v{font-family:var(--mono);font-size:13px;font-weight:800;color:var(--text2);}
 .cc-lv-p{font-size:8px;font-weight:600;margin-top:1px;}
-
-/* Progress */
 .cc-prog{padding:5px 12px 8px;border-bottom:1px solid var(--border);}
 .cc-prog-meta{display:flex;justify-content:space-between;font-size:8px;color:var(--dim);margin-bottom:3px;}
 .cc-prog-bar{height:5px;background:var(--s3);border-radius:3px;overflow:hidden;}
-.cc-prog-fill{height:100%;border-radius:3px;transition:width .3s;}
-
-/* Stats */
+.cc-prog-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#3b82f6,#22c55e);transition:width .3s;}
 .cc-stats{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid var(--border);}
 .cc-st{padding:6px 4px;text-align:center;border-right:1px solid var(--border);}
 .cc-st:last-child{border-right:none;}
 .cc-st-l{font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;}
 .cc-st-v{font-family:var(--mono);font-size:11px;font-weight:700;}
-
-/* Futures */
 .cc-futures{display:grid;grid-template-columns:2fr 1fr 1fr;border-bottom:1px solid var(--border);}
 .cc-ft{padding:7px 10px;border-right:1px solid var(--border);}
 .cc-ft:last-child{border-right:none;}
@@ -252,8 +240,6 @@ button:hover{opacity:.85;}
 .oi-arr{font-size:9px;font-weight:800;padding:1px 5px;border-radius:3px;}
 .oi-up{background:var(--green-bg);color:var(--green);}
 .oi-dn{background:var(--red-bg);color:var(--red);}
-
-/* CVD + MTF + Candles row */
 .cc-row5{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border);}
 .cc-r5b{padding:7px 10px;border-right:1px solid var(--border);}
 .cc-r5b:last-child{border-right:none;}
@@ -269,8 +255,6 @@ button:hover{opacity:.85;}
 .cc-candle-list{display:flex;flex-direction:column;gap:2px;}
 .ci{font-size:8px;display:flex;align-items:center;gap:3px;}
 .ci.bear{color:var(--red);}.ci.bull{color:var(--green);}.ci.neut{color:var(--muted);}
-
-/* Two text boxes */
 .cc-text-section{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--border);}
 .cc-tb{padding:8px 10px;border-right:1px solid var(--border);}
 .cc-tb:last-child{border-right:none;}
@@ -280,8 +264,6 @@ button:hover{opacity:.85;}
 .cc-tb-text{font-size:9px;color:var(--text2);line-height:1.5;}
 .cc-tb-agent{background:var(--s1);}
 .cc-tb-ai{background:#eff6ff;}
-
-/* Phases */
 .cc-phases{padding:7px 12px;border-bottom:1px solid var(--border);}
 .cc-ph-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
 .cc-ph-title{font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;}
@@ -290,19 +272,13 @@ button:hover{opacity:.85;}
 .cc-ph-dot.done{background:#f59e0b;}
 .cc-ph-tags{display:flex;gap:3px;flex-wrap:wrap;}
 .ph-tag{padding:2px 6px;background:#fef3c7;border:1px solid #fde68a;border-radius:3px;font-size:7px;font-weight:600;color:#92400e;}
-
-/* Future slot */
-.cc-future-slot{padding:6px 12px;background:var(--s1);border-bottom:1px solid var(--border);min-height:24px;display:flex;align-items:center;justify-content:center;}
-.cc-fs-label{font-size:7px;color:var(--border);text-transform:uppercase;letter-spacing:1px;}
-
-/* Actions */
-.cc-actions{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;}
-.cc-act{padding:9px 6px;border:none;cursor:pointer;font-size:9px;font-weight:700;font-family:inherit;border-right:1px solid rgba(0,0,0,.05);}
+.cc-actions{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;border-top:1px solid var(--border);}
+.cc-act{padding:9px 6px;border:none;cursor:pointer;font-size:9px;font-weight:700;font-family:inherit;border-right:1px solid var(--border);}
 .cc-act:last-child{border-right:none;}
 .cc-act-tv{background:var(--red);color:#fff;}
-.cc-act-ai{background:#1e40af;color:#bfdbfe;}
-.cc-act-work{background:#15803d;color:#dcfce7;}
-.cc-act-copy{background:var(--s2);color:var(--muted);border-top:1px solid var(--border);}
+.cc-act-ai{background:var(--blue-bg);color:var(--blue);}
+.cc-act-work{background:var(--green-bg);color:var(--green);}
+.cc-act-copy{background:var(--s2);color:var(--muted);}
 
 </style>
 </head>
@@ -320,12 +296,14 @@ button:hover{opacity:.85;}
     <span class="thresh-val" id="thresh-val">15%</span>
   </div>
   <div style="flex:1"></div>
-  <span style="font-size:10px;color:#94a3b8;font-family:var(--mono);margin-right:4px;">₿</span>
-  <span class="top-price" id="btc-price-main">—</span>
-  <span id="btc-change-main" style="font-size:13px;font-weight:700;margin-left:4px;">—</span>
-  <span id="btc-trend-main" style="font-size:9px;padding:2px 5px;border-radius:3px;margin-left:6px;"></span>
+  <div style="display:flex;align-items:center;gap:6px;padding:0 10px;border-left:1px solid var(--border);border-right:1px solid var(--border);">
+    <span style="font-size:20px;font-weight:900;color:#f7931a;font-family:var(--mono);" title="Bitcoin">₿</span>
+    <span id="btc-price-main" class="top-price" style="font-size:19px;">—</span>
+    <span id="btc-change-main" class="top-price" style="font-size:19px;">—</span>
+    <span id="btc-trend-main" style="margin-left:2px;line-height:1;"></span>
+  </div>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v15.05 21:18</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v15.05 21:29</span>
   <button id="mute-btn" onclick="toggleMute()" style="font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:3px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);" title="Звук вкл/выкл">🔔</button>
   <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 Gemini</button>
   <button id="claude-btn" onclick="promptClaudeKey()" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px;cursor:pointer;background:var(--s2);border:1px solid var(--border);color:var(--muted);">🔑 Claude</button>
@@ -338,6 +316,7 @@ button:hover{opacity:.85;}
   <span id="pump-alert-text">🔥</span>
   <button onclick="document.getElementById('pump-alert').style.display='none'" style="margin-left:auto;background:#92400e;color:white;border:none;border-radius:3px;padding:2px 7px;font-size:9px;cursor:pointer;">✕</button>
 </div>
+<!-- removed btc-banner --><div id="btc-banner-old" style="display:none;" style="display:flex;align-items:center;gap:8px;padding:4px 14px;font-size:10px;font-family:var(--mono);flex-shrink:0;border-bottom:1px solid;"></div>
 
 <!-- BODY -->
 <div id="body">
@@ -1482,119 +1461,61 @@ async function loadSym(sym,idea=null){
 function showCoinCard(idea,analysis){
   const dz=document.getElementById('dynamic-zone');if(!dz)return;
   const a=analysis||S.analysis;
-
-  // Direction colors
   const dc=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
   const dbg=idea.isPump?'var(--amber-bg)':idea.dir==='LONG'?'var(--green-bg)':'var(--red-bg)';
   const dbl=idea.isPump?'var(--amber-b)':idea.dir==='LONG'?'var(--green-b)':'var(--red-b)';
   const dl=idea.isPump?'🔥 ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT';
-
-  // TF orientation
   const tf=tfOrient(a);
-  const mtfHtml=[
-    {tf:'5m',v:tf.m5},{tf:'15m',v:tf.m15},{tf:'1h',v:tf.h1},{tf:'4h',v:tf.h4}
-  ].map(x=>{
+  const mtfHtml=[{tf:'5m',v:tf.m5},{tf:'15m',v:tf.m15},{tf:'1h',v:tf.h1},{tf:'4h',v:tf.h4}].map(x=>{
     const cls=x.v==='bull'?'mp-bull':x.v==='bear'?'mp-bear':'mp-neut';
     const arrow=x.v==='bull'?'▲':x.v==='bear'?'▼':'→';
     return `<span class="mp ${cls}">${x.tf} ${arrow}</span>`;
   }).join('');
-
-  // Cap
   const cap=typeof getCapLabel==='function'&&idea.quoteVol24h>0?getCapLabel(idea.quoteVol24h):null;
-  const capHtml=cap?`<div class="cap-badge"><span class="cap-dot" style="background:${cap.color};"></span><span>${cap.label} · $${idea.quoteVol24h>1e9?(idea.quoteVol24h/1e9).toFixed(1)+'B':idea.quoteVol24h>1e6?(idea.quoteVol24h/1e6).toFixed(0)+'M':'<1M'} vol/24h</span></div>`:'';
-
-  // Confidence ring
+  const capHtml=cap?`<span class="cc-cap"><span class="cap-dot" style="background:${cap.color};"></span>${cap.label} · $${idea.quoteVol24h>1e9?(idea.quoteVol24h/1e9).toFixed(1)+'B':idea.quoteVol24h>1e6?(idea.quoteVol24h/1e6).toFixed(0)+'M':'<1M'} vol/24h</span>`:'';
   const confPct=Math.min(100,idea.conf||0);
   const r=17,circ=2*Math.PI*r;
-  const offset=circ*(1-confPct/100);
   const confColor=confPct>=85?'#16a34a':confPct>=70?'#2563eb':'#f59e0b';
-  const confRing=`<div class="conf-ring">
-    <svg width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="none" stroke="#f1f5f9" stroke-width="3.5"/>
-    <circle cx="20" cy="20" r="17" fill="none" stroke="${confColor}" stroke-width="3.5"
-      stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"
-      stroke-linecap="round" transform="rotate(-90 20 20)"/></svg>
-    <div class="conf-num" style="color:${confColor};">${confPct.toFixed(0)}</div>
-  </div>`;
-
-  // Progress bar entry→TP
-  let progress=0;
-  if(idea.entry>0&&idea.tp1>0){
-    const lp=S.activeTrack.find(t=>t.sym===idea.sym)?.lastPrice||idea.entry;
-    progress=idea.dir==='LONG'
-      ?Math.max(0,Math.min(100,(lp-idea.entry)/(idea.tp1-idea.entry)*100))
-      :Math.max(0,Math.min(100,(idea.entry-lp)/(idea.entry-idea.tp1)*100));
-  }
-  const progressColor=progress>70?'#22c55e':progress>40?'#3b82f6':'#94a3b8';
-
-  // SL/TP pcts
+  const offset=(circ*(1-confPct/100)).toFixed(1);
   const tpPct=idea.entry>0&&idea.tp1>0?Math.abs((idea.tp1-idea.entry)/idea.entry*100):0;
   const slPct=idea.entry>0&&idea.sl>0?Math.abs((idea.sl-idea.entry)/idea.entry*100):0;
-  const rrVal=idea.rr>0?idea.rr.toFixed(1):'?';
-
-  // OI change
-  const oiHtml=S.oiChange4h!=null
-    ?`<span class="oi-arr ${S.oiChange4h>=0?'oi-up':'oi-dn'}">${S.oiChange4h>=0?'↑':'↓'} ${S.oiChange4h>=0?'+':''}${S.oiChange4h.toFixed(1)}% 4ч</span>`:'';
-
-  // Candle patterns
-  const patterns=a?.candlePatterns||[];
-  const candleHtml=patterns.length
-    ?patterns.slice(0,3).map(p=>`<div class="ci ${p.bull?'bull':'bear'}">🕯 ${p.name}</div>`).join('')
-    :'<div class="ci neut" style="color:#94a3b8;">нет паттернов</div>';
-
-  // Phase tags
-  const phases=a?.phases||idea.phases||[];
-  const phaseDone=phases.filter(p=>p.done).length;
-  const phaseTotal=Math.max(phases.length,3);
-  const phaseHtml=phases.filter(p=>p.done).map(p=>`<span class="ph-tag">${p.label||p}</span>`).join('');
-
-  // Verdict
-  const verdictColor=idea.verdict==='GO'?'var(--green)':idea.verdict==='WAIT'?'var(--amber)':'var(--muted)';
+  const oiHtml=S.oiChange4h!=null?`<span class="oi-arr ${S.oiChange4h>=0?'oi-up':'oi-dn'}">${S.oiChange4h>=0?'↑':'↓'} ${S.oiChange4h>=0?'+':''}${S.oiChange4h.toFixed(1)}% 4ч</span>`:'';
+  const phaseTags=(a?.phases||[]).filter(p=>p.done).map(p=>`<span class="ph-tag">${p.label||p}</span>`).join('');
+  const phaseDone=(a?.phases||[]).filter(p=>p.done).length;
   const verdictBg=idea.verdict==='GO'?'#dcfce7':idea.verdict==='WAIT'?'#fef3c7':'#f1f5f9';
-  const verdictText=idea.verdict==='GO'?'#166534':idea.verdict==='WAIT'?'#92400e':'#64748b';
-  const verdictLabel=idea.verdict==='GO'?`GO ${idea.verdictConf||''}%`:idea.verdict||'—';
-
+  const verdictTxt=idea.verdict==='GO'?'#166534':idea.verdict==='WAIT'?'#92400e':'#64748b';
   dz.innerHTML=`<div class="coin-card fade">
-
   <div class="cc-hd">
-    <div class="cc-hd-l">
+    <div>
       <div class="cc-sym-row">
         <span class="cc-sym" style="color:${dc};">${idea.sym.replace('USDT','')}</span>
-        <span class="cc-dir-pill" style="background:${dbg};color:${dc};border:1px solid ${dbl};">${dl}</span>
+        <span class="cc-dir" style="background:${dbg};color:${dc};border:1px solid ${dbl};">${dl}</span>
         ${capHtml}
       </div>
       <div class="cc-price-row">
         <span class="cc-price">${idea.entry>0?'$'+fmt(idea.entry):'—'}</span>
-        ${(idea.pumpPct||0)>0?`<span class="cc-ptag cc-ptag-pump">🔥 +${(idea.pumpPct||0).toFixed(1)}%</span>`:''}
-        ${(idea.pumpSpeed||0)!==0?`<span class="cc-ptag cc-ptag-speed">⚡ ${(idea.pumpSpeed||0).toFixed(1)}%/2ч</span>`:''}
+        ${(idea.pumpPct||0)>0?`<span class="cc-tag cc-tag-pump">🔥 +${(idea.pumpPct||0).toFixed(1)}%</span>`:''}
+        ${Math.abs(idea.pumpSpeed||0)>0?`<span class="cc-tag cc-tag-muted">⚡${(idea.pumpSpeed||0).toFixed(1)}%/2ч</span>`:''}
       </div>
     </div>
-    <div class="cc-hd-r">${confRing}</div>
+    <div class="cc-conf">
+      <div class="conf-ring">
+        <svg width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="3.5"/>
+        <circle cx="20" cy="20" r="${r}" fill="none" stroke="${confColor}" stroke-width="3.5" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${offset}" stroke-linecap="round" transform="rotate(-90 20 20)"/></svg>
+        <div class="conf-num" style="color:${confColor};">${confPct.toFixed(0)}</div>
+      </div>
+    </div>
   </div>
-
   <div class="cc-levels">
-    <div class="cc-lv"><div class="cc-lv-l">Триггер</div><div class="cc-lv-v" style="color:#1e293b;">${idea.entry>0?'$'+fmt(idea.entry):'—'}</div></div>
-    <div class="cc-lv" style="border-color:${idea.sl>0?'#fca5a5':''}">
-      <div class="cc-lv-l">Стоп-лосс</div>
-      <div class="cc-lv-v" style="color:var(--red);">${idea.sl>0?'$'+fmt(idea.sl):'—'}</div>
-      ${slPct>0?`<div class="cc-lv-p" style="color:var(--red);">+${slPct.toFixed(1)}%</div>`:''}
-    </div>
-    <div class="cc-lv" style="border-color:${idea.tp1>0?'#86efac':''}">
-      <div class="cc-lv-l">Тейк-профит</div>
-      <div class="cc-lv-v" style="color:var(--green);">${idea.tp1>0?'$'+fmt(idea.tp1):'—'}</div>
-      ${tpPct>0?`<div class="cc-lv-p" style="color:var(--green);">-${tpPct.toFixed(1)}%</div>`:''}
-    </div>
-    <div class="cc-lv"><div class="cc-lv-l">R/R</div><div class="cc-lv-v" style="color:var(--blue);">${rrVal}×</div></div>
+    <div class="cc-lv"><div class="cc-lv-l">Триггер</div><div class="cc-lv-v">${idea.entry>0?'$'+fmt(idea.entry):'—'}</div></div>
+    <div class="cc-lv" style="border-color:${slPct>0?'#fca5a5':''};"><div class="cc-lv-l">Стоп-лосс</div><div class="cc-lv-v" style="color:var(--red);">${idea.sl>0?'$'+fmt(idea.sl):'—'}</div>${slPct>0?`<div class="cc-lv-p" style="color:var(--red);">+${slPct.toFixed(1)}%</div>`:''}</div>
+    <div class="cc-lv" style="border-color:${tpPct>0?'#86efac':''};"><div class="cc-lv-l">Тейк-профит</div><div class="cc-lv-v" style="color:var(--green);">${idea.tp1>0?'$'+fmt(idea.tp1):'—'}</div>${tpPct>0?`<div class="cc-lv-p" style="color:var(--green);">-${tpPct.toFixed(1)}%</div>`:''}</div>
+    <div class="cc-lv"><div class="cc-lv-l">R/R</div><div class="cc-lv-v" style="color:var(--blue);">${idea.rr>0?idea.rr.toFixed(1)+'×':'—'}</div>${tpPct>0?`<div class="cc-lv-p" style="color:var(--muted);">~${tpPct.toFixed(1)}%</div>`:''}</div>
   </div>
-
   <div class="cc-prog">
-    <div class="cc-prog-meta">
-      <span>${idea.entry>0?'Entry $'+fmt(idea.entry):''}</span>
-      <span style="color:#3b82f6;font-weight:700;">${progress>0?'→ '+progress.toFixed(0)+'% к цели':idea.verdictReason?'Тренд сломается':''}</span>
-      <span>${idea.tp1>0?'TP $'+fmt(idea.tp1):''}</span>
-    </div>
-    <div class="cc-prog-bar"><div class="cc-prog-fill" style="width:${progress}%;background:linear-gradient(90deg,#3b82f6,${progressColor});"></div></div>
+    <div class="cc-prog-meta"><span>${idea.entry>0?'Entry $'+fmt(idea.entry):''}</span><span style="color:#3b82f6;font-weight:700;">${idea.verdictReason||'Тренд сломается'}</span><span>${idea.tp1>0?'TP $'+fmt(idea.tp1):''}</span></div>
+    <div class="cc-prog-bar"><div class="cc-prog-fill" style="width:0%;"></div></div>
   </div>
-
   <div class="cc-stats">
     <div class="cc-st"><div class="cc-st-l">Памп 8h</div><div class="cc-st-v" style="color:${(idea.pumpPct||0)>=PUMP_THRESH?'var(--red)':'var(--amber)'};">+${(idea.pumpPct||0).toFixed(1)}%</div></div>
     <div class="cc-st"><div class="cc-st-l">Скорость</div><div class="cc-st-v" style="color:${Math.abs(idea.pumpSpeed||0)>5?'var(--orange)':'var(--muted)'};">${(idea.pumpSpeed||0).toFixed(1)}%</div></div>
@@ -1603,78 +1524,35 @@ function showCoinCard(idea,analysis){
     <div class="cc-st"><div class="cc-st-l">ATR ratio</div><div class="cc-st-v" style="color:${(idea.atrRatio||1)>1.5?'var(--red)':'var(--muted)'};">×${(idea.atrRatio||1).toFixed(2)}</div></div>
     <div class="cc-st"><div class="cc-st-l">CVD</div><div class="cc-st-v" style="color:${idea.cvdFalling?'var(--red)':'var(--green)'};">${idea.cvdFalling?'↓':'↑'}</div></div>
   </div>
-
   <div class="cc-futures">
-    <div class="cc-ft">
-      <div class="cc-ft-l">Open Interest</div>
-      <div class="cc-ft-main"><span class="cc-ft-v" id="cc-oi">${S.oi?fmt(S.oi)+' конт':'—'}</span>${oiHtml}</div>
-      <div class="cc-ft-sub" id="cc-oi-sub">${S.oiChange4h!=null?(S.oiChange4h<0?'OI падает — позиции закрываются':'OI растёт — позиции наращиваются'):'загрузка...'}</div>
-    </div>
-    <div class="cc-ft">
-      <div class="cc-ft-l">Funding Rate</div>
-      <div class="cc-ft-v" id="cc-fr">${S.fr!=null?(S.fr>=0?'+':'')+S.fr.toFixed(4)+'%':'—'}</div>
-      <div class="cc-ft-sub" id="cc-fr-warn" style="color:${S.fr!=null&&S.fr>0.05?'var(--red)':S.fr!=null&&S.fr<-0.05?'var(--green)':'var(--muted)'};">${S.fr!=null&&S.fr>0.05?'лонги платят':S.fr!=null&&S.fr<-0.05?'шорты платят':''}</div>
-    </div>
-    <div class="cc-ft">
-      <div class="cc-ft-l">Taker 4ч</div>
-      <div class="cc-ft-v" style="color:${S.takerRatio!=null?(S.takerRatio>1.1?'var(--green)':S.takerRatio<0.9?'var(--red)':'var(--muted)'):'var(--muted)'};">${S.takerRatio!=null?(S.takerRatio>1.1?'агр. лонги':S.takerRatio<0.9?'агр. шорты':'нейтрально'):'—'}</div>
-      <div class="cc-ft-sub">${S.takerRatio!=null?'ratio '+S.takerRatio.toFixed(2):''}</div>
-    </div>
+    <div class="cc-ft"><div class="cc-ft-l">Open Interest</div><div class="cc-ft-main"><span class="cc-ft-v" id="cc-oi">${S.oi?fmt(S.oi)+' конт':'—'}</span>${oiHtml}</div><div class="cc-ft-sub">${S.oiChange4h!=null?(S.oiChange4h<0?'OI падает — позиции закрываются':'OI растёт'):'загрузка...'}</div></div>
+    <div class="cc-ft"><div class="cc-ft-l">Funding Rate</div><div class="cc-ft-v" id="cc-fr" style="color:${S.fr!=null&&S.fr>0.05?'var(--red)':S.fr!=null&&S.fr<-0.05?'var(--green)':'var(--text2)'};">${S.fr!=null?(S.fr>=0?'+':'')+S.fr.toFixed(4)+'%':'—'}</div><div class="cc-ft-sub" id="cc-fr-warn" style="color:${S.fr!=null&&S.fr>0.05?'var(--red)':S.fr!=null&&S.fr<-0.05?'var(--green)':'var(--muted)'};">${S.fr!=null&&S.fr>0.05?'лонги платят':S.fr!=null&&S.fr<-0.05?'шорты платят':''}</div></div>
+    <div class="cc-ft"><div class="cc-ft-l">Taker 4ч</div><div class="cc-ft-v" id="cc-taker" style="color:${S.takerRatio!=null?(S.takerRatio>1.1?'var(--green)':S.takerRatio<0.9?'var(--red)':'var(--muted)'):'var(--muted)'};">${S.takerRatio!=null?(S.takerRatio>1.1?'агр. лонги':S.takerRatio<0.9?'агр. шорты':'нейтр.'):'—'}</div><div class="cc-ft-sub">${S.takerRatio!=null?'ratio '+S.takerRatio.toFixed(2):''}</div></div>
   </div>
-
   <div class="cc-row5">
-    <div class="cc-r5b">
-      <div class="cc-r5-t">CVD · 15M</div>
+    <div class="cc-r5b"><div class="cc-r5-t">CVD · 15M</div>
       <div class="cc-cvd-row"><span class="cc-cvd-lbl">Тренд дельты</span><span id="cc-cvd-trend" class="cc-cvd-val" style="color:${idea.cvdFalling?'var(--red)':'var(--green)'};">${idea.cvdFalling?'↓ МЕДВЕЖИЙ':'↑ БЫЧИЙ'}</span></div>
       <div class="cc-cvd-row"><span class="cc-cvd-lbl">Дивергенция</span><span id="cc-cvd-div" class="cc-cvd-val" style="color:${idea.cvdDiv?'var(--red)':'var(--muted)'};">${idea.cvdDiv?'⚠ Да':'Нет'}</span></div>
     </div>
-    <div class="cc-r5b">
-      <div class="cc-r5-t">МТФ</div>
-      <div class="cc-mtf-pills">${mtfHtml}</div>
-      ${tf.h4?`<div style="font-size:8px;color:var(--muted);margin-top:4px;">${tf.h4==='bull'?'↑ 4h бычий':'↓ 4h медвежий'}</div>`:''}
-    </div>
-    <div class="cc-r5b">
-      <div class="cc-r5-t">Свечной анализ</div>
-      <div class="cc-candle-list">${candleHtml}</div>
-    </div>
+    <div class="cc-r5b"><div class="cc-r5-t">МТФ</div><div class="cc-mtf-pills">${mtfHtml}</div><div style="font-size:8px;color:var(--muted);margin-top:4px;">${tf.h4==='bull'?'↑ 4h бычий':tf.h4==='bear'?'↓ 4h медвежий':''}</div></div>
+    <div class="cc-r5b"><div class="cc-r5-t">Свечной анализ</div><div class="cc-candle-list" id="cc-candles"><span style="font-size:8px;color:var(--dim);">загрузка...</span></div></div>
   </div>
-
   <div class="cc-text-section">
-    <div class="cc-tb cc-tb-agent">
-      <div class="cc-tb-hd"><span>⚡</span><span class="cc-tb-title">Сигналы агента</span></div>
-      <div class="cc-tb-text">${idea.why||idea.sigs?.join('<br>')||'—'}</div>
-    </div>
-    <div class="cc-tb cc-tb-ai">
-      <div class="cc-tb-hd">
-        <span>✦</span><span class="cc-tb-title">AI · ${idea.verdict?idea.verdict:'анализ'}</span>
-        ${idea.verdict?`<span class="cc-vp" style="background:${verdictBg};color:${verdictText};">${verdictLabel}</span>`:''}
-      </div>
-      <div class="cc-tb-text">${idea.verdictReason||'<span style="color:var(--dim);">Нажмите + AI анализ</span>'}</div>
-    </div>
+    <div class="cc-tb cc-tb-agent"><div class="cc-tb-hd"><span>⚡</span><span class="cc-tb-title">Сигналы агента</span></div><div class="cc-tb-text">${(idea.sigs||[]).join('<br>')||idea.why||'—'}</div></div>
+    <div class="cc-tb cc-tb-ai"><div class="cc-tb-hd"><span>✦</span><span class="cc-tb-title">AI · Gemini</span>${idea.verdict?`<span class="cc-vp" style="background:${verdictBg};color:${verdictTxt};">${idea.verdict}${idea.verdictConf?' '+idea.verdictConf+'%':''}</span>`:''}</div><div class="cc-tb-text">${idea.verdictReason||'<span style="color:var(--dim);">Нажмите ✦ AI анализ</span>'}</div></div>
   </div>
-
   <div class="cc-phases">
-    <div class="cc-ph-hd">
-      <span class="cc-ph-title">Фазы истощения</span>
-      <div class="cc-ph-score">
-        ${[1,2,3].map(i=>`<div class="cc-ph-dot${i<=phaseDone?' done':''}"></div>`).join('')}
-        <span style="font-size:8px;color:var(--amber);font-weight:700;margin-left:3px;">${phaseDone}/${phaseTotal}</span>
-      </div>
-    </div>
-    <div class="cc-ph-tags">${phaseHtml}</div>
+    <div class="cc-ph-hd"><span class="cc-ph-title">Фазы истощения</span>
+    <div class="cc-ph-score">${[1,2,3].map(i=>`<div class="cc-ph-dot${i<=phaseDone?' done':''}"></div>`).join('')}<span style="font-size:8px;color:var(--amber);font-weight:700;margin-left:3px;">${phaseDone}/3</span></div></div>
+    <div class="cc-ph-tags">${phaseTags}</div>
   </div>
-
-  <div class="cc-future-slot">
-    <span class="cc-fs-label">· · · место для дополнительных данных · · ·</span>
-  </div>
-
+  <div style="padding:5px 12px;background:var(--s1);border-top:1px solid var(--border);min-height:22px;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:var(--border);text-transform:uppercase;letter-spacing:1px;">· · · место для дополнительных данных · · ·</span></div>
   <div class="cc-actions">
     <button class="cc-act cc-act-tv" onclick="window.open('https://www.tradingview.com/chart/?symbol=BINANCE:${idea.sym}','_blank')">▼ TradingView ↗</button>
-    <button class="cc-act cc-act-ai" onclick="handleAIAnalysis()">✦ AI анализ</button>
-    <button class="cc-act cc-act-work" onclick="toggleActive('${idea.sym}')">📌 В работу</button>
+    <button class="cc-act cc-act-ai" onclick="askQuick('Проанализируй торговый сетап')">✦ AI анализ</button>
+    <button class="cc-act cc-act-work" onclick="toggleActive('${idea.sym}')">${S.activeTrack.find(t=>t.sym===idea.sym)?'📌 В работе ✓':'📌 В работу'}</button>
     <button class="cc-act cc-act-copy" onclick="copyForChatGPT()">📋 Копировать</button>
   </div>
-
 </div>`;
   fetchFutures(idea.sym);
 }
@@ -3008,18 +2886,21 @@ function updateBTCBanner(){
   var tEl=document.getElementById('btc-trend-main');
   if(!pEl)return;
   pEl.textContent=price>0?'$'+price.toFixed(0):'—';
-  var dir=ch>0?'↑':ch<0?'↓':'→';
-  var color=abs>=2?ch>0?'var(--green)':'var(--red)':abs>=0.5?ch>0?'#4ade80':'#f87171':'#94a3b8';
+  var color=abs>=2?ch>0?'var(--green)':'var(--red)':abs>=0.5?ch>0?'#16a34a':'#dc2626':'var(--muted)';
   cEl.textContent=(ch>=0?'+':'')+ch.toFixed(2)+'%';
   cEl.style.color=color;
   if(tEl){
-    if(BTC_STATE.trend==='bull'){tEl.textContent='1ч ▲';tEl.style.background='var(--green-bg)';tEl.style.color='var(--green)';}
-    else if(BTC_STATE.trend==='bear'){tEl.textContent='1ч ▼';tEl.style.background='var(--red-bg)';tEl.style.color='var(--red)';}
-    else{tEl.textContent='1ч →';tEl.style.background='transparent';tEl.style.color='#94a3b8';}
+    if(BTC_STATE.trend==='bull'){
+      tEl.innerHTML='<span style="font-size:18px;line-height:1;color:var(--green);">▲</span>';
+    } else if(BTC_STATE.trend==='bear'){
+      tEl.innerHTML='<span style="font-size:18px;line-height:1;color:var(--red);">▼</span>';
+    } else {
+      tEl.innerHTML='<span style="font-size:18px;line-height:1;color:var(--muted);">→</span>';
+    }
   }
   if(abs>=2&&(!BTC_STATE._notified||(Date.now()-BTC_STATE._notified)>30*60*1000)){
     BTC_STATE._notified=Date.now();
-    notify('⚡ BTC '+dir+' '+(ch>=0?'+':'')+ch.toFixed(2)+'% за 1ч','Проверьте позиции');
+    notify('⚡ BTC '+(ch>=0?'▲':'▼')+' '+(ch>=0?'+':'')+ch.toFixed(2)+'% за 1ч','Проверьте позиции');
   }
 }
 setInterval(checkBTC, 5*60*1000);
