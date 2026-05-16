@@ -216,6 +216,11 @@ button:hover{opacity:.85;}
 .conf-ring{position:relative;width:40px;height:40px;flex-shrink:0;}
 .conf-ring svg{position:absolute;top:0;left:0;}
 .conf-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:900;}
+.cc-score-layers{display:flex;align-items:center;gap:6px;padding:4px 12px 6px;background:var(--s2);border-bottom:1px solid var(--border);}
+.cc-sl-item{display:flex;flex-direction:column;align-items:center;gap:1px;flex:1;}
+.cc-sl-lbl{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;}
+.cc-sl-val{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text2);}
+.cc-sl-sep{font-size:9px;color:var(--dim);flex-shrink:0;padding:0 2px;}
 .cc-levels{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);}
 .cc-lv{background:var(--s1);border:1px solid var(--border);border-radius:6px;padding:6px 8px;}
 .cc-lv-l{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;}
@@ -612,7 +617,9 @@ const S = {
   activeTrack: loadActive(), // [{sym, dir, entry, sl, tp1, rr, addedAt, lastPrice, alerts:[]}]
   scanning:false, phase:3,
   activeIdea:null,
+  activeCardIdea:null, // currently displayed coin card — for layer updates
   nextRefresh: Date.now()+REFRESH_INTERVAL,
+  oiChange4h:null, takerRatio:null, // populated by fetchFutures
 };
 
 // ═══════════════════════════════════════════════════════
@@ -1184,6 +1191,11 @@ async function scoreForIdea(sym){
           isPumpSignal:true,entry:price,sl:price*0.975,tp1:price*1.05,tp2:price*1.10,rr:2.0,atrv});
       }
     }
+    // Store strategy_conf (pure structural score, before positioning/execution layers)
+    res.strategy_conf = res.bestConf || 0;
+    res.pos_mult = 1.0;
+    res.pos_state = 'neutral';
+    res.exec_adj = 0;
     return res;
   }catch(e){console.error('scoreForIdea error:',sym,e);return null;}
 }
@@ -1232,7 +1244,9 @@ async function runIdeas(manual=false){
           volRatio:r.volRatio,rsiNow:r.rsiNow,atrRatio:r.atrRatio,
           bodyRatio:r.bodyRatio,trend4h:r.trend4h,cvdFalling:r.cvdFalling,
           cvdDiv:r.cvdDiv,isPump:r.isPumpSignal,ts:now,
-          cds1h:r.cds1h,cds15m:r.cds15m,
+          cds1h:r.cds1h,cds15m:r.cds15m,allPatterns:r.allPatterns||[],
+          strategy_conf:r.strategy_conf||r.bestConf||0,
+          pos_mult:1.0,pos_state:'neutral',pos_notes:[],exec_adj:0,
           verdict:null, verdictReason:'', verdictConf:0};
         newIdeas.push(ideaObj);
         // Async AI verdict (Claude or Gemini) — staggered to avoid rate limits
@@ -1502,6 +1516,7 @@ async function loadSym(sym,idea=null){
 // ═══════════════════════════════════════════════════════
 function showCoinCard(idea,analysis){
   const dz=document.getElementById('dynamic-zone');if(!dz)return;
+  S.activeCardIdea = idea; // track for positioning/execution layer updates
   const a=analysis||S.analysis;
   const dc=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
   const dbg=idea.isPump?'var(--amber-bg)':idea.dir==='LONG'?'var(--green-bg)':'var(--red-bg)';
@@ -1546,6 +1561,15 @@ function showCoinCard(idea,analysis){
         <div class="conf-num" style="color:${confColor};">${confPct.toFixed(0)}</div>
       </div>
     </div>
+  </div>
+  <div class="cc-score-layers" id="cc-score-layers">
+    <div class="cc-sl-item"><div class="cc-sl-lbl">Strategy</div><div class="cc-sl-val" id="cc-sl-strategy">${(idea.strategy_conf||idea.conf||0).toFixed(0)}</div></div>
+    <div class="cc-sl-sep">×</div>
+    <div class="cc-sl-item"><div class="cc-sl-lbl">Positioning</div><div class="cc-sl-val" id="cc-sl-pos" style="color:var(--muted);">1.00</div></div>
+    <div class="cc-sl-sep">+</div>
+    <div class="cc-sl-item"><div class="cc-sl-lbl">Execution</div><div class="cc-sl-val" id="cc-sl-exec" style="color:var(--muted);">±0</div></div>
+    <div class="cc-sl-sep">=</div>
+    <div class="cc-sl-item"><div class="cc-sl-lbl">Final</div><div class="cc-sl-val" id="cc-sl-final" style="font-size:11px;color:${confColor};">${confPct.toFixed(0)}</div></div>
   </div>
   <div class="cc-levels">
     <div class="cc-lv"><div class="cc-lv-l">Триггер</div><div class="cc-lv-v">${idea.entry>0?'$'+fmt(idea.entry):'—'}</div></div>
@@ -2352,6 +2376,212 @@ function updateFuturesDisplay(){
   if(ccCVD){ccCVD.textContent=cvdFall?'↓ МЕДВЕЖИЙ':'↑ БЫЧИЙ';ccCVD.style.color=cvdFall?'var(--red)':'var(--green)';}
   const ccCVDdiv=document.getElementById('cc-cvd-div');
   if(ccCVDdiv){ccCVDdiv.textContent=cvdDiv?'⚠ Дивергенция':'Нет';ccCVDdiv.style.color=cvdDiv?'var(--red)':'var(--muted)';}
+  // Apply positioning layer now that FR/OI/Taker are loaded
+  if(S.activeCardIdea) applyPositioningLayer(S.activeCardIdea);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SCORING LAYERS: Positioning (multiplier) + Execution (additive ±3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Positioning Layer — FR, OI (with price context), Taker as multipliers (±5% each)
+function applyPositioningLayer(idea){
+  if(!idea) return;
+  const dir = idea.dir; // 'LONG' | 'SHORT' | 'ПАМП'
+  if(!dir || dir==='ПАМП') return;
+
+  let pos_mult = 1.0;
+  const pos_notes = [];
+
+  // ── Funding Rate ──────────────────────────────────────────
+  // FR > +0.05%: longs are crowded/overheated (bearish pressure)
+  // FR < −0.05%: shorts are crowded/overheated (bullish pressure)
+  const fr = S.fr;
+  if(fr != null){
+    if(fr > 0.05){
+      if(dir==='SHORT'){ pos_mult += 0.04; pos_notes.push('FR+ лонги перегреты ✓'); }
+      else             { pos_mult -= 0.04; pos_notes.push('FR+ перегрев против'); }
+    } else if(fr < -0.05){
+      if(dir==='LONG') { pos_mult += 0.04; pos_notes.push('FR− шорты перегреты ✓'); }
+      else             { pos_mult -= 0.04; pos_notes.push('FR− против'); }
+    }
+  }
+
+  // ── OI dynamics (price-context aware) ────────────────────
+  // price↓ + OI↑ = new shorts added → confirms SHORT
+  // price↓ + OI↓ = longs closing → confirms SHORT (exhaustion)
+  // price↑ + OI↑ = new longs added → confirms LONG
+  // price↑ + OI↓ = short covering → LONG but weaker
+  const oi = S.oiChange4h;
+  if(oi != null){
+    const priceUp = dir==='LONG' || (idea.pumpPct||0) > 1;
+    if(!priceUp && oi > 3){
+      pos_mult += 0.04; pos_notes.push(`OI↑${oi.toFixed(1)}% новые шорты ✓`);
+    } else if(!priceUp && oi < -3){
+      pos_mult += 0.02; pos_notes.push(`OI↓${oi.toFixed(1)}% лонги уходят ✓`);
+    } else if(priceUp && oi > 3 && dir==='LONG'){
+      pos_mult += 0.04; pos_notes.push(`OI↑${oi.toFixed(1)}% новые лонги ✓`);
+    } else if(priceUp && oi < -3 && dir==='SHORT'){
+      pos_mult -= 0.03; pos_notes.push(`OI↓${oi.toFixed(1)}% шорты закрываются`);
+    }
+  }
+
+  // ── Taker Ratio ───────────────────────────────────────────
+  // > 1.15: aggressive buyers dominate
+  // < 0.87: aggressive sellers dominate
+  const taker = S.takerRatio;
+  if(taker != null){
+    if(taker > 1.15){
+      if(dir==='LONG') { pos_mult += 0.03; pos_notes.push(`Taker ${taker.toFixed(2)} покупатели ✓`); }
+      else             { pos_mult -= 0.03; pos_notes.push(`Taker ${taker.toFixed(2)} против SHORT`); }
+    } else if(taker < 0.87){
+      if(dir==='SHORT'){ pos_mult += 0.03; pos_notes.push(`Taker ${taker.toFixed(2)} продавцы ✓`); }
+      else             { pos_mult -= 0.03; pos_notes.push(`Taker ${taker.toFixed(2)} против LONG`); }
+    }
+  }
+
+  // Clamp multiplier: max ±15%
+  pos_mult = Math.max(0.85, Math.min(1.15, pos_mult));
+
+  // Positioning state label
+  let pos_state = 'нейтральный';
+  if(pos_mult >= 1.08)      pos_state = 'подтверждён';
+  else if(pos_mult >= 1.03) pos_state = 'слабо +';
+  else if(pos_mult <= 0.92) pos_state = 'против';
+  else if(pos_mult <= 0.97) pos_state = 'слабо −';
+
+  idea.pos_mult = pos_mult;
+  idea.pos_state = pos_state;
+  idea.pos_notes = pos_notes;
+
+  // Recalculate final conf
+  const sc = idea.strategy_conf || idea.conf || 0;
+  idea.strategy_conf = sc;
+  const ea = idea.exec_adj || 0;
+  idea.conf = Math.round(Math.min(96, Math.max(0, sc * pos_mult + ea)));
+
+  updateConfDisplay(idea);
+}
+
+// ── Flow Quality ────────────────────────────────────────
+// Returns 'strong' / 'mixed' / 'chaotic' based on micro/short/mid direction consensus
+function computeFlowQuality(micro, short, mid){
+  if(!micro || !short || !mid) return 'chaotic';
+  const dirs = [micro.direction, short.direction, mid.direction];
+  const counts = {};
+  dirs.forEach(d => counts[d] = (counts[d]||0) + 1);
+  const maxCount = Math.max(...Object.values(counts));
+  const mismatches = 3 - maxCount; // how many disagree with majority
+  if(mismatches === 0) return 'strong';
+  if(mismatches === 1) return 'mixed';
+  return 'chaotic';
+}
+
+// Execution Layer — with Stability Filter + Decay + Flow Quality
+// combinedScore: -10..+10 from OB module (direction-aware)
+// flowQuality:   'strong' | 'mixed' | 'chaotic'
+function applyExecutionLayer(idea, combinedScore, flowQuality){
+  if(!idea || !idea.strategy_conf) return;
+  const now = Date.now();
+  const STABILITY_MS = 15000; // 15 seconds
+  const DECAY_TAU_S  = 120;   // exponential decay: half-life ~83 sec
+
+  // ── Step 1: Raw adj (capped ±4) ──────────────────────
+  let adj = Math.round(Math.max(-4, Math.min(4, combinedScore * 0.4)));
+
+  // ── Step 2: Flow Quality multiplier ──────────────────
+  // strong: full  mixed: ×0.5  chaotic: min(×0.5, 0)
+  const qual = flowQuality || 'mixed';
+  if(qual === 'mixed'){
+    adj = Math.round(adj * 0.5);
+  } else if(qual === 'chaotic'){
+    adj = Math.min(Math.round(adj * 0.5), 0); // no positive boost in chaos
+  }
+
+  // ── Step 3: Stability Filter ──────────────────────────
+  // Only commit new value if it has been stable for STABILITY_MS
+  if(idea._pExec === undefined){ idea._pExec = adj; idea._pExecTs = now; }
+  // Direction changed or value jumped by ≥2 → reset pending
+  if(Math.sign(adj) !== Math.sign(idea._pExec) || Math.abs(adj - idea._pExec) >= 2){
+    idea._pExec = adj;
+    idea._pExecTs = now;
+  }
+  const pendingAge = now - (idea._pExecTs || now);
+  if(pendingAge >= STABILITY_MS){
+    // Stable enough → commit
+    if(idea._pExec !== idea.exec_adj){
+      idea.exec_adj = idea._pExec;
+      idea.exec_adj_ts = now;
+    }
+  }
+  // If not yet stable, keep current committed exec_adj (don't update it)
+
+  // ── Step 4: Decay ────────────────────────────────────
+  const commitAge = idea.exec_adj_ts ? (now - idea.exec_adj_ts) / 1000 : 9999;
+  const decayFactor = Math.exp(-commitAge / DECAY_TAU_S);
+  const decayed_adj = Math.round((idea.exec_adj || 0) * decayFactor);
+
+  // ── Step 5: Store quality metadata ───────────────────
+  idea.flow_quality = qual;
+  idea.flow_dir = combinedScore > 1 ? 'бычий' : combinedScore < -1 ? 'медвежий' : 'нейтральный';
+  idea.exec_pending_pct = Math.min(100, Math.round(pendingAge / STABILITY_MS * 100));
+  idea.exec_decayed_adj = decayed_adj;
+
+  // ── Step 6: Recompute final conf ─────────────────────
+  const sc = idea.strategy_conf;
+  const pm = idea.pos_mult || 1.0;
+  idea.conf = Math.round(Math.min(96, Math.max(0, sc * pm + decayed_adj)));
+  updateConfDisplay(idea);
+}
+
+// Update the confidence ring + breakdown row in DOM
+function updateConfDisplay(idea){
+  if(!idea) return;
+  const confPct = Math.min(100, idea.conf || 0);
+  const confColor = confPct>=85?'#16a34a':confPct>=70?'#2563eb':'#f59e0b';
+
+  // Update ring
+  const r=17, circ=2*Math.PI*r;
+  const offset=(circ*(1-confPct/100)).toFixed(1);
+  const ring = document.querySelector('.conf-ring svg circle:last-child');
+  if(ring){
+    ring.setAttribute('stroke', confColor);
+    ring.setAttribute('stroke-dashoffset', offset);
+  }
+  const numEl = document.querySelector('.conf-num');
+  if(numEl){ numEl.textContent=confPct.toFixed(0); numEl.style.color=confColor; }
+
+  // Update breakdown row
+  const sc = idea.strategy_conf || confPct;
+  const pm = idea.pos_mult || 1.0;
+  const ea = idea.exec_decayed_adj !== undefined ? idea.exec_decayed_adj : (idea.exec_adj || 0);
+  const pmSign = pm >= 1 ? '+' : '';
+  const pmDelta = ((pm - 1)*100).toFixed(0);
+  const pmLabel = `${pmSign}${pmDelta}%`;
+  const pmColor = pm > 1.03 ? 'var(--green)' : pm < 0.97 ? 'var(--red)' : 'var(--muted)';
+
+  // Execution label with quality context
+  const qual = idea.flow_quality;
+  let eaLabel, eaColor, eaTitle;
+  if(qual === 'chaotic' && ea >= 0){
+    eaLabel = 'блок'; eaColor = 'var(--amber)';
+    eaTitle = `Поток хаотичный — усиление заблокировано`;
+  } else {
+    const pct = idea.exec_pending_pct || 0;
+    const pending = pct < 100 ? ` (${pct}%)` : '';
+    eaLabel = (ea >= 0 ? '+' : '') + ea + pending;
+    eaColor = ea > 0 ? 'var(--green)' : ea < 0 ? 'var(--red)' : 'var(--muted)';
+    eaTitle = qual ? `Качество: ${qual==='strong'?'сильный':qual==='mixed'?'смешанный':'хаотичный'}` : '';
+  }
+
+  const elSt = document.getElementById('cc-sl-strategy');
+  const elPo = document.getElementById('cc-sl-pos');
+  const elEx = document.getElementById('cc-sl-exec');
+  const elFi = document.getElementById('cc-sl-final');
+  if(elSt) elSt.textContent = sc.toFixed(0);
+  if(elPo){ elPo.textContent = pmLabel; elPo.style.color = pmColor; }
+  if(elEx){ elEx.textContent = eaLabel; elEx.style.color = eaColor; if(eaTitle) elEx.title = eaTitle; }
+  if(elFi){ elFi.textContent = confPct.toFixed(0); elFi.style.color = confColor; }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2576,8 +2806,24 @@ function obRenderContainer() {
   // OB score is 50% weight in combined: keep flow dominant
   const combinedScore = Math.max(-10, Math.min(10, flowData.score + Math.round(obScore * 0.4)));
   if (state) { state.flowScore = flowData.score; state.label = flowData.label; }
+  // Flow Quality: based on micro/short/mid direction consensus
+  const flowQuality = hasBuckets && micro && short && mid
+    ? computeFlowQuality(micro, short, mid) : 'chaotic';
+  // Apply execution layer to card conf (with stability + decay + quality)
+  if(S.activeCardIdea && S.activeCardIdea.sym === sym) applyExecutionLayer(S.activeCardIdea, combinedScore, flowQuality);
   const scoreClass = combinedScore > 3 ? 'ob-score-pos' : combinedScore < -3 ? 'ob-score-neg' : 'ob-score-neu';
   const scoreText  = (combinedScore > 0 ? '+' : '') + combinedScore;
+  // Quality display labels
+  const qualLabel = flowQuality==='strong'?'сильный':flowQuality==='mixed'?'смешанный':'хаотичный';
+  const qualColor = flowQuality==='strong'?'var(--green)':flowQuality==='mixed'?'var(--amber)':'var(--red)';
+  const flowDirLabel = combinedScore > 1 ? 'бычий' : combinedScore < -1 ? 'медвежий' : 'нейтральный';
+  const flowDirColor = combinedScore > 1 ? 'var(--green)' : combinedScore < -1 ? 'var(--red)' : 'var(--muted)';
+  // Exec status for display
+  const cardIdea = S.activeCardIdea && S.activeCardIdea.sym === sym ? S.activeCardIdea : null;
+  const pendingPct = cardIdea ? (cardIdea.exec_pending_pct || 0) : 0;
+  const execBlocked = flowQuality === 'chaotic' && combinedScore > 0;
+  const execStatus = execBlocked ? 'заблокирован' : pendingPct < 100 ? `стабилизация ${pendingPct}%` : `${(combinedScore > 0 ? '+' : '')}${Math.round(combinedScore * 0.4)}`;
+  const execStatusColor = execBlocked ? 'var(--amber)' : pendingPct < 100 ? 'var(--dim)' : scoreClass === 'ob-score-pos' ? 'var(--green)' : scoreClass === 'ob-score-neg' ? 'var(--red)' : 'var(--muted)';
   const ts = new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
   el.innerHTML = `
@@ -2602,6 +2848,20 @@ function obRenderContainer() {
       <div class="ob-conf-text">${flowData.label}</div>
     </div>
     <span class="ob-score-badge ${scoreClass}">Flow ${scoreText}</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:6px 8px;border-top:1px solid var(--border);background:var(--s2);">
+    <div style="display:flex;flex-direction:column;gap:1px;">
+      <div style="font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;">Поток</div>
+      <div style="font-size:10px;font-weight:700;color:${flowDirColor};">${flowDirLabel}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1px;">
+      <div style="font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;">Качество</div>
+      <div style="font-size:10px;font-weight:700;color:${qualColor};">${qualLabel}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1px;">
+      <div style="font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;">Exec</div>
+      <div style="font-size:10px;font-weight:700;color:${execStatusColor};">${execStatus}</div>
+    </div>
   </div>`;
 }
 
