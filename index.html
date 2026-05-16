@@ -507,6 +507,7 @@ const BINANCE = FAPI; // same — futures API has no CORS issues
 const CLAUDE_MODEL = 'claude-haiku-4-5';
 function getClaudeKey(){return localStorage.getItem('claude_api_key')||'';}
 
+// Для вердиктов — возвращает JSON {verdict, confidence, reason}
 async function callClaude(prompt, maxTokens=300){
   const key=getClaudeKey();
   if(!key)return null;
@@ -522,7 +523,7 @@ async function callClaude(prompt, maxTokens=300){
       body:JSON.stringify({
         model:CLAUDE_MODEL,
         max_tokens:maxTokens,
-        system:'You are a disciplined intraday crypto trader. CRITICAL: NEVER give GO for LONG if 4h trend is bearish. NEVER give GO for SHORT if 4h trend is bullish. GO only if 4h aligns + volume confirms + RSI ok. SKIP if 4h opposes. Target <30% GO rate. Reply ONLY with valid JSON: {"verdict":"GO"|"WAIT"|"SKIP","confidence":0-100,"reason":"1 sentence"}',
+        system:'Ты дисциплинированный интрадей трейдер криптовалют. КРИТИЧНО: НЕ давай GO для LONG если 4h тренд медвежий. НЕ давай GO для SHORT если 4h тренд бычий. GO только если 4h совпадает + объём подтверждает + RSI ок. SKIP если 4h против. Цель: <30% GO. Поле reason — ОБЯЗАТЕЛЬНО на русском языке. Отвечай ТОЛЬКО валидным JSON без пояснений: {"verdict":"GO"|"WAIT"|"SKIP","confidence":0-100,"reason":"одно предложение на русском"}',
         messages:[{role:'user',content:prompt}]
       })
     });
@@ -532,6 +533,33 @@ async function callClaude(prompt, maxTokens=300){
     const match=text.match(/\{[^}]+\}/);
     if(!match)return null;
     return JSON.parse(match[0]);
+  }catch(e){console.warn('Claude API error:',e);return null;}
+}
+
+// Для чата и анализа — возвращает обычный текст на русском
+async function callClaudeText(prompt, maxTokens=800, system=null){
+  const key=getClaudeKey();
+  if(!key)return null;
+  const sysPrompt = system || 'Ты опытный интрадей трейдер криптовалют. Отвечай ТОЛЬКО на русском языке. Без markdown, без звёздочек — только чистый текст. Будь конкретным и кратким.';
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key':key,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify({
+        model:CLAUDE_MODEL,
+        max_tokens:maxTokens,
+        system:sysPrompt,
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const j=await r.json();
+    if(j.error){console.warn('Claude error:',j.error.message);return null;}
+    return j.content?.[0]?.text||null;
   }catch(e){console.warn('Claude API error:',e);return null;}
 }
 
@@ -2028,8 +2056,9 @@ ${idea.entry?'Entry $'+fmt(idea.entry)+' · SL $'+fmt(idea.sl)+' · TP $'+fmt(id
     if(!getClaudeKey()){appendMsg('ai','⚠️ Нужен Claude API ключ. Нажмите 🔑 Claude в топбаре.');return;}
     updateClaudeBtn('working');
     try{
-      const reply=await callClaude(detailPrompt,600);
+      const reply=await callClaudeText(detailPrompt,600);
       if(reply) appendMsg('ai',`[${idea.sym} · ${idea.verdict}] ${reply}`);
+      else appendMsg('ai','⚠️ Claude не ответил. Попробуйте снова.');
     }catch(e){appendMsg('ai','❌ '+e.message);}
     updateClaudeBtn(true);
     return;
@@ -2054,7 +2083,7 @@ ${idea.entry?`Entry:$${fmt(idea.entry)} SL:$${fmt(idea.sl)} TP:$${fmt(idea.tp1)}
       return;
     }
     updateClaudeBtn('working');
-    const reply=await callClaude(prompt,800);
+    const reply=await callClaudeText(prompt,800);
     document.getElementById(tid)?.remove();
     if(!reply){appendMsg('ai','⚠️ Claude не ответил. Попробуйте снова.');return;}
     appendMsg('ai',`[${idea.sym}] ${reply}`);
@@ -2111,7 +2140,7 @@ async function sendChat(userMsg){
     updateClaudeBtn('working');
     const hist=chatHistory.slice(-4).map(m=>`${m.role}: ${m.content.substring(0,100)}`).join('\n');
     const fullPrompt=buildContext()+extra+(hist?'\n\n[История]\n'+hist:'')+'\n\n---\nВопрос: '+msg;
-    const reply=await callClaude(fullPrompt,2048);
+    const reply=await callClaudeText(fullPrompt,2048);
     document.getElementById(tid)?.remove();
     if(!reply){appendMsg('ai','⚠️ Claude не ответил. Попробуйте снова.');return;}
     updateClaudeBtn(true);
@@ -3134,7 +3163,7 @@ EMA20: $${fmt(e20n)}, цена ${lp>e20n?'выше':'ниже'} EMA20
 CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
 Объём: ×${(curVol/avgVol).toFixed(1)} от среднего
 Оцени опасность для позиции. Нужно ли срочно закрывать?`;
-                callClaude(prompt, 300).then(reply => {
+                callClaudeText(prompt, 300).then(reply => {
                   if(!reply) return;
                   rec.aiWarning = reply;
                   // Если AI говорит закрывать — критичный алерт
