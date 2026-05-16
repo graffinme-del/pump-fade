@@ -1843,32 +1843,40 @@ function showWinrates(){
   var _wrTab=window._wrTab;
   var now2=Date.now();
 
-  // Merge history
-  var histData=[];
-  if(_wrTab==='custom'){
-    // Custom date range
+  // ── Объединённый источник данных ─────────────────────────
+  // Все вкладки читают из S.winrates + WR_HISTORY_KEY и фильтруют по времени.
+  // Это не зависит от того, сработал ли midnight reset.
+  var mskOff=3*3600000;
+  var todayStartMsk=Math.floor((now2+mskOff)/86400000)*86400000;
+  var todayStartUtc=todayStartMsk-mskOff;
+  var yStartUtc=todayStartUtc-86400000;
+
+  // Merged pool: дедупликация по sym+signalTime чтобы archived + live не дублировались
+  var hist=loadWRHistory();
+  var pool=S.winrates.concat(hist);
+  var seen=new Set();
+  pool=pool.filter(function(w){
+    var key=(w.sym||'')+'_'+(w.signalTime||w.ts||0);
+    if(seen.has(key))return false;
+    seen.add(key);return true;
+  });
+
+  var allData=[];
+  if(_wrTab==='today'){
+    allData=pool.filter(function(w){var t=w.signalTime||w.ts||0;return t>=todayStartUtc;});
+  } else if(_wrTab==='yesterday'){
+    allData=pool.filter(function(w){var t=w.signalTime||w.ts||0;return t>=yStartUtc&&t<todayStartUtc;});
+  } else if(_wrTab==='week'){
+    allData=pool.filter(function(w){return(w.signalTime||w.ts||0)>=now2-7*86400000;});
+  } else if(_wrTab==='month'){
+    allData=pool.filter(function(w){return(w.signalTime||w.ts||0)>=now2-30*86400000;});
+  } else if(_wrTab==='all'){
+    allData=pool;
+  } else if(_wrTab==='custom'){
     var d1=window._wrDateFrom?new Date(window._wrDateFrom).getTime():0;
     var d2=window._wrDateTo?new Date(window._wrDateTo).getTime()+86400000:now2;
-    var hist=loadWRHistory();
-    histData=hist.filter(function(w){var t=w.signalTime||w.ts||0;return t>=d1&&t<d2;});
-    // Also include today's winrates if range covers today
-    var allData=S.winrates.filter(function(w){var t=w.signalTime||w.ts||0;return t>=d1&&t<d2;}).concat(histData);
-  } else if(_wrTab!=='today'){
-    var hist=loadWRHistory();
-    if(_wrTab==='yesterday'){
-      // Moscow time = UTC+3; find midnight boundaries for yesterday
-      var mskOff=3*3600000;
-      var todayStartMsk=Math.floor((now2+mskOff)/86400000)*86400000;
-      var todayStartUtc=todayStartMsk-mskOff;
-      var yStartUtc=todayStartUtc-86400000;
-      histData=hist.filter(function(w){var t=w.signalTime||w.ts||0;return t>=yStartUtc&&t<todayStartUtc;});
-    } else {
-      var cutoff=_wrTab==='week'?now2-7*86400000:_wrTab==='month'?now2-30*86400000:0;
-      histData=hist.filter(function(w){return(w.signalTime||w.ts||0)>=cutoff;});
-    }
+    allData=pool.filter(function(w){var t=w.signalTime||w.ts||0;return t>=d1&&t<d2;});
   }
-  // For "yesterday" don't include today's S.winrates (they belong to today)
-  var allData=(_wrTab==='yesterday'||_wrTab==='custom')?histData:S.winrates.concat(histData);
   var wins=allData.filter(function(w){return w.result==='win';});
   var losses=allData.filter(function(w){return w.result==='loss';});
   var pend=allData.filter(function(w){return w.result==='pending';});
