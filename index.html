@@ -280,6 +280,29 @@ button:hover{opacity:.85;}
 .cc-act-work{background:var(--green-bg);color:var(--green);}
 .cc-act-copy{background:var(--s2);color:var(--muted);}
 
+/* ── ORDER BOOK & FLOW ── */
+.ob-container{background:var(--s2);border-top:1px solid var(--border);}
+.ob-hd{display:flex;align-items:center;justify-content:space-between;padding:5px 12px;border-bottom:1px solid var(--border);background:var(--s1);}
+.ob-hd-title{font-size:9px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;}
+.ob-body{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border);}
+.ob-section{padding:6px 10px;border-right:1px solid var(--border);}
+.ob-section:last-child{border-right:none;}
+.ob-sec-title{font-size:8px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
+.ob-bar-wrap{height:5px;background:var(--s3);border-radius:3px;overflow:hidden;margin-bottom:4px;display:flex;}
+.ob-bar-bid{height:100%;background:#16a34a;transition:width .6s;}
+.ob-bar-ask{height:100%;background:#dc2626;transition:width .6s;}
+.ob-lbl{font-size:10px;color:var(--text2);line-height:1.6;}
+.ob-lbl b{font-family:var(--mono);}
+.ob-confluence{padding:6px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--s1);border-top:1px solid var(--border);}
+.ob-conf-text{font-size:10px;color:var(--text2);flex:1;}
+.ob-score-badge{font-size:9px;font-weight:800;padding:2px 8px;border-radius:10px;font-family:var(--mono);flex-shrink:0;}
+.ob-score-pos{background:var(--green-bg);color:var(--green);border:1px solid var(--green-b);}
+.ob-score-neg{background:var(--red-bg);color:var(--red);border:1px solid var(--red-b);}
+.ob-score-neu{background:var(--s3);color:var(--muted);border:1px solid var(--border);}
+.ob-loading{padding:10px 12px;font-size:10px;color:var(--dim);text-align:center;font-style:italic;}
+@keyframes ob-pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.ob-connecting{animation:ob-pulse 1.2s infinite;}
+
 </style>
 </head>
 <body>
@@ -530,6 +553,25 @@ const WR_HISTORY_KEY = 'pf_wr_history_v1';
 const ACTIVE_KEY = 'pf_active_v1';
 let PUMP_THRESH = 15;
 let MIN_CONF = 70;
+
+// ═══════════════════════════════════════════════════════
+//  ORDER BOOK & FLOW STATE
+// ═══════════════════════════════════════════════════════
+const OB_STATE = {
+  // Card tracking
+  cardSym: null,
+  cardIdea: null,
+  renderTimer: null,
+  // Order book (card only)
+  bids: [], asks: [],
+  imbalance: null,
+  stacking: null,
+  depthSnapshots: [], // [{ts, bidTotal, askTotal}]
+  obScore: 0,
+  // Per-symbol aggTrade flow state (card + active positions)
+  // sym → {wsFlow, flowBuckets, micro, short, mid, flowScore, label, lastAlertTs}
+  symState: {},
+};
 
 // ═══════════════════════════════════════════════════════
 //  STATE
@@ -1546,7 +1588,7 @@ function showCoinCard(idea,analysis){
     <div class="cc-ph-score">${[1,2,3].map(i=>`<div class="cc-ph-dot${i<=phaseDone?' done':''}"></div>`).join('')}<span style="font-size:8px;color:var(--amber);font-weight:700;margin-left:3px;">${phaseDone}/3</span></div></div>
     <div class="cc-ph-tags">${phaseTags}</div>
   </div>
-  <div style="padding:5px 12px;background:var(--s1);border-top:1px solid var(--border);min-height:22px;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:var(--border);text-transform:uppercase;letter-spacing:1px;">· · · место для дополнительных данных · · ·</span></div>
+  <div id="ob-container" class="ob-container"><div class="ob-loading ob-connecting">Загрузка стакана и flow...</div></div>
   <div class="cc-actions">
     <button class="cc-act cc-act-tv" onclick="window.open('https://www.tradingview.com/chart/?symbol=BINANCE:${idea.sym}','_blank')">▼ TradingView ↗</button>
     <button class="cc-act cc-act-ai" onclick="askQuick('Проанализируй торговый сетап')">✦ AI анализ</button>
@@ -1555,6 +1597,9 @@ function showCoinCard(idea,analysis){
   </div>
 </div>`;
   fetchFutures(idea.sym);
+  // Start OB & Flow tracking for this coin
+  stopCardOBTracking();
+  startOBTracking(idea);
 }
 
 
@@ -2218,6 +2263,354 @@ function updateFuturesDisplay(){
 }
 
 // ═══════════════════════════════════════════════════════
+//  ORDER BOOK & FLOW ANALYSIS MODULE
+// ═══════════════════════════════════════════════════════
+
+// ── Flow bucket helpers ──────────────────────────────
+function obGetOrCreateSymState(sym) {
+  if (!OB_STATE.symState[sym]) {
+    OB_STATE.symState[sym] = {
+      wsFlow: null,
+      flowBuckets: [], // [{ts (sec), buyVol, sellVol}]
+      micro: {buyVol:0,sellVol:0,delta:0,velocity:0,direction:'neutral',totalVol:0},
+      short: {buyVol:0,sellVol:0,delta:0,velocity:0,direction:'neutral',totalVol:0},
+      mid:   {buyVol:0,sellVol:0,delta:0,velocity:0,direction:'neutral',totalVol:0},
+      flowScore: 0, label: '', lastAlertTs: 0,
+    };
+  }
+  return OB_STATE.symState[sym];
+}
+
+function obProcessAggTrade(data, sym) {
+  const state = OB_STATE.symState[sym];
+  if (!state) return;
+  const isBuy = !data.m; // m=true → maker sold → taker bought
+  const vol = parseFloat(data.q) * parseFloat(data.p); // USDT volume
+  if (!vol || isNaN(vol)) return;
+  const tsSec = Math.floor(Date.now() / 1000);
+  const buckets = state.flowBuckets;
+  const last = buckets[buckets.length - 1];
+  if (last && last.ts === tsSec) {
+    if (isBuy) last.buyVol += vol; else last.sellVol += vol;
+  } else {
+    buckets.push({ts: tsSec, buyVol: isBuy ? vol : 0, sellVol: isBuy ? 0 : vol});
+    if (buckets.length > 1800) buckets.splice(0, buckets.length - 1800);
+  }
+}
+
+function obComputeWindow(buckets, windowSec) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const cutoff = nowSec - windowSec;
+  const wb = buckets.filter(b => b.ts >= cutoff);
+  if (!wb.length) return {buyVol:0,sellVol:0,delta:0,velocity:0,direction:'neutral',totalVol:0};
+  const buyVol  = wb.reduce((s,b) => s+b.buyVol, 0);
+  const sellVol = wb.reduce((s,b) => s+b.sellVol, 0);
+  const delta   = buyVol - sellVol;
+  const totalVol = buyVol + sellVol || 1;
+  // Velocity: compare last 20% vs earlier portion of window
+  const velSec  = Math.max(10, Math.floor(windowSec * 0.2));
+  const vCutoff = nowSec - velSec;
+  const recent  = wb.filter(b => b.ts >= vCutoff);
+  const earlier = wb.filter(b => b.ts <  vCutoff);
+  const rDelta  = recent.reduce((s,b)=>s+b.buyVol-b.sellVol, 0);
+  const eDelta  = earlier.reduce((s,b)=>s+b.buyVol-b.sellVol, 0);
+  // Normalize by total volume so velocity is scale-independent
+  const velocity = (rDelta - eDelta) / totalVol;
+  const thr = 0.05;
+  const direction = delta > totalVol * thr ? 'bull' : delta < -totalVol * thr ? 'bear' : 'neutral';
+  return {buyVol, sellVol, delta, velocity, direction, totalVol};
+}
+
+function obUpdateWindows(sym) {
+  const state = OB_STATE.symState[sym];
+  if (!state) return;
+  state.micro = obComputeWindow(state.flowBuckets, 60);
+  state.short = obComputeWindow(state.flowBuckets, 300);
+  state.mid   = obComputeWindow(state.flowBuckets, 1800);
+}
+
+// ── Flow scoring (direction-aware) ──────────────────
+function obComputeFlowScore(idea, micro, short, mid) {
+  const dir = idea && idea.dir;
+  if (!dir || dir === '?' || dir === 'ПАМП') return {score:0, label:'нет данных'};
+  function align(d) {
+    if (d === 'neutral') return 0;
+    return (dir === 'LONG') ? (d === 'bull' ? 1 : -1) : (d === 'bear' ? 1 : -1);
+  }
+  const mA = align(micro.direction), shA = align(short.direction), miA = align(mid.direction);
+  let score = 0, label = '';
+  if      (mA>0  && shA>0  && miA>0)  { score =  8; label = 'сильное продолжение'; }
+  else if (mA<0  && shA<0  && miA<0)  { score = -8; label = 'тренд сломан'; }
+  else if (mA>0  && shA>0  && miA===0){ score =  4; label = 'краткосрочный импульс'; }
+  else if (mA>0  && shA>0  && miA<0)  { score =  2; label = 'импульс против тренда'; }
+  else if (mA>0  && shA<0  && miA<0)  { score =  0; label = 'отскок против тренда'; }
+  else if (mA<0  && shA>0  && miA>0)  { score = -2; label = 'откат в тренде'; }
+  else if (mA<0  && shA<0  && miA>0)  { score = -4; label = 'давление нарастает'; }
+  else                                 { score =  0; label = 'смешанный сигнал'; }
+  // Exhaustion override: velocity collapses sharply in micro
+  if (micro.velocity < -0.15 && mA <= 0) {
+    score = Math.min(score, -6);
+    label = 'истощение движения';
+  }
+  return {score: Math.max(-10, Math.min(10, score)), label};
+}
+
+// ── OB imbalance & stacking ──────────────────────────
+async function obFetchSnapshot(sym) {
+  try {
+    const r = await fetch(`${FAPI}/depth?symbol=${sym}&limit=100`);
+    const j = await r.json();
+    if (!j.bids || !j.asks) return;
+    OB_STATE.bids = j.bids.map(([p,q]) => [parseFloat(p), parseFloat(q)]);
+    OB_STATE.asks = j.asks.map(([p,q]) => [parseFloat(p), parseFloat(q)]);
+    obComputeImbalance(sym);
+  } catch(e) { console.warn('OB snapshot error:', e.message); }
+}
+
+function obComputeImbalance(sym) {
+  const price = S.prices[sym]?.price || (OB_STATE.bids[0] ? OB_STATE.bids[0][0] : 0);
+  if (!price || !OB_STATE.bids.length) return;
+  const range  = price * 0.005; // ±0.5%
+  const bidVol = OB_STATE.bids.filter(([p]) => p >= price - range).reduce((s,[,q]) => s+q, 0);
+  const askVol = OB_STATE.asks.filter(([p]) => p <= price + range).reduce((s,[,q]) => s+q, 0);
+  if (!askVol) return;
+  OB_STATE.imbalance = bidVol / askVol;
+  // Stacking / pulling detection (2-snapshot confirmation)
+  const now = Date.now();
+  OB_STATE.depthSnapshots.push({ts: now, bidTotal: bidVol, askTotal: askVol});
+  if (OB_STATE.depthSnapshots.length > 10) OB_STATE.depthSnapshots.shift();
+  OB_STATE.stacking = null;
+  if (OB_STATE.depthSnapshots.length >= 3) {
+    const prev = OB_STATE.depthSnapshots[OB_STATE.depthSnapshots.length - 3];
+    const curr = OB_STATE.depthSnapshots[OB_STATE.depthSnapshots.length - 1];
+    const bidChg = prev.bidTotal > 0 ? (curr.bidTotal - prev.bidTotal) / prev.bidTotal : 0;
+    const askChg = prev.askTotal > 0 ? (curr.askTotal - prev.askTotal) / prev.askTotal : 0;
+    if      (bidChg >  0.15) OB_STATE.stacking = 'bid_stacking';
+    else if (bidChg < -0.15) OB_STATE.stacking = 'bid_pulling';
+    else if (askChg >  0.15) OB_STATE.stacking = 'ask_stacking';
+    else if (askChg < -0.15) OB_STATE.stacking = 'ask_pulling';
+  }
+}
+
+function obGetOBScore(idea) {
+  const imb = OB_STATE.imbalance;
+  const stk = OB_STATE.stacking;
+  const dir = idea && idea.dir;
+  if (imb == null || !dir) return 0;
+  let score = 0;
+  if (dir === 'LONG') {
+    if      (imb > 1.8) score += 5;
+    else if (imb > 1.2) score += 3;
+    else if (imb < 0.6) score -= 8;
+    else if (imb < 0.8) score -= 5;
+    if (stk === 'bid_stacking') score += 4;
+    if (stk === 'bid_pulling')  score -= 4;
+  } else if (dir === 'SHORT') {
+    if      (imb < 0.6) score += 5;
+    else if (imb < 0.8) score += 3;
+    else if (imb > 1.8) score -= 8;
+    else if (imb > 1.2) score -= 5;
+    if (stk === 'ask_stacking') score += 4;
+    if (stk === 'ask_pulling')  score -= 4;
+  }
+  return Math.max(-10, Math.min(10, score));
+}
+
+// ── Rendering ────────────────────────────────────────
+function obRenderContainer() {
+  const el = document.getElementById('ob-container');
+  if (!el) { clearInterval(OB_STATE.renderTimer); OB_STATE.renderTimer = null; return; }
+  const idea = OB_STATE.cardIdea;
+  const sym  = OB_STATE.cardSym;
+  if (!sym) { el.innerHTML = '<div class="ob-loading">Выберите монету</div>'; return; }
+
+  const state = OB_STATE.symState[sym];
+  const micro = state ? state.micro : null;
+  const short = state ? state.short : null;
+  const mid   = state ? state.mid   : null;
+  const hasBuckets = state && state.flowBuckets.length > 5;
+
+  // OBI
+  const imb = OB_STATE.imbalance;
+  const stk = OB_STATE.stacking;
+  const bidPct = imb != null ? Math.round(imb / (1 + imb) * 100) : 50;
+  const askPct = 100 - bidPct;
+  const obiText = imb == null ? '<span class="ob-connecting">загрузка...</span>'
+    : imb > 1.8 ? `<b style="color:var(--green);">${bidPct}% bid</b> — сильное давление покупателей`
+    : imb > 1.2 ? `<b style="color:var(--green);">${bidPct}% bid</b> — умеренное давление покупателей`
+    : imb > 0.9 ? `<b>${bidPct}% bid</b> — нейтральный стакан`
+    : imb > 0.6 ? `<b style="color:var(--red);">${askPct}% ask</b> — давление продавцов`
+    :             `<b style="color:var(--red);">${askPct}% ask</b> — сильное давление продавцов`;
+  const stackText = stk === 'bid_stacking' ? '<span style="color:var(--green);">📥 Bid стакинг</span>'
+    : stk === 'bid_pulling'  ? '<span style="color:var(--red);">📤 Bid убирают</span>'
+    : stk === 'ask_stacking' ? '<span style="color:var(--red);">📥 Ask стакинг</span>'
+    : stk === 'ask_pulling'  ? '<span style="color:var(--green);">📤 Ask убирают</span>' : '';
+
+  // Flow window helper — text-focused, no raw numbers
+  function fmtVol(v) {
+    return v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v.toFixed(0);
+  }
+  function windowHTML(title, w, winLabel) {
+    if (!w || !hasBuckets) {
+      return `<div class="ob-section"><div class="ob-sec-title">${title} <span style="font-size:7px;color:var(--dim);">(${winLabel})</span></div>
+        <div class="ob-lbl ob-connecting" style="color:var(--dim);">накопление данных...</div></div>`;
+    }
+    const dArr  = w.direction === 'bull' ? '▲' : w.direction === 'bear' ? '▼' : '→';
+    const dClr  = w.direction === 'bull' ? 'var(--green)' : w.direction === 'bear' ? 'var(--red)' : 'var(--muted)';
+    const who   = w.buyVol > w.sellVol ? 'Покупатели' : 'Продавцы';
+    const velTxt = Math.abs(w.velocity) < 0.02 ? 'стабильно'
+      : w.velocity >  0.12 ? 'резкий рост'
+      : w.velocity >  0.02 ? 'ускоряется'
+      : w.velocity < -0.12 ? 'резкое ослабление'
+      :                       'замедляется';
+    const velClr = w.velocity >  0.05 ? 'var(--green)'
+      : w.velocity < -0.05 ? 'var(--red)' : 'var(--muted)';
+    const dSign = w.delta >= 0 ? '+' : '';
+    return `<div class="ob-section">
+      <div class="ob-sec-title">${title} <span style="font-size:7px;color:var(--dim);">(${winLabel})</span></div>
+      <div class="ob-lbl"><span style="font-size:13px;font-weight:800;color:${dClr};">${dArr}</span> ${who} доминируют</div>
+      <div class="ob-lbl" style="color:var(--muted);">Delta: <b style="color:${w.delta>=0?'var(--green)':'var(--red)'};">${dSign}${fmtVol(Math.abs(w.delta))}</b></div>
+      <div class="ob-lbl" style="color:var(--muted);">Импульс: <span style="color:${velClr};">${velTxt}</span></div>
+    </div>`;
+  }
+
+  // Confluence & score
+  const dirIcon = d => d==='bull' ? '<span style="color:var(--green);">▲</span>' : d==='bear' ? '<span style="color:var(--red);">▼</span>' : '<span style="color:var(--muted);">→</span>';
+  const confIcons = hasBuckets && micro
+    ? `Micro ${dirIcon(micro.direction)} Short ${dirIcon(short.direction)} Mid ${dirIcon(mid.direction)}`
+    : '—';
+  const flowData = hasBuckets && micro ? obComputeFlowScore(idea, micro, short, mid) : {score:0, label:'накопление данных...'};
+  const obScore  = obGetOBScore(idea);
+  // OB score is 50% weight in combined: keep flow dominant
+  const combinedScore = Math.max(-10, Math.min(10, flowData.score + Math.round(obScore * 0.4)));
+  if (state) { state.flowScore = flowData.score; state.label = flowData.label; }
+  const scoreClass = combinedScore > 3 ? 'ob-score-pos' : combinedScore < -3 ? 'ob-score-neg' : 'ob-score-neu';
+  const scoreText  = (combinedScore > 0 ? '+' : '') + combinedScore;
+  const ts = new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+  el.innerHTML = `
+  <div class="ob-hd">
+    <span class="ob-hd-title">📊 Стакан · Flow</span>
+    <span style="font-size:8px;color:var(--dim);font-family:var(--mono);">${ts}</span>
+  </div>
+  <div class="ob-body">
+    <div class="ob-section">
+      <div class="ob-sec-title">Стакан OBI <span style="font-size:7px;color:var(--dim);">(±0.5%)</span></div>
+      <div class="ob-bar-wrap"><div class="ob-bar-bid" style="width:${imb!=null?bidPct:50}%;"></div><div class="ob-bar-ask" style="width:${imb!=null?askPct:50}%;"></div></div>
+      <div class="ob-lbl">${obiText}</div>
+      <div class="ob-lbl" style="color:var(--muted);">Ratio: <b>${imb!=null?imb.toFixed(2):'—'}</b></div>
+      ${stackText ? `<div class="ob-lbl" style="margin-top:3px;">${stackText}</div>` : ''}
+    </div>
+    ${windowHTML('SHORT FLOW', short, '5м')}
+    ${windowHTML('MID FLOW',   mid,   '30м')}
+  </div>
+  <div class="ob-confluence">
+    <div style="flex:1;">
+      <div style="font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">Confluence · ${confIcons}</div>
+      <div class="ob-conf-text">${flowData.label}</div>
+    </div>
+    <span class="ob-score-badge ${scoreClass}">Flow ${scoreText}</span>
+  </div>`;
+}
+
+// ── WebSocket connections ────────────────────────────
+function obConnectFlowStream(sym) {
+  const state = obGetOrCreateSymState(sym);
+  if (state.wsFlow && state.wsFlow.readyState < 2) return; // already open/connecting
+  const url = `wss://stream.binance.com:9443/stream?streams=${sym.toLowerCase()}@aggTrade`;
+  const ws = new WebSocket(url);
+  ws.onmessage = e => {
+    try { const msg = JSON.parse(e.data); if (msg.data) obProcessAggTrade(msg.data, sym); }
+    catch {}
+  };
+  ws.onerror = () => {};
+  ws.onclose = () => {
+    // Auto-reconnect only if still needed (in active track or card open)
+    const needed = OB_STATE.cardSym === sym || S.activeTrack.some(t => t.sym === sym);
+    if (needed) setTimeout(() => obConnectFlowStream(sym), 5000);
+  };
+  state.wsFlow = ws;
+}
+
+function obDisconnectFlowStream(sym) {
+  const state = OB_STATE.symState[sym];
+  if (!state) return;
+  if (state.wsFlow) { try { state.wsFlow.close(); } catch {} state.wsFlow = null; }
+  delete OB_STATE.symState[sym];
+}
+
+// ── Orchestration ─────────────────────────────────────
+function startOBTracking(idea) {
+  const sym = idea && idea.sym;
+  if (!sym) return;
+  OB_STATE.cardSym  = sym;
+  OB_STATE.cardIdea = idea;
+  // Reset OB snapshot data for new symbol
+  OB_STATE.bids = []; OB_STATE.asks = [];
+  OB_STATE.imbalance = null; OB_STATE.stacking = null; OB_STATE.depthSnapshots = [];
+  // Start aggTrade stream (reuses if already running for active position)
+  obConnectFlowStream(sym);
+  // Fetch order book snapshot (and refresh every 10s)
+  obFetchSnapshot(sym);
+  // Render loop every 2 seconds
+  clearInterval(OB_STATE.renderTimer);
+  OB_STATE.renderTimer = setInterval(() => {
+    obUpdateWindows(sym);
+    obComputeImbalance(sym);
+    obRenderContainer();
+  }, 2000);
+  // Initial render immediately
+  obRenderContainer();
+}
+
+function stopCardOBTracking() {
+  clearInterval(OB_STATE.renderTimer);
+  OB_STATE.renderTimer = null;
+  const prevSym = OB_STATE.cardSym;
+  OB_STATE.cardSym  = null;
+  OB_STATE.cardIdea = null;
+  // Stop flow stream if not needed for active positions
+  if (prevSym && !S.activeTrack.some(t => t.sym === prevSym)) {
+    obDisconnectFlowStream(prevSym);
+  }
+}
+
+function startActiveFlowTracking(sym) {
+  obConnectFlowStream(sym);
+}
+
+function stopActiveFlowTracking(sym) {
+  if (OB_STATE.cardSym === sym) return; // card still showing this sym
+  obDisconnectFlowStream(sym);
+}
+
+// ── Active position flow alerts ───────────────────────
+function checkActiveFlowAlerts() {
+  const now = Date.now();
+  S.activeTrack.forEach(rec => {
+    const state = OB_STATE.symState[rec.sym];
+    if (!state || state.flowBuckets.length < 5) return;
+    obUpdateWindows(rec.sym);
+    const {micro, short, mid} = state;
+    const idea = S.ideas.find(i => i.sym === rec.sym) || rec;
+    const {score, label} = obComputeFlowScore(idea, micro, short, mid);
+    state.flowScore = score; state.label = label;
+    // Throttle: no more than 1 alert per 5 min per sym
+    if (now - (state.lastAlertTs || 0) < 5 * 60 * 1000) return;
+    let msg = null;
+    if (label === 'истощение движения') msg = `📊 ${rec.sym.replace('USDT','')} — истощение flow`;
+    else if (score <= -6) msg = `📊 ${rec.sym.replace('USDT','')} — flow против позиции`;
+    if (msg) {
+      state.lastAlertTs = now;
+      showToast(msg);
+      if (!rec.alerts) rec.alerts = [];
+      rec.alerts.unshift({type: score <= -6 ? 'danger' : 'warn', msg: `📊 Flow: ${label}`});
+      if (rec.alerts.length > 8) rec.alerts.pop();
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
 //  WEBSOCKET
 // ═══════════════════════════════════════════════════════
 function connectWS(){
@@ -2321,6 +2714,8 @@ function toggleActive(sym){
     // Немедленно запускаем первую проверку
     setTimeout(()=>runActiveMonitor(), 500);
     scheduleWinrateCheck(idea||rec);
+    // Запускаем flow stream для мониторинга позиции
+    startActiveFlowTracking(sym);
   }
   updateTabCounts();
   if(ideasTab==='active') renderIdeas();
@@ -2335,6 +2730,8 @@ function toggleActive(sym){
 function removeActiveTrack(sym){
   S.activeTrack = S.activeTrack.filter(t=>t.sym!==sym);
   saveActive();
+  // Останавливаем flow stream если карточка не открыта на этой монете
+  stopActiveFlowTracking(sym);
   updateTabCounts();
   if(ideasTab==='active') renderIdeas();
 }
@@ -2530,6 +2927,8 @@ CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
     } catch(e){}
   }));
   saveActive();
+  // Проверяем flow алерты для активных позиций
+  checkActiveFlowAlerts();
   if(ideasTab==='active') renderIdeas();
 }
 
@@ -2949,6 +3348,8 @@ setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
 setInterval(function(){checkPendingWinrates();checkMidnightReset();}, 15*60*1000); // WR check every 15 min
 setInterval(()=>runActiveMonitor(), 15*1000); // Active track monitor every 15 sec
 setTimeout(()=>runActiveMonitor(), 5000); // Initial active monitor check
+// Запускаем flow streams для монет, которые были "В работе" до перезагрузки страницы
+S.activeTrack.forEach(rec => startActiveFlowTracking(rec.sym));
 // Initial check on load
 // Clean up winrates with bad TP/SL (<1% range)
 S.winrates = S.winrates.filter(w => {
