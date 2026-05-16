@@ -52,10 +52,10 @@ button:hover{opacity:.85;}
 .thresh-val{font-family:var(--mono);color:#f59e0b;font-weight:700;min-width:28px;}
 .top-btn{font-size:9px;color:#94a3b8;border:1px solid #334155;padding:2px 8px;border-radius:2px;}
 .top-btn:hover{color:#f8fafc;}
-#gemini-btn{font-family:var(--mono);font-size:10px;font-weight:700;color:#4ade80;
+#claude-btn{font-family:var(--mono);font-size:10px;font-weight:700;color:#4ade80;
   border:1px solid #334155;padding:2px 8px;border-radius:2px;cursor:pointer;}
-#gemini-btn.off{color:#f87171;animation:sig-blink 2s infinite;}
-#gemini-btn.working{color:#f59e0b;}
+#claude-btn.off{color:#f87171;animation:sig-blink 2s infinite;}
+#claude-btn.working{color:#f59e0b;}
 
 /* ── PUMP ALERT ── */
 #pump-alert{
@@ -333,9 +333,7 @@ button:hover{opacity:.85;}
   <div class="tdiv"></div>
   <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v16.05 14:16</span>
   <button id="mute-btn" onclick="toggleMute()" style="font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:3px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);" title="Звук вкл/выкл">🔔</button>
-  <button id="gemini-btn" class="off" onclick="promptApiKey()">🔑 Gemini</button>
-  <button id="claude-btn" onclick="promptClaudeKey()" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px;cursor:pointer;background:var(--s2);border:1px solid var(--border);color:var(--muted);">🔑 Claude</button>
-  <button onclick="checkGeminiModels()" style="font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;" title="Проверить доступные модели Gemini">📋 Модели</button>
+  <button id="claude-btn" class="off" onclick="promptClaudeKey()">🔑 Claude</button>
   <!-- theme toggle disabled -->
 </div>
 
@@ -470,12 +468,12 @@ button:hover{opacity:.85;}
   <!-- RIGHT: CHAT ONLY -->
   <div id="right">
     <div class="right-hd">
-      <span class="right-title">💬 AI Советник · Gemini</span>
+      <span class="right-title">💬 AI Советник · Claude</span>
       <span id="chat-status" style="font-size:9px;color:var(--muted);">не подключён</span>
     </div>
     <div id="chat-messages">
       <div class="msg-ai">
-        <div class="msg-ai-hd">✦ Gemini</div>
+        <div class="msg-ai-hd">✦ Claude</div>
         Привет! Слежу за рынком.<br>
         <span style="color:var(--dim);">Спрашивайте про монету, тренд, CVD.<br>
         Или нажмите <b>✦ AI</b> в карточке монеты.</span>
@@ -503,7 +501,7 @@ button:hover{opacity:.85;}
 // ═══════════════════════════════════════════════════════
 const FAPI   = 'https://fapi.binance.com/fapi/v1';
 const BINANCE = FAPI; // same — futures API has no CORS issues
-// Model is set by user via 📋 Модели button → localStorage('gemini_model_override')
+// Claude model: claude-haiku-4-5 (set in callClaude)
 
 // ── CLAUDE API ──────────────────────────────────────────
 const CLAUDE_MODEL = 'claude-haiku-4-5';
@@ -538,9 +536,8 @@ async function callClaude(prompt, maxTokens=300){
 }
 
 async function getAIVerdict(idea){
-  // Используем Claude если есть ключ, иначе Gemini
   if(getClaudeKey()) return callClaudeVerdict(idea);
-  return getGeminiVerdict(idea);
+  return null;
 }
 
 async function callClaudeVerdict(idea){
@@ -1249,8 +1246,8 @@ async function runIdeas(manual=false){
           pos_mult:1.0,pos_state:'neutral',pos_notes:[],exec_adj:0,
           verdict:null, verdictReason:'', verdictConf:0};
         newIdeas.push(ideaObj);
-        // Async AI verdict (Claude or Gemini) — staggered to avoid rate limits
-        if (getApiKey() || getClaudeKey()) {
+        // Async AI verdict (Claude) — staggered to avoid rate limits
+        if (getClaudeKey()) {
           const verdictDelay = (newIdeas.length - 1) * 3000;
           setTimeout(() => {
             getAIVerdict(ideaObj).then(v => {
@@ -1275,7 +1272,7 @@ async function runIdeas(manual=false){
             }).catch(() => { ideaObj.verdictChecked = true; renderIdeas(); });
           }, verdictDelay);
         } else {
-          // No Gemini key — track winrate directly
+          // No Claude key — track winrate directly
           ideaObj.verdictChecked = true;
           if (ideaObj.entry && ideaObj.sl && ideaObj.tp1) scheduleWinrateCheck(ideaObj);
         }
@@ -1426,7 +1423,7 @@ function renderIdeas(){
           idea.verdict==='SKIP' ? '' :
           idea.verdictChecked ?
           `<span style="font-size:8px;color:var(--dim);">—</span>` :
-          (getApiKey()||getClaudeKey()) ? `<span style="font-size:8px;color:var(--dim);animation:pulse 1s infinite;">✦</span>` :
+          getClaudeKey() ? `<span style="font-size:8px;color:var(--dim);animation:pulse 1s infinite;">✦</span>` :
           `<span style="font-size:8px;color:var(--dim);">—</span>`
         }
         <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${idea.conf>=85?'var(--red)':idea.conf>=72?'var(--orange)':'var(--muted)'};">${(idea.conf||0).toFixed(0)}/100</span>
@@ -1604,7 +1601,7 @@ function showCoinCard(idea,analysis){
   </div>
   <div class="cc-text-section">
     <div class="cc-tb cc-tb-agent"><div class="cc-tb-hd"><span>⚡</span><span class="cc-tb-title">Сигналы агента</span></div><div class="cc-tb-text">${(idea.sigs||[]).join('<br>')||idea.why||'—'}</div></div>
-    <div class="cc-tb cc-tb-ai"><div class="cc-tb-hd"><span>✦</span><span class="cc-tb-title">AI · Gemini</span>${idea.verdict?`<span class="cc-vp" style="background:${verdictBg};color:${verdictTxt};">${idea.verdict}${idea.verdictConf?' '+idea.verdictConf+'%':''}</span>`:''}</div><div class="cc-tb-text">${idea.verdictReason||'<span style="color:var(--dim);">Нажмите ✦ AI анализ</span>'}</div></div>
+    <div class="cc-tb cc-tb-ai"><div class="cc-tb-hd"><span>✦</span><span class="cc-tb-title">AI · Claude</span>${idea.verdict?`<span class="cc-vp" style="background:${verdictBg};color:${verdictTxt};">${idea.verdict}${idea.verdictConf?' '+idea.verdictConf+'%':''}</span>`:''}</div><div class="cc-tb-text">${idea.verdictReason||'<span style="color:var(--dim);">Нажмите ✦ AI анализ</span>'}</div></div>
   </div>
   <div class="cc-phases">
     <div class="cc-ph-hd"><span class="cc-ph-title">Фазы истощения</span>
@@ -1972,66 +1969,32 @@ function showWinrates(){
 
 
 // ═══════════════════════════════════════════════════════
-//  GEMINI AI
+//  CLAUDE AI — единственный AI провайдер
 // ═══════════════════════════════════════════════════════
-function getApiKey(){return localStorage.getItem('gemini_api_key')||'';}
-
-async function checkGeminiModels(){
-  const key = getApiKey();
-  if(!key){ alert('Сначала введи API ключ (кнопка 🔑 AI)'); return; }
-  const current = localStorage.getItem('gemini_model_override') || 'не выбрана';
-  try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-    const j = await r.json();
-    if(j.error){ alert('Ошибка API: ' + j.error.message); return; }
-    const models = (j.models||[])
-      .filter(m=>m.supportedGenerationMethods?.includes('generateContent'))
-      .map(m=>m.name.replace('models/',''));
-    if(!models.length){ alert('Нет доступных моделей'); return; }
-    const choice = prompt(
-      'Текущая модель: ' + current + '\n\nДоступные модели:\n' + models.join('\n') + '\n\nВведи название:',
-      current !== 'не выбрана' ? current : models[0]
-    );
-    if(choice && choice.trim()){
-      localStorage.setItem('gemini_model_override', choice.trim());
-      updateGeminiBtn(true);
-      showToast('✅ Модель: ' + choice.trim());
-    }
-  } catch(e) {
-    alert('Ошибка: ' + e.message);
-  }
-}
-
+function getApiKey(){return '';} // stub — Gemini удалён
 
 function promptClaudeKey(){
-  const key=prompt('Claude API Key (console.anthropic.com):',getClaudeKey());
+  const key=prompt('Claude API Key\n\nconsole.anthropic.com → API Keys → Create Key\n(начинается с sk-ant-...)',getClaudeKey());
   if(key!==null){
     localStorage.setItem('claude_api_key',key.trim());
-    const btn=document.getElementById('claude-btn');
-    if(btn){btn.style.color=key.trim()?'#4ade80':'var(--muted)';}
+    updateClaudeBtn(key.trim()?true:false);
     showToast(key.trim()?'✅ Claude подключён':'Claude ключ удалён');
   }
 }
 
-function promptApiKey(){
-  const key=prompt('Google Gemini API ключ\n\nПолучите бесплатно: aistudio.google.com → Get API Key\n(После пополнения баланса лимиты снимаются)',getApiKey());
-  if(key&&key.length>20){
-    localStorage.setItem('gemini_api_key',key.trim());
-    updateGeminiBtn(true);
-    showToast('✓ Gemini AI подключён');
-  }
-}
-
-function updateGeminiBtn(ok){
-  const btn=document.getElementById('gemini-btn');
+function updateClaudeBtn(ok){
+  const btn=document.getElementById('claude-btn');
   const status=document.getElementById('chat-status');
   if(btn){
-    if(ok===true){btn.className='';btn.textContent='✦ Gemini ●';btn.style.color='#4ade80';}
-    else if(ok==='working'){btn.style.color='#f59e0b';}
-    else{btn.className='off';btn.textContent='🔑 AI';btn.style.color='#f87171';}
+    if(ok===true){btn.className='';btn.textContent='✦ Claude ●';btn.style.color='#4ade80';}
+    else if(ok==='working'){btn.className='working';btn.textContent='✦ Claude…';btn.style.color='#f59e0b';}
+    else{btn.className='off';btn.textContent='🔑 Claude';btn.style.color='#f87171';}
   }
   if(status){status.textContent=ok===true?'подключён':ok==='working'?'думает...':'не подключён';status.style.color=ok===true?'var(--green)':ok==='working'?'var(--amber)':'var(--dim)';}
 }
+
+// Stub — Gemini удалён, оставлен для обратной совместимости внутренних вызовов
+function updateGeminiBtn(ok){ updateClaudeBtn(ok); }
 
 function showToast(msg){
   const t=document.createElement('div');
@@ -2039,104 +2002,9 @@ function showToast(msg){
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);
 }
 
-// Auto-detect working Gemini model
-let _workingModel = null;
-const GEMINI_MODELS_TRY = [
-  'gemini-2.0-flash-lite',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-  'gemini-2.5-flash',
-];
-
-async function getWorkingModel(key) {
-  return localStorage.getItem('gemini_model_override') || 'gemini-2.0-flash-lite';
-}
-
-async function callGemini(prompt,maxTokens=800){
-  const key=getApiKey();if(!key)return null;
-  const model = await getWorkingModel(key);
-  const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-  const body={
-    contents:[{parts:[{text:prompt}]}],
-    generationConfig:{maxOutputTokens:maxTokens,temperature:0.2},
-  };
-  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(!r.ok){
-    const err=await r.json().catch(()=>({}));
-    const msg=err?.error?.message||`HTTP ${r.status}`;
-    if(r.status===429){
-      await new Promise(r=>setTimeout(r,15000));
-      const r2=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-      if(!r2.ok)throw new Error('Лимит запросов. Подождите минуту.');
-      const d2=await r2.json();updateGeminiBtn(true);return d2?.candidates?.[0]?.content?.parts?.[0]?.text||'';
-    }
-    updateGeminiBtn(false);throw new Error(msg);
-  }
-  const data=await r.json();
-  updateGeminiBtn(true);
-  const candidate = data?.candidates?.[0];
-  const text = candidate?.content?.parts?.[0]?.text || '';
-  const finishReason = candidate?.finishReason;
-  // If truncated by token limit, add note
-  // finishReason check removed - just return text as-is
-  return text;
-}
-
-// ═══════════════════════════════════════════════════════
-//  GEMINI VERDICT: GO / SKIP / WAIT
-// ═══════════════════════════════════════════════════════
-async function getGeminiVerdict(idea) {
-  if (!getApiKey()) return null;
-  const a = idea.cds1h && idea.cds15m ? analyzeFull(idea.cds1h, idea.cds15m) : null;
-  // Same full context as AI analysis button
-  const prompt = `${idea.sym} | ${idea.dir} | ${idea.conf?.toFixed(0)||0}/100
-Pump: +${(idea.pumpPct||0).toFixed(1)}% | EMA: ${(idea.dist||0).toFixed(1)}% | RSI: ${idea.rsiNow?.toFixed(0)||50} | Vol x${idea.volRatio?.toFixed(1)||1} | CVD: ${idea.cvdFalling?'falling':'rising'}${idea.cvdDiv?' + divergence':''}
-ATR x${(idea.atrRatio||1).toFixed(2)} | 4h: ${idea.trend4h||'neutral'}
-Signals: ${(idea.sigs||[]).join(' | ')}
-${a?'Phase: '+a.phase+'/3 | Ready: '+(a.readyToShort?'YES':'NO')+' | Exhaustion: '+(a.exSigs?.map(s=>s.t).join(', ')||'none')+' | Breakdown: '+(a.bkSigs?.map(s=>s.t).join(', ')||'none'):''}
-${idea.entry?'Entry: $'+fmt(idea.entry)+' | SL: $'+fmt(idea.sl)+' | TP: $'+fmt(idea.tp1):''}
-Candle patterns: ${(idea.allPatterns||[]).map(p=>p.name+' '+p.tf).join(', ')||'none'}
-
-Reply ONLY with JSON (no markdown):
-{"verdict":"GO","confidence":80,"reason":"1 sentence in Russian"}
-GO=enter now, SKIP=pass, WAIT=need confirmation
-Rules: GO only if 4h trend aligns AND volume >1.5x avg AND RSI in normal range. WAIT if trend neutral or 1 signal conflicts. SKIP if 4h opposes direction, or ATR>1.8, or pump already >15%. Be selective — target 1-2 GO per scan, not all signals.`;
-
-  try {
-    const model = localStorage.getItem('gemini_model_override') || 'gemini-2.0-flash-lite';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${getApiKey()}`;
-    const r = await fetch(url, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        contents:[{parts:[{text:prompt}]}],
-        generationConfig:{maxOutputTokens:200, temperature:0.2},
-        systemInstruction:{parts:[{text:'You are a disciplined intraday crypto trader with a strict filter. CRITICAL RULES: (1) NEVER give GO for LONG if 4h trend is bearish — only SKIP or WAIT. (2) NEVER give GO for SHORT if 4h trend is bullish — only SKIP or WAIT. (3) GO only if: 4h trend aligns with direction AND 1h trend aligns AND volume >1.5x avg AND RSI not overextended. (4) WAIT if trend neutral or 1 signal conflicts. (5) SKIP if trends oppose direction. Target 20-30% GO rate. Reply ONLY valid JSON. No markdown.'}]}
-      })
-    });
-    if (!r.ok) return null;
-    const data = await r.json();
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!raw) return null;
-    const clean = raw.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
-    const start = clean.indexOf('{'), end2 = clean.lastIndexOf('}');
-    if (start >= 0 && end2 > start) {
-      try {
-        const parsed = JSON.parse(clean.slice(start, end2+1));
-        if (parsed.verdict) return parsed;
-      } catch(e2) {}
-    }
-    // Fallback
-    const upper = raw.toUpperCase();
-    const verdict = upper.includes('"GO"')?'GO':upper.includes('"SKIP"')?'SKIP':upper.includes('"WAIT"')?'WAIT':null;
-    if (verdict) {
-      // Extract just the reason text, remove JSON structure
-      const reasonMatch = clean.match(/"reason"\s*:\s*"([^"]+)"/);
-      const reason = reasonMatch ? reasonMatch[1] : clean.replace(/[{}"\n,]/g,' ').replace(/verdict\s*:\s*\w+/gi,'').replace(/confidence\s*:\s*\d+/gi,'').trim().substring(0,150);
-      return {verdict, confidence:70, reason};
-    }
-    return null;
-  } catch(e) { return null; }
-}
+// Stub — Gemini удалён
+async function callGemini(prompt, maxTokens=800){ return callClaude(prompt, maxTokens); }
+async function getGeminiVerdict(idea){ return getAIVerdict(idea); }
 
 
 async function askAIAboutIdea(sym){
@@ -2157,12 +2025,13 @@ ${a?'Фаза '+a.phase+'/3. '+( a.exSigs?.map(s=>s.t).join(', ')||''):''}
 ${idea.entry?'Entry $'+fmt(idea.entry)+' · SL $'+fmt(idea.sl)+' · TP $'+fmt(idea.tp1)+' · R/R '+idea.rr:''}
 
 Вердикт: ${idea.verdict}. Данные выше.`;
-    if(!getApiKey()){appendMsg('ai','⚠️ Нужен Gemini API ключ.');return;}
-    updateGeminiBtn('working');
+    if(!getClaudeKey()){appendMsg('ai','⚠️ Нужен Claude API ключ. Нажмите 🔑 Claude в топбаре.');return;}
+    updateClaudeBtn('working');
     try{
-      const reply=await callGemini(detailPrompt,600);
+      const reply=await callClaude(detailPrompt,600);
       if(reply) appendMsg('ai',`[${idea.sym} · ${idea.verdict}] ${reply}`);
     }catch(e){appendMsg('ai','❌ '+e.message);}
+    updateClaudeBtn(true);
     return;
   }
   const a=S.analysis;
@@ -2179,21 +2048,21 @@ ${idea.entry?`Entry:$${fmt(idea.entry)} SL:$${fmt(idea.sl)} TP:$${fmt(idea.tp1)}
 РИСКИ: одна фраза
 ДЕЙСТВИЕ: входить / ждать / пропустить`;
   try{
-    updateGeminiBtn('working');
-    if (!getApiKey()) {
+    if(!getClaudeKey()){
       document.getElementById(tid)?.remove();
-      appendMsg('ai','⚠️ Нужен Gemini API ключ. Нажмите ✦ Gemini в топбаре.');
+      appendMsg('ai','⚠️ Нужен Claude API ключ. Нажмите 🔑 Claude в топбаре.');
       return;
     }
-    updateGeminiBtn('working');
-    const reply=await callGemini(prompt,800);
+    updateClaudeBtn('working');
+    const reply=await callClaude(prompt,800);
     document.getElementById(tid)?.remove();
-    if (!reply) { appendMsg('ai','⚠️ Gemini не ответил. Попробуйте снова.'); return; }
+    if(!reply){appendMsg('ai','⚠️ Claude не ответил. Попробуйте снова.');return;}
     appendMsg('ai',`[${idea.sym}] ${reply}`);
+    updateClaudeBtn(true);
   }catch(e){
     document.getElementById(tid)?.remove();
     appendMsg('ai','❌ Ошибка: '+(e.message||'неизвестная'));
-    updateGeminiBtn(false);
+    updateClaudeBtn(false);
   }
 }
 
@@ -2216,9 +2085,9 @@ async function sendChat(userMsg){
   appendMsg('user',msg);
   const tid='t'+Date.now();appendThinking(tid);
   try{
-    if(!getApiKey()){
+    if(!getClaudeKey()){
       document.getElementById(tid)?.remove();
-      appendMsg('ai','⚠️ Нужен Gemini API ключ.\nНажмите кнопку 🔑 AI в топбаре.\nКлюч бесплатно: aistudio.google.com → Get API Key');
+      appendMsg('ai','⚠️ Нужен Claude API ключ.\nНажмите кнопку 🔑 Claude в топбаре.\nconsole.anthropic.com → API Keys');
       return;
     }
     // Detect coin symbol in message (e.g. "BTC", "ETHUSDT", "анализ SOL")
@@ -2239,20 +2108,20 @@ async function sendChat(userMsg){
         }
       }catch(e){ console.warn('scoreForIdea in chat:', e); }
     }
-    updateGeminiBtn('working');
+    updateClaudeBtn('working');
     const hist=chatHistory.slice(-4).map(m=>`${m.role}: ${m.content.substring(0,100)}`).join('\n');
     const fullPrompt=buildContext()+extra+(hist?'\n\n[История]\n'+hist:'')+'\n\n---\nВопрос: '+msg;
-    const reply=await callGemini(fullPrompt,2048);
+    const reply=await callClaude(fullPrompt,2048);
     document.getElementById(tid)?.remove();
-    if(!reply){appendMsg('ai','⚠️ Gemini не ответил. Попробуйте снова.');return;}
+    if(!reply){appendMsg('ai','⚠️ Claude не ответил. Попробуйте снова.');return;}
+    updateClaudeBtn(true);
     appendMsg('ai',reply);
     chatHistory.push({role:'user',content:msg},{role:'assistant',content:reply});
     if(chatHistory.length>12)chatHistory=chatHistory.slice(-12);
   }catch(e){
     document.getElementById(tid)?.remove();
-    if(e.message?.includes('429')||e.message?.includes('лимит'))
-      appendMsg('ai','⏳ Лимит Gemini (15 запросов/мин). Подождите минуту.');
-    else appendMsg('ai','❌ Ошибка: '+(e.message||'неизвестная'));
+    appendMsg('ai','❌ Ошибка Claude: '+(e.message||'неизвестная'));
+    updateClaudeBtn(false);
   }
 }
 
@@ -2290,7 +2159,7 @@ function appendMsg(role,text){
     div.textContent=text;
   } else {
     div.className='msg-ai';
-    div.innerHTML=`<div class="msg-ai-hd">✦ Gemini · ${new Date().toLocaleTimeString()}</div>${renderMarkdown(text)}`;
+    div.innerHTML=`<div class="msg-ai-hd">✦ Claude · ${new Date().toLocaleTimeString()}</div>${renderMarkdown(text)}`;
   }
   msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
 }
@@ -3252,7 +3121,7 @@ async function runActiveMonitor(){
 
             // AI анализ каждые 15 мин если есть ключ
             const _aiInterval = 15*60*1000;
-            if(getApiKey() && (!rec._lastAiCheck||(now-rec._lastAiCheck)>_aiInterval)) {
+            if(getClaudeKey() && (!rec._lastAiCheck||(now-rec._lastAiCheck)>_aiInterval)) {
               rec._lastAiCheck = now;
               const dangerSignals = newAlerts.filter(a=>a.type==='danger');
               if(dangerSignals.length>=2) {
@@ -3265,7 +3134,7 @@ EMA20: $${fmt(e20n)}, цена ${lp>e20n?'выше':'ниже'} EMA20
 CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
 Объём: ×${(curVol/avgVol).toFixed(1)} от среднего
 Оцени опасность для позиции. Нужно ли срочно закрывать?`;
-                callGemini(prompt, 300).then(reply => {
+                callClaude(prompt, 300).then(reply => {
                   if(!reply) return;
                   rec.aiWarning = reply;
                   // Если AI говорит закрывать — критичный алерт
@@ -3408,9 +3277,8 @@ async function analyzeManual(){
     redrawCharts();fetchFutures(sym);
     showCoinCard(idea,S.analysis||{});
     // AI анализ
-    if(getApiKey()||(typeof getClaudeKey!=='undefined'&&getClaudeKey())){
-      var aiFn=typeof getAIVerdict!=='undefined'?getAIVerdict:getGeminiVerdict;
-      aiFn(idea).then(function(v){
+    if(getClaudeKey()){
+      getAIVerdict(idea).then(function(v){
         if(!v||!res)return;
         idea.verdict=v.verdict;idea.verdictReason=v.reason;idea.verdictConf=v.confidence;
         showCoinCard(idea,S.analysis||{});
@@ -3499,7 +3367,7 @@ function renderActiveTab(list){
 }
 
 // ═══════════════════════════════════════════════════════
-//  WATCH LIST — монеты на перепроверке (WAIT от Gemini)
+//  WATCH LIST — монеты на перепроверке (WAIT от Claude)
 // ═══════════════════════════════════════════════════════
 const WATCH_LIST = {}; // {sym: {idea, addedAt, checks, maxChecks}}
 const WATCH_INTERVAL_MS = 5 * 60 * 1000; // перепроверка каждые 5 мин
@@ -3530,7 +3398,7 @@ function renderWatchBadge() {
 
 async function runWatchChecks() {
   const syms = Object.keys(WATCH_LIST);
-  if (!syms.length || !getApiKey()) return;
+  if (!syms.length || !getClaudeKey()) return;
 
   for (const sym of syms) {
     const w = WATCH_LIST[sym];
@@ -3562,8 +3430,8 @@ async function runWatchChecks() {
         rsiNow: fresh.rsiNow, cvdFalling: fresh.cvdFalling,
       };
 
-      // Перепрашиваем Gemini
-      const verdict = await getGeminiVerdict(w.idea);
+      // Перепрашиваем Claude
+      const verdict = await getAIVerdict(w.idea);
       if (!verdict) continue;
 
       if (verdict.verdict === 'GO') {
@@ -3616,7 +3484,7 @@ function playAlert() {
 //  INIT
 // ═══════════════════════════════════════════════════════
 // Check API key status
-if(getApiKey())updateGeminiBtn(true);
+if(getClaudeKey())updateClaudeBtn(true);
 
 // BTC Monitor
 const BTC_STATE = {price:0, prev1h:0, change1h:0, trend:'neutral', lastCheck:0, history:[]};
