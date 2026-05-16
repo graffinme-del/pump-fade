@@ -1507,7 +1507,7 @@ function showCoinCard(idea,analysis){
   const dbg=idea.isPump?'var(--amber-bg)':idea.dir==='LONG'?'var(--green-bg)':'var(--red-bg)';
   const dbl=idea.isPump?'var(--amber-b)':idea.dir==='LONG'?'var(--green-b)':'var(--red-b)';
   const dl=idea.isPump?'🔥 ПАМП':idea.dir==='LONG'?'▲ LONG':'▼ SHORT';
-  const tf=tfOrient(idea.cds1h||S.cds1h||[]);
+  const tf=tfOrient(idea.cds1h||S.cds1h||[], idea.cds15m||S.cds15m||[], idea.trend4h);
   const mtfHtml=[{tf:'5m',v:tf.m5},{tf:'15m',v:tf.m15},{tf:'1h',v:tf.h1},{tf:'4h',v:tf.h4}].map(x=>{
     const cls=x.v==='bull'?'mp-bull':x.v==='bear'?'mp-bear':'mp-neut';
     const arrow=x.v==='bull'?'▲':x.v==='bear'?'▼':'→';
@@ -1521,7 +1521,6 @@ function showCoinCard(idea,analysis){
   const offset=(circ*(1-confPct/100)).toFixed(1);
   const tpPct=idea.entry>0&&idea.tp1>0?Math.abs((idea.tp1-idea.entry)/idea.entry*100):0;
   const slPct=idea.entry>0&&idea.sl>0?Math.abs((idea.sl-idea.entry)/idea.entry*100):0;
-  const oiHtml=S.oiChange4h!=null?`<span class="oi-arr ${S.oiChange4h>=0?'oi-up':'oi-dn'}">${S.oiChange4h>=0?'↑':'↓'} ${S.oiChange4h>=0?'+':''}${S.oiChange4h.toFixed(1)}% 4ч</span>`:'';
   const phaseTags=(a?.phases||[]).filter(p=>p.done).map(p=>`<span class="ph-tag">${p.label||p}</span>`).join('');
   const phaseDone=(a?.phases||[]).filter(p=>p.done).length;
   const verdictBg=idea.verdict==='GO'?'#dcfce7':idea.verdict==='WAIT'?'#fef3c7':'#f1f5f9';
@@ -1567,16 +1566,16 @@ function showCoinCard(idea,analysis){
     <div class="cc-st"><div class="cc-st-l">CVD</div><div class="cc-st-v" style="color:${idea.cvdFalling?'var(--red)':'var(--green)'};">${idea.cvdFalling?'↓':'↑'}</div></div>
   </div>
   <div class="cc-futures">
-    <div class="cc-ft"><div class="cc-ft-l">Open Interest</div><div class="cc-ft-main"><span class="cc-ft-v" id="cc-oi">${S.oi?fmt(S.oi)+' конт':'—'}</span>${oiHtml}</div><div class="cc-ft-sub">${S.oiChange4h!=null?(S.oiChange4h<0?'OI падает — позиции закрываются':'OI растёт'):'загрузка...'}</div></div>
-    <div class="cc-ft"><div class="cc-ft-l">Funding Rate</div><div class="cc-ft-v" id="cc-fr" style="color:${S.fr!=null&&S.fr>0.05?'var(--red)':S.fr!=null&&S.fr<-0.05?'var(--green)':'var(--text2)'};">${S.fr!=null?(S.fr>=0?'+':'')+S.fr.toFixed(4)+'%':'—'}</div><div class="cc-ft-sub" id="cc-fr-warn" style="color:${S.fr!=null&&S.fr>0.05?'var(--red)':S.fr!=null&&S.fr<-0.05?'var(--green)':'var(--muted)'};">${S.fr!=null&&S.fr>0.05?'лонги платят':S.fr!=null&&S.fr<-0.05?'шорты платят':''}</div></div>
-    <div class="cc-ft"><div class="cc-ft-l">Taker 4ч</div><div class="cc-ft-v" id="cc-taker" style="color:${S.takerRatio!=null?(S.takerRatio>1.1?'var(--green)':S.takerRatio<0.9?'var(--red)':'var(--muted)'):'var(--muted)'};">${S.takerRatio!=null?(S.takerRatio>1.1?'агр. лонги':S.takerRatio<0.9?'агр. шорты':'нейтр.'):'—'}</div><div class="cc-ft-sub">${S.takerRatio!=null?'ratio '+S.takerRatio.toFixed(2):''}</div></div>
+    <div class="cc-ft"><div class="cc-ft-l">Open Interest</div><div class="cc-ft-main"><span class="cc-ft-v" id="cc-oi">—</span><span id="cc-oi-change"></span></div><div class="cc-ft-sub" id="cc-oi-sub">загрузка...</div></div>
+    <div class="cc-ft"><div class="cc-ft-l">Funding Rate</div><div class="cc-ft-v" id="cc-fr">—</div><div class="cc-ft-sub" id="cc-fr-warn"></div></div>
+    <div class="cc-ft"><div class="cc-ft-l">Taker 4ч</div><div class="cc-ft-v" id="cc-taker" style="color:var(--muted);">—</div><div class="cc-ft-sub" id="cc-taker-sub"></div></div>
   </div>
   <div class="cc-row5">
     <div class="cc-r5b"><div class="cc-r5-t">CVD · 15M</div>
       <div class="cc-cvd-row"><span class="cc-cvd-lbl">Тренд дельты</span><span id="cc-cvd-trend" class="cc-cvd-val" style="color:${idea.cvdFalling?'var(--red)':'var(--green)'};">${idea.cvdFalling?'↓ МЕДВЕЖИЙ':'↑ БЫЧИЙ'}</span></div>
       <div class="cc-cvd-row"><span class="cc-cvd-lbl">Дивергенция</span><span id="cc-cvd-div" class="cc-cvd-val" style="color:${idea.cvdDiv?'var(--red)':'var(--muted)'};">${idea.cvdDiv?'⚠ Да':'Нет'}</span></div>
     </div>
-    <div class="cc-r5b"><div class="cc-r5-t">МТФ</div><div class="cc-mtf-pills">${mtfHtml}</div><div style="font-size:8px;color:var(--muted);margin-top:4px;">${tf.h4==='bull'?'↑ 4h бычий':tf.h4==='bear'?'↓ 4h медвежий':''}</div></div>
+    <div class="cc-r5b"><div class="cc-r5-t">МТФ</div><div class="cc-mtf-pills">${mtfHtml}</div><div style="font-size:8px;color:${tf.h4==='bull'?'var(--green)':tf.h4==='bear'?'var(--red)':'var(--dim)'};margin-top:4px;">${tf.h4==='bull'?'↑ 4h бычий':tf.h4==='bear'?'↓ 4h медвежий':'→ 4h нейтрально'}</div></div>
     <div class="cc-r5b"><div class="cc-r5-t">Свечной анализ</div><div class="cc-candle-list" id="cc-candles"><span style="font-size:8px;color:var(--dim);">загрузка...</span></div></div>
   </div>
   <div class="cc-text-section">
@@ -1596,6 +1595,20 @@ function showCoinCard(idea,analysis){
     <button class="cc-act cc-act-copy" onclick="copyForChatGPT()">📋 Копировать</button>
   </div>
 </div>`;
+  // Populate candle analysis from pre-computed patterns
+  const ccCandles=document.getElementById('cc-candles');
+  if(ccCandles){
+    const pats=idea.allPatterns||[];
+    if(!pats.length){
+      ccCandles.innerHTML='<span style="font-size:8px;color:var(--dim);">—</span>';
+    } else {
+      ccCandles.innerHTML=pats.slice(0,5).map(p=>{
+        const c=p.dir==='bear'?'var(--red)':'var(--green)';
+        const sym=p.dir==='bear'?'▼':'▲';
+        return `<span style="display:block;font-size:8px;color:${c};">${sym} ${p.name}${p.tf?' <span style="color:var(--dim);">('+p.tf+')</span>':''}</span>`;
+      }).join('');
+    }
+  }
   fetchFutures(idea.sym);
   // Start OB & Flow tracking for this coin
   stopCardOBTracking();
@@ -1603,14 +1616,23 @@ function showCoinCard(idea,analysis){
 }
 
 
-function tfOrient(cds){
-  if(!cds||cds.length<22)return'—';
-  const c=cds.map(x=>x.close),n=c.length-1;
-  const e20=ema(c,20),e50=ema(c,50);
-  if(!e20[n]||!e50[n])return'neutral';
-  if(c[n]>e20[n]&&e20[n]>e50[n])return'bull';
-  if(c[n]<e20[n]&&e20[n]<e50[n])return'bear';
-  return'neutral';
+function tfOrient(cds1h, cds15m, trend4h){
+  function _orient(cds){
+    if(!cds||cds.length<22)return'neutral';
+    const c=cds.map(x=>x.close),n=c.length-1;
+    const e20=ema(c,20),e50=ema(c,50);
+    if(!e20[n]||!e50[n])return'neutral';
+    if(c[n]>e20[n]&&e20[n]>e50[n])return'bull';
+    if(c[n]<e20[n]&&e20[n]<e50[n])return'bear';
+    return'neutral';
+  }
+  const h1=_orient(cds1h);
+  const m15=_orient(cds15m);
+  // m5 approximation: last third of 15m candles represents shorter-term pressure
+  const m5slice=cds15m&&cds15m.length>33?cds15m.slice(-Math.floor(cds15m.length/3)):null;
+  const m5=m5slice&&m5slice.length>=22?_orient(m5slice):m15;
+  const h4=trend4h==='bull'?'bull':trend4h==='bear'?'bear':'neutral';
+  return{m5,m15,h1,h4};
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1801,10 +1823,20 @@ function showWinrates(){
   var histData=[];
   if(_wrTab!=='today'){
     var hist=loadWRHistory();
-    var cutoff=_wrTab==='week'?now2-7*86400000:_wrTab==='month'?now2-30*86400000:0;
-    histData=hist.filter(function(w){return(w.signalTime||w.ts||0)>=cutoff;});
+    if(_wrTab==='yesterday'){
+      // Moscow time = UTC+3; find midnight boundaries for yesterday
+      var mskOff=3*3600000;
+      var todayStartMsk=Math.floor((now2+mskOff)/86400000)*86400000;
+      var todayStartUtc=todayStartMsk-mskOff;
+      var yStartUtc=todayStartUtc-86400000;
+      histData=hist.filter(function(w){var t=w.signalTime||w.ts||0;return t>=yStartUtc&&t<todayStartUtc;});
+    } else {
+      var cutoff=_wrTab==='week'?now2-7*86400000:_wrTab==='month'?now2-30*86400000:0;
+      histData=hist.filter(function(w){return(w.signalTime||w.ts||0)>=cutoff;});
+    }
   }
-  var allData=S.winrates.concat(histData);
+  // For "yesterday" don't include today's S.winrates (they belong to today)
+  var allData=_wrTab==='yesterday'?histData:S.winrates.concat(histData);
   var wins=allData.filter(function(w){return w.result==='win';});
   var losses=allData.filter(function(w){return w.result==='loss';});
   var pend=allData.filter(function(w){return w.result==='pending';});
@@ -1826,7 +1858,7 @@ function showWinrates(){
 
   dz.innerHTML='<div class="fade" style="font-size:12px;">'
     +'<div class="phase-list-hd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">'
-    +'<div style="display:flex;gap:3px;">'+tabBtn('today','Сегодня')+tabBtn('week','Неделя')+tabBtn('month','Месяц')+tabBtn('all','Всё время')+'</div>'
+    +'<div style="display:flex;gap:3px;">'+tabBtn('today','Сегодня')+tabBtn('yesterday','Вчера')+tabBtn('week','Неделя')+tabBtn('month','Месяц')+tabBtn('all','Всё время')+'</div>'
     +'<div style="display:flex;gap:3px;">'
     +'<button onclick="checkPendingWinrates().then(function(){showWinrates();})" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--blue-bg);border:1px solid var(--blue-b);color:var(--blue);cursor:pointer;font-family:inherit;" title="Проверить pending">↻</button>'
     +'<button onclick="recheckAllWinrates()" style="font-size:8px;padding:2px 7px;border-radius:3px;background:var(--s3);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit;" title="Пересчитать все монеты">⟳ Все</button>'
@@ -2230,6 +2262,23 @@ function getCapLabel(v){
 async function fetchFutures(sym){
   try{const r=await fetch(`${FAPI}/openInterest?symbol=${sym}`);const j=await r.json();if(j.openInterest)S.oi=+j.openInterest;}catch{S.oi=null;}
   try{const r=await fetch(`${FAPI}/fundingRate?symbol=${sym}&limit=1`);const j=await r.json();if(Array.isArray(j)&&j[0])S.fr=+j[0].fundingRate*100;}catch{S.fr=null;}
+  // OI history: 9 × 30m intervals = 4h change
+  try{
+    const r=await fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${sym}&period=30m&limit=9`);
+    const j=await r.json();
+    if(Array.isArray(j)&&j.length>=2){
+      const first=+j[0].sumOpenInterest, last=+j[j.length-1].sumOpenInterest;
+      S.oiChange4h=first>0?(last-first)/first*100:null;
+    }else S.oiChange4h=null;
+  }catch{S.oiChange4h=null;}
+  // Taker ratio: 4 × 1h = 4h average buy/sell ratio
+  try{
+    const r=await fetch(`https://fapi.binance.com/futures/data/takerlongshortRatio?symbol=${sym}&period=1h&limit=4`);
+    const j=await r.json();
+    if(Array.isArray(j)&&j.length>0){
+      S.takerRatio=j.reduce((s,x)=>s+(+x.buySellRatio),0)/j.length;
+    }else S.takerRatio=null;
+  }catch{S.takerRatio=null;}
   updateFuturesDisplay();
 }
 
@@ -2237,21 +2286,40 @@ function updateFuturesDisplay(){
   // Mini topbar indicator
   const el=document.getElementById('oi-fr');
   if(el)el.textContent=S.fr!=null?`FR: ${S.fr>0?'+':''}${S.fr.toFixed(4)}%`:'—';
-  // Coin card fields
+  // Coin card: OI
   const ccOI=document.getElementById('cc-oi');
   if(ccOI)ccOI.textContent=S.oi!=null?fmt(S.oi)+' контр':'—';
+  // Coin card: OI change 4h
+  const ccOiChange=document.getElementById('cc-oi-change');
+  if(ccOiChange){
+    if(S.oiChange4h!=null){
+      const up=S.oiChange4h>=0;
+      ccOiChange.innerHTML=`<span class="oi-arr ${up?'oi-up':'oi-dn'}" style="font-size:9px;margin-left:4px;">${up?'↑':'↓'} ${up?'+':''}${S.oiChange4h.toFixed(1)}% 4ч</span>`;
+      const oiSub=document.getElementById('cc-oi-sub');
+      if(oiSub)oiSub.textContent=S.oiChange4h<0?'OI падает — позиции закрываются':'OI растёт';
+    }
+  }
+  // Coin card: Funding Rate
   const ccFR=document.getElementById('cc-fr');
   if(ccFR){
     ccFR.textContent=S.fr!=null?`${S.fr>0?'+':''}${S.fr.toFixed(4)}%`:'—';
-    if(ccFR)ccFR.style.color=S.fr!=null?(S.fr>0?'var(--red)':'var(--green)'):'var(--muted)';
+    ccFR.style.color=S.fr!=null?(S.fr>0.05?'var(--red)':S.fr<-0.05?'var(--green)':'var(--text2)'):'var(--muted)';
   }
   const ccWarn=document.getElementById('cc-fr-warn');
   if(ccWarn){
     if(S.fr!=null&&Math.abs(S.fr)>0.05){
-      ccWarn.style.display='block';
-      ccWarn.textContent=S.fr>0?'⚠ Лонги перегреты — фаворизирует шорт':'⚠ Шорты перегреты';
-      ccWarn.style.cssText=`display:block;font-size:9px;padding:3px 5px;border-radius:2px;margin-top:3px;font-weight:600;background:${S.fr>0?'var(--red-bg)':'var(--green-bg)'};color:${S.fr>0?'var(--red)':'var(--green)'};`;
-    } else ccWarn.style.display='none';
+      ccWarn.textContent=S.fr>0?'⚠ Лонги перегреты':'⚠ Шорты перегреты';
+      ccWarn.style.cssText=`font-size:9px;padding:3px 5px;border-radius:2px;margin-top:3px;font-weight:600;background:${S.fr>0?'var(--red-bg)':'var(--green-bg)'};color:${S.fr>0?'var(--red)':'var(--green)'};`;
+    } else ccWarn.textContent='';
+  }
+  // Coin card: Taker ratio 4h
+  const ccTaker=document.getElementById('cc-taker');
+  if(ccTaker&&S.takerRatio!=null){
+    const label=S.takerRatio>1.1?'агр. лонги':S.takerRatio<0.9?'агр. шорты':'нейтр.';
+    ccTaker.textContent=label;
+    ccTaker.style.color=S.takerRatio>1.1?'var(--green)':S.takerRatio<0.9?'var(--red)':'var(--muted)';
+    const ccTakerSub=document.getElementById('cc-taker-sub');
+    if(ccTakerSub)ccTakerSub.textContent='ratio '+S.takerRatio.toFixed(2);
   }
   // CVD fields
   const cvdFall=S.cvdData.length>10&&S.cvdData[S.cvdData.length-1]<S.cvdData[Math.max(0,S.cvdData.length-10)];
