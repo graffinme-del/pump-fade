@@ -221,6 +221,16 @@ button:hover{opacity:.85;}
 .cc-sl-lbl{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;}
 .cc-sl-val{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text2);}
 .cc-sl-sep{font-size:9px;color:var(--dim);flex-shrink:0;padding:0 2px;}
+/* ── Narrative Engine ─────────────────────────── */
+.cc-narrative{padding:7px 12px 8px;background:var(--s1);border-bottom:1px solid var(--border);border-left:3px solid var(--amber);transition:border-left-color .4s;}
+.cc-narrative.narr-high{border-left-color:#ef4444;}
+.cc-narrative.narr-low{border-left-color:var(--dim);}
+.narr-line{font-size:10px;line-height:1.55;margin-bottom:1px;}
+.narr-momentum{color:var(--text2);}
+.narr-flow{color:var(--muted);}
+.narr-conclusion{font-weight:700;margin-top:3px;}
+.narr-prob{display:inline-block;font-size:8px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:1px 5px;border-radius:3px;margin-right:4px;}
+/* ── end Narrative ─────────────────────────────── */
 .cc-levels{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);}
 .cc-lv{background:var(--s1);border:1px solid var(--border);border-radius:6px;padding:6px 8px;}
 .cc-lv-l{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;}
@@ -329,6 +339,7 @@ button:hover{opacity:.85;}
     <span id="btc-price-main" class="top-price" style="font-size:19px;">—</span>
     <span id="btc-change-main" class="top-price" style="font-size:19px;">—</span>
     <span id="btc-trend-main" style="margin-left:2px;line-height:1;"></span>
+    <span id="btc-regime-badge" style="margin-left:6px;font-size:8px;font-weight:700;letter-spacing:.5px;padding:2px 5px;border:1px solid var(--dim);border-radius:3px;color:var(--dim);"></span>
   </div>
   <div class="tdiv"></div>
   <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v16.05 14:16</span>
@@ -1585,6 +1596,7 @@ function showCoinCard(idea,analysis){
         <circle cx="20" cy="20" r="${r}" fill="none" stroke="${confColor}" stroke-width="3.5" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${offset}" stroke-linecap="round" transform="rotate(-90 24 24)"/></svg>
         <div class="conf-num" style="color:${confColor};">${confPct.toFixed(0)}</div>
       </div>
+      <div id="cc-prob-lbl" style="font-size:7px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${confColor};text-align:center;margin-top:2px;">${confPct>=83?'высокая':confPct>=70?'средняя':confPct>=55?'слабая':'низкая'}</div>
     </div>
   </div>
   <div class="cc-score-layers" id="cc-score-layers">
@@ -1595,6 +1607,9 @@ function showCoinCard(idea,analysis){
     <div class="cc-sl-item"><div class="cc-sl-lbl">Execution</div><div class="cc-sl-val" id="cc-sl-exec" style="color:var(--muted);">±0</div></div>
     <div class="cc-sl-sep">=</div>
     <div class="cc-sl-item"><div class="cc-sl-lbl">Final</div><div class="cc-sl-val" id="cc-sl-final" style="font-size:11px;color:${confColor};">${confPct.toFixed(0)}</div></div>
+  </div>
+  <div class="cc-narrative" id="cc-narrative">
+    <div id="cc-narrative-text"><span style="color:var(--dim);font-size:10px;">Анализ накапливается...</span></div>
   </div>
   <div class="cc-levels">
     <div class="cc-lv"><div class="cc-lv-l">Триггер</div><div class="cc-lv-v">${idea.entry>0?'$'+fmt(idea.entry):'—'}</div></div>
@@ -1659,6 +1674,8 @@ function showCoinCard(idea,analysis){
     }
   }
   fetchFutures(idea.sym);
+  // Render initial narrative (updates in real-time via updateConfDisplay)
+  updateNarrativeDisplay(idea);
   // Start OB & Flow tracking for this coin
   stopCardOBTracking();
   startOBTracking(idea);
@@ -2456,6 +2473,11 @@ function updateConfDisplay(idea){
   }
   const numEl = document.querySelector('.conf-num');
   if(numEl){ numEl.textContent=confPct.toFixed(0); numEl.style.color=confColor; }
+  const probEl = document.getElementById('cc-prob-lbl');
+  if(probEl){
+    probEl.textContent = confPct>=83?'высокая':confPct>=70?'средняя':confPct>=55?'слабая':'низкая';
+    probEl.style.color = confColor;
+  }
 
   // Update breakdown row
   const sc = idea.strategy_conf || confPct;
@@ -2488,6 +2510,177 @@ function updateConfDisplay(idea){
   if(elPo){ elPo.textContent = pmLabel; elPo.style.color = pmColor; }
   if(elEx){ elEx.textContent = eaLabel; elEx.style.color = eaColor; if(eaTitle) elEx.title = eaTitle; }
   if(elFi){ elFi.textContent = confPct.toFixed(0); elFi.style.color = confColor; }
+
+  // Update narrative in real-time
+  updateNarrativeDisplay(idea);
+}
+
+// ═══════════════════════════════════════════════════════
+//  NARRATIVE ENGINE — rules-based, zero latency
+// ═══════════════════════════════════════════════════════
+
+function generateNarrative(idea){
+  if(!idea || !idea.dir) return null;
+
+  const dir        = idea.dir;
+  const conf       = idea.conf || 0;
+  const posMult    = idea.pos_mult || 1.0;
+  const posState   = idea.pos_state || 'neutral';
+  const execAdj    = idea.exec_decayed_adj !== undefined ? idea.exec_decayed_adj : (idea.exec_adj || 0);
+  const flowQual   = idea.flow_quality || 'mixed';
+  const rsi        = idea.rsiNow || 50;
+  const cvdFalling = !!idea.cvdFalling;
+  const cvdDiv     = !!idea.cvdDiv;
+  const pumpPct    = idea.pumpPct || 0;
+  const dist       = idea.dist || 0;
+  const trend4h    = idea.trend4h || 'neutral';
+
+  let momentumLine = '';
+  let flowLine     = '';
+  let posLine      = '';
+  let conclusion   = '';
+
+  // ─── 1. MOMENTUM / STRUCTURE ─────────────────────────
+  if(dir === 'SHORT'){
+    const exhausted  = (pumpPct > 10 && cvdFalling) || (rsi > 72 && cvdFalling);
+    const overheated = pumpPct > 8 || rsi > 70 || dist > 7;
+    const weak       = pumpPct < 5 && rsi < 65 && dist < 5;
+    if(exhausted && cvdDiv)
+      momentumLine = `Памп +${pumpPct.toFixed(1)}% с дивергенцией CVD — классический сигнал истощения.`;
+    else if(exhausted)
+      momentumLine = `Памп +${pumpPct.toFixed(1)}% теряет силу — CVD разворачивается вниз.`;
+    else if(overheated && !cvdFalling)
+      momentumLine = `Памп +${pumpPct.toFixed(1)}% при RSI ${rsi.toFixed(0)} — перегрет, покупатель ещё держится.`;
+    else if(weak)
+      momentumLine = `Слабый импульс (${pumpPct.toFixed(1)}%) — структура ненадёжна для фейда.`;
+    else if(dist > 6)
+      momentumLine = `Отклонение от EMA ${dist.toFixed(1)}%, RSI ${rsi.toFixed(0)} — зона истощения.`;
+    else
+      momentumLine = `RSI ${rsi.toFixed(0)}, памп ${pumpPct.toFixed(1)}% — сетап формируется.`;
+  } else if(dir === 'LONG'){
+    const aligned      = trend4h === '↑' || trend4h === 'bull';
+    const overExtended = rsi > 70 || dist > 10;
+    if(aligned && !overExtended)
+      momentumLine = `4h бычий, структура поддерживает — точка входа актуальна.`;
+    else if(aligned && overExtended)
+      momentumLine = `4h бычий, но RSI ${rsi.toFixed(0)} — возможна коррекция перед продолжением.`;
+    else
+      momentumLine = `4h нейтральный/медвежий — лонг против тренда, риск повышен.`;
+  } else if(dir === 'ПАМП'){
+    momentumLine = `Памп +${pumpPct.toFixed(1)}% — импульсный сигнал, режим наблюдения.`;
+  }
+
+  // ─── 2. FLOW / EXECUTION ────────────────────────────
+  const favorShort = dir === 'SHORT' && execAdj < -1;
+  const favorLong  = dir === 'LONG'  && execAdj > 1;
+  const againstDir = (dir === 'SHORT' && execAdj > 1) || (dir === 'LONG' && execAdj < -1);
+
+  if(flowQual === 'strong'){
+    if(favorShort)      flowLine = 'Поток продавцов нарастает — давление подтверждено.';
+    else if(favorLong)  flowLine = 'Поток покупателей сильный — вход поддержан.';
+    else if(againstDir) flowLine = dir==='SHORT'
+      ? 'Покупатель ещё активен — контрсигнал, вход преждевременен.'
+      : 'Продавец давит — контрсигнал, лучше подождать.';
+    else flowLine = 'Поток сильный, нейтральный.';
+  } else if(flowQual === 'mixed'){
+    if(favorShort || favorLong)
+      flowLine = 'Поток смешанный, слабо склоняется в нужную сторону.';
+    else if(againstDir)
+      flowLine = 'Поток смешанный с давлением против — осторожно.';
+    else
+      flowLine = 'Поток смешанный — чёткого подтверждения нет.';
+  } else { // chaotic
+    flowLine = 'Поток хаотичный — рынок неопределён, исполнение затруднено.';
+  }
+
+  // ─── 3. POSITIONING (подсказка) ─────────────────────
+  if(posMult < 0.93)
+    posLine = 'Лонги переполнены — рынок уязвим для разворота.';
+  else if(posMult > 1.07 && dir==='SHORT')
+    posLine = 'Шорт-сжатие маловероятно — позиционирование поддерживает фейд.';
+  else if(posState === 'bearish' && dir==='SHORT')
+    posLine = 'Funding сигнализирует о перегреве.';
+
+  // ─── 4. CONCLUSION + PROBABILITY LABEL ──────────────
+  const isShort = dir === 'SHORT';
+  let probLabel, probColor, probBg;
+  if(conf >= 83){
+    probLabel = 'ВЫСОКАЯ';
+    probColor = '#ffffff'; probBg = '#16a34a';
+    conclusion = isShort
+      ? 'Вероятность fade высокая — сетап активен.'
+      : 'Высокая вероятность продолжения — сетап активен.';
+  } else if(conf >= 70){
+    probLabel = 'СРЕДНЯЯ';
+    probColor = '#000000'; probBg = '#f59e0b';
+    conclusion = isShort
+      ? 'Умеренная вероятность истощения — ждать входа.'
+      : 'Умеренная вероятность движения — можно рассмотреть.';
+  } else if(conf >= 55){
+    probLabel = 'СЛАБАЯ';
+    probColor = '#ffffff'; probBg = '#6b7280';
+    conclusion = 'Сигнал слабый — подтверждение не получено.';
+  } else {
+    probLabel = 'НИЗКАЯ';
+    probColor = '#ffffff'; probBg = '#374151';
+    conclusion = 'Слабый сетап — лучше пропустить.';
+  }
+
+  // ─── 5. REGIME CONTEXT ───────────────────────────────
+  let regimeLine = '';
+  const regime = (typeof BTC_STATE !== 'undefined') ? BTC_STATE.regime : 'neutral';
+  if(regime === 'trend-up' && dir === 'SHORT'){
+    regimeLine = '⚠ BTC в тренде вверх — фейдить сложнее, риск выше.';
+  } else if(regime === 'trend-down' && dir === 'SHORT'){
+    regimeLine = '✓ BTC в нисходящем тренде — условия для фейда благоприятные.';
+  } else if(regime === 'chop'){
+    regimeLine = '✓ BTC во флэте — оптимальный режим для Pump Fade.';
+  } else if(regime === 'high-vol'){
+    regimeLine = '⚠ Высокая волатильность BTC — расширенные стопы, осторожно.';
+  } else if(regime === 'trend-up' && dir === 'LONG'){
+    regimeLine = '✓ BTC тренд поддерживает лонг.';
+  } else if(regime === 'trend-down' && dir === 'LONG'){
+    regimeLine = '⚠ BTC в снижении — лонг против тренда.';
+  }
+
+  return { momentumLine, flowLine, posLine, regimeLine, conclusion, probLabel, probColor, probBg, conf };
+}
+
+function updateNarrativeDisplay(idea){
+  const wrap = document.getElementById('cc-narrative');
+  const el   = document.getElementById('cc-narrative-text');
+  if(!el || !idea) return;
+
+  const narr = generateNarrative(idea);
+  if(!narr){
+    el.innerHTML = '<span style="color:var(--dim);font-size:10px;">Анализ накапливается...</span>';
+    return;
+  }
+
+  // Update border class
+  if(wrap){
+    wrap.className = 'cc-narrative' +
+      (narr.conf >= 83 ? ' narr-high' : narr.conf < 55 ? ' narr-low' : '');
+  }
+
+  const posHtml = narr.posLine
+    ? `<div class="narr-line narr-flow" style="color:var(--amber);">${narr.posLine}</div>` : '';
+  const regimeHtml = narr.regimeLine ? (function(){
+    const isWarning = narr.regimeLine.startsWith('⚠');
+    const isFavor   = narr.regimeLine.startsWith('✓');
+    const col = isWarning ? '#f87171' : isFavor ? '#4ade80' : 'var(--muted)';
+    return `<div class="narr-line" style="color:${col};font-size:9px;">${narr.regimeLine}</div>`;
+  })() : '';
+
+  el.innerHTML =
+    `<div class="narr-line narr-momentum">${narr.momentumLine}</div>` +
+    `<div class="narr-line narr-flow">${narr.flowLine}</div>` +
+    posHtml +
+    regimeHtml +
+    `<div class="narr-line narr-conclusion" style="color:${narr.probBg};">` +
+      `<span class="narr-prob" style="background:${narr.probBg};color:${narr.probColor};">${narr.probLabel}</span>` +
+      narr.conclusion +
+    `</div>`;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -3516,20 +3709,62 @@ function playAlert() {
 if(getClaudeKey())updateClaudeBtn(true);
 
 // BTC Monitor
-const BTC_STATE = {price:0, prev1h:0, change1h:0, trend:'neutral', lastCheck:0, history:[]};
+const BTC_STATE = {
+  price:0, prev1h:0, change1h:0, change24h:0,
+  trend:'neutral', volatility:'normal',
+  regime:'neutral', // trend-up | trend-down | chop | high-vol | low-vol | neutral
+  regimeLabel:'', regimeColor:'',
+  atrRatio:1, lastCheck:0, history:[]
+};
+
+function classifyBTCRegime(ch4h, ch24h, atrRatio){
+  // High volatility — big swings, increased risk
+  if(atrRatio > 2.2) return {regime:'high-vol', label:'ВЫСОК.ВОЛ', color:'#f87171'};
+  // Strong trend up
+  if(ch4h > 1.5 && ch24h > 3)  return {regime:'trend-up',   label:'ТРЕНД ↑',  color:'#4ade80'};
+  // Strong trend down
+  if(ch4h < -1.5 && ch24h < -3) return {regime:'trend-down', label:'ТРЕНД ↓',  color:'#f87171'};
+  // Chop: low net move but moderate volatility — good for Pump Fade
+  if(Math.abs(ch24h) < 2 && atrRatio >= 0.8) return {regime:'chop', label:'ФЛЭТ',    color:'#f59e0b'};
+  // Low vol — calm market, signals may be weaker
+  if(atrRatio < 0.6) return {regime:'low-vol', label:'НИЗ.ВОЛ', color:'#94a3b8'};
+  // Default — mild trend
+  if(ch4h > 0.8)  return {regime:'mild-up',   label:'↑ мягкий', color:'#86efac'};
+  if(ch4h < -0.8) return {regime:'mild-down',  label:'↓ мягкий', color:'#fca5a5'};
+  return {regime:'neutral', label:'НЕЙТР',    color:'#94a3b8'};
+}
+
 async function checkBTC(){
   try{
-    var r=await fetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=5');
+    // Fetch 25 1h candles → covers 24h + ATR calculation
+    var r=await fetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=25');
     var j=await r.json();
-    if(!Array.isArray(j)||j.length<5)return;
-    var lp=parseFloat(j[j.length-1][4]);   // текущая цена
-    var lp4h=parseFloat(j[0][4]);           // 4h назад
-    if(!lp||!lp4h)return;
-    BTC_STATE.price=lp;
-    BTC_STATE.prev1h=lp4h;
-    BTC_STATE.change1h=(lp-lp4h)/lp4h*100; // переименуем позже, пока совместимость
-    BTC_STATE.trend=BTC_STATE.change1h>1?'bull':BTC_STATE.change1h<-1?'bear':'neutral';
-    BTC_STATE.lastCheck=Date.now();
+    if(!Array.isArray(j)||j.length<10)return;
+    var lp    = parseFloat(j[j.length-1][4]); // current close
+    var lp4h  = parseFloat(j[j.length-5][4]); // 4h ago
+    var lp24h = parseFloat(j[0][4]);           // ~24h ago
+    if(!lp||!lp4h||!lp24h)return;
+
+    // ATR-like: avg of (high-low)/close for last 8 bars vs prior 8
+    var recent=j.slice(-8), prior=j.slice(-16,-8);
+    var avgRange=function(bars){
+      return bars.reduce(function(s,b){return s+(parseFloat(b[2])-parseFloat(b[3]))/parseFloat(b[4]);},0)/bars.length*100;
+    };
+    var recentAtr=avgRange(recent), priorAtr=avgRange(prior)||recentAtr;
+    var atrRatio=priorAtr>0?recentAtr/priorAtr:1;
+
+    BTC_STATE.price    = lp;
+    BTC_STATE.prev1h   = lp4h;
+    BTC_STATE.change1h = (lp-lp4h)/lp4h*100;   // used by existing UI
+    BTC_STATE.change24h= (lp-lp24h)/lp24h*100;
+    BTC_STATE.atrRatio = +atrRatio.toFixed(2);
+    BTC_STATE.trend    = BTC_STATE.change1h>1?'bull':BTC_STATE.change1h<-1?'bear':'neutral';
+    BTC_STATE.volatility = atrRatio>1.8?'high':atrRatio<0.7?'low':'normal';
+    var rc=classifyBTCRegime(BTC_STATE.change1h, BTC_STATE.change24h, atrRatio);
+    BTC_STATE.regime      = rc.regime;
+    BTC_STATE.regimeLabel = rc.label;
+    BTC_STATE.regimeColor = rc.color;
+    BTC_STATE.lastCheck   = Date.now();
     updateBTCBanner();
   }catch(e){}
 }
@@ -3553,6 +3788,13 @@ function updateBTCBanner(){
     } else {
       tEl.innerHTML='<span style="font-size:18px;line-height:1;color:var(--muted);">→</span>';
     }
+  }
+  // Regime badge
+  var rEl=document.getElementById('btc-regime-badge');
+  if(rEl && BTC_STATE.regimeLabel){
+    rEl.textContent=BTC_STATE.regimeLabel;
+    rEl.style.color=BTC_STATE.regimeColor;
+    rEl.style.borderColor=BTC_STATE.regimeColor;
   }
   if(abs>=2&&(!BTC_STATE._notified||(Date.now()-BTC_STATE._notified)>30*60*1000)){
     BTC_STATE._notified=Date.now();
