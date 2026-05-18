@@ -632,9 +632,9 @@ function saveWRHistory(records){
 function loadWR(){
   try{
     var d=JSON.parse(localStorage.getItem(WR_KEY)||'[]');
-    var resolved=d.filter(function(w){return w.result!=='pending';});
-    var pending=d.filter(function(w){return w.result==='pending';}).slice(0,20);
-    return resolved.concat(pending);
+    // ФИX: без обрезки pending — грузим ВСЕ записи
+    if(d.length>2000)d=d.slice(-2000); // мягкий глобальный лимит
+    return d;
   }catch{return[];}
 }
 function loadActive(){try{return JSON.parse(localStorage.getItem(ACTIVE_KEY)||'[]');}catch{return[];}}
@@ -1757,22 +1757,30 @@ function showPhaseContent(phase){
 function scheduleWinrateCheck(idea){
   if(!idea.sym||!idea.entry||!idea.sl||!idea.tp1)return;
   var _rn=Date.now();
-  if(S.winrates.find(function(w){return w.sym===idea.sym&&w.result==='pending'&&(_rn-(w.recordedAt||0))<1800000;}))return;
+  // Деду п: тот же sym уже pending менее 30 мин назад
+  if(S.winrates.find(function(w){
+    return w.sym===idea.sym && w.result==='pending' && (_rn-(w.signalTime||w.recordedAt||0))<1800000;
+  })) return;
   var tpPct=idea.entry>0?Math.abs((idea.tp1-idea.entry)/idea.entry*100):0;
   var slPct=idea.entry>0?Math.abs((idea.sl-idea.entry)/idea.entry*100):0;
-  S.winrates.unshift({
+  var rec={
     sym:idea.sym, dir:idea.dir||'?', entry:idea.entry,
     tp:idea.tp1, sl:idea.sl, tpPct:tpPct, slPct:slPct,
     ts:idea.ts||_rn, recordedAt:_rn, signalTime:_rn,
     result:'pending', pnl:null, maxPnl:null, closePrice:null, closedAt:null, elapsed:0,
     conf:idea.conf||0, pumpPct:idea.pumpPct||0
-  });
-  if(S.winrates.length>50)S.winrates=S.winrates.slice(0,50);
+  };
+  S.winrates.unshift(rec);
+  // ФИX: без лимита 50 — храним всё (loadWR ограничивает при загрузке до 2000)
+  if(S.winrates.length>2000)S.winrates=S.winrates.slice(0,2000);
   saveWR();
+  console.log('[WR] Записан сигнал:', rec.sym, rec.dir, 'entry:', rec.entry, 'TP:', rec.tp, 'SL:', rec.sl);
+  // Немедленная проверка (не ждать 5 мин)
+  setTimeout(function(){ checkPendingWinrates(); }, 4000);
   if(S.phase===5)showWinrates();
 }
 
-// Moscow midnight reset
+// Moscow midnight reset — архивирует ТОЛЬКО resolved (win/loss), pending ОСТАЮТСЯ живыми
 function checkMidnightReset(){
   var now=new Date();
   var msk=new Date(now.getTime()+3*3600000);
@@ -1780,24 +1788,24 @@ function checkMidnightReset(){
   var today=msk.toISOString().slice(0,10);
   if(localStorage.getItem('wr_reset_date')===today)return;
   localStorage.setItem('wr_reset_date',today);
-  // Check prices first, then archive
-  checkPendingWinrates().then(function(){
-    var toArchive=S.winrates.map(function(w){
-      var r=Object.assign({},w);
-      if(r.result==='pending'){r.result='expired';r.closedAt=Date.now();}
-      return r;
-    });
-    saveWRHistory(toArchive);
-    S.winrates=[];
-    saveWR();
-    if(S.phase===5)showWinrates();
-    showToast('🕛 00:00 МСК — WR сброшен, '+toArchive.length+' записей в истории');
-  });
+  // ФИX: НЕ вызываем checkPendingWinrates() рекурсивно — только архивируем resolved
+  var toArchive=S.winrates.filter(function(w){return w.result==='win'||w.result==='loss';});
+  var keepPending=S.winrates.filter(function(w){return w.result==='pending';});
+  // expired оставляем в пуле но без активного мониторинга
+  var keepExpired=S.winrates.filter(function(w){return w.result==='expired';});
+  if(toArchive.length>0)saveWRHistory(toArchive);
+  // Pending продолжают мониториться! Expired убираем в историю тоже.
+  if(keepExpired.length>0)saveWRHistory(keepExpired);
+  S.winrates=keepPending; // только pending остаются в живом WR_KEY
+  saveWR();
+  if(S.phase===5)showWinrates();
+  showToast('🕛 00:00 МСК — '+(toArchive.length)+' в истории, '+keepPending.length+' pending продолжают отслеживаться');
 }
 
 async function checkPendingWinrates(){
-  checkMidnightReset();
+  // ФИX: checkMidnightReset вызывается ОТДЕЛЬНО в своём интервале — не здесь
   var now=Date.now();
+  // Pending мониторятся БЕСКОНЕЧНО — только реальный TP/SL закрывает запись
   var active=S.winrates.filter(function(w){return w.result==='pending';});
   if(!active.length){saveWR();return;}
   console.log('WR check: '+active.length+' pending');
@@ -1807,19 +1815,23 @@ async function checkPendingWinrates(){
         fetchPrice(rec.sym),
         new Promise(function(_,rej){setTimeout(function(){rej(new Error('t'));},5000);})
       ]);
-      if(!lp||lp<=0)return;
+      if(!lp||lp<=0){ console.warn('[WR] Нет цены для', rec.sym); return; }
       rec.elapsed=Math.floor((now-(rec.signalTime||rec.ts||0))/60000);
       var curPnl=rec.dir==='SHORT'?(rec.entry-lp)/rec.entry*100:(lp-rec.entry)/rec.entry*100;
       if(rec.maxPnl===null||rec.maxPnl===undefined||curPnl>rec.maxPnl)rec.maxPnl=curPnl;
       var hit=null;
       if(rec.dir==='SHORT'){if(lp<=rec.tp)hit='win';else if(lp>=rec.sl)hit='loss';}
       else{if(lp>=rec.tp)hit='win';else if(lp<=rec.sl)hit='loss';}
+      console.log('[WR]', rec.sym, rec.dir, 'lp='+lp.toFixed(4),
+        'entry='+rec.entry.toFixed(4), 'TP='+rec.tp.toFixed(4), 'SL='+rec.sl.toFixed(4),
+        'pnl='+(curPnl>=0?'+':'')+curPnl.toFixed(2)+'%', hit?'→ '+hit.toUpperCase():'pending');
       if(hit){
         rec.result=hit;rec.closePrice=lp;rec.pnl=curPnl;rec.closedAt=now;
+        saveWR(); // Сохраняем сразу как только hit зафиксирован
         notify(hit==='win'?'✅ TP · '+rec.sym.replace('USDT',''):'❌ SL · '+rec.sym.replace('USDT',''),
           (curPnl>=0?'+':'')+curPnl.toFixed(2)+'% за '+fmtElapsed(rec.elapsed));
       }
-    }catch(e){}
+    }catch(e){ console.warn('[WR] Ошибка проверки', rec.sym, e.message); }
   }));
   saveWR();
   if(S.phase===5)showWinrates();
@@ -3844,20 +3856,14 @@ setInterval(function(){
   if(S.ideas.length!==before)renderIdeas();
 },60*1000); // expiry check every 1 min
 setInterval(()=>runWatchChecks(), WATCH_INTERVAL_MS);
-setInterval(function(){checkPendingWinrates();checkMidnightReset();}, 15*60*1000); // WR check every 15 min
+setInterval(checkPendingWinrates, 3*60*1000);  // ФИX: каждые 3 мин (было 15)
+setInterval(checkMidnightReset, 60*1000);      // midnight reset отдельно каждую минуту
 setInterval(()=>runActiveMonitor(), 15*1000); // Active track monitor every 15 sec
 setTimeout(()=>runActiveMonitor(), 5000); // Initial active monitor check
 // Запускаем flow streams для монет, которые были "В работе" до перезагрузки страницы
 S.activeTrack.forEach(rec => startActiveFlowTracking(rec.sym));
-// Initial check on load
-// Clean up winrates with bad TP/SL (<1% range)
-S.winrates = S.winrates.filter(w => {
-  if (w.result !== 'pending') return true;
-  const tpPct = w.entry > 0 ? Math.abs(w.tp - w.entry) / w.entry * 100 : 0;
-  return tpPct >= 1.0; // keep only if TP is at least 1% away
-});
-saveWR();
-setTimeout(()=>checkPendingWinrates(), 10000);
+// Initial check on load — НЕ фильтруем записи, просто проверяем цены
+setTimeout(()=>checkPendingWinrates(), 8000);
 setInterval(()=>{
   fetch(`${FAPI}/ticker/24hr`).then(r=>r.json()).then(t=>{
     if(!Array.isArray(t))return;
