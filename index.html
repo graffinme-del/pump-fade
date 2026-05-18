@@ -665,6 +665,64 @@ function ema(arr,p){const k=2/(p+1);const out=[];let prev=null;const init=[];for
 function rsi(c,p=14){const r=Array(p).fill(null);let ag=0,al=0;for(let i=1;i<=p;i++){const d=c[i]-c[i-1];d>=0?ag+=d:al-=d;}ag/=p;al/=p;r.push(al===0?100:100-100/(1+ag/al));for(let i=p+1;i<c.length;i++){const d=c[i]-c[i-1];ag=(ag*(p-1)+(d>0?d:0))/p;al=(al*(p-1)+(d<0?-d:0))/p;r.push(al===0?100:100-100/(1+ag/al));}return r;}
 function macd(c){const f=ema(c,12),s=ema(c,26);const ml=c.map((_,i)=>f[i]!=null&&s[i]!=null?f[i]-s[i]:null);const valid=ml.filter(v=>v!=null);const sr=ema(valid,9);let si=0;const sig=ml.map(v=>v!=null?sr[si++]:null);const h=ml.map((v,i)=>v!=null&&sig[i]!=null?v-sig[i]:null);return{ml,sig,h};}
 function atrCalc(cds,p=14){if(cds.length<2)return 0;const trs=cds.slice(1).map((c,i)=>Math.max(c.high-c.low,Math.abs(c.high-cds[i].close),Math.abs(c.low-cds[i].close)));return trs.slice(-p).reduce((s,v)=>s+v,0)/Math.min(p,trs.length);}
+
+// ── SL по локальным уровням swing high/low ──────────────────
+// Ищет последний swing high (для SHORT) или swing low (для LONG)
+// в окне candles (15m), возвращает цену SL с буфером 0.15%
+// Ограничение: мин 0.4%, макс 5% от entry
+function findSwingSL(cds, entry, dir) {
+  const BUFFER = 0.0015;  // 0.15% за уровень
+  const MIN_PCT = 0.004;  // минимум 0.4%
+  const MAX_PCT = 0.05;   // максимум 5%
+  const lookback = Math.min(cds.length, 30);
+  const slice = cds.slice(-lookback);
+
+  if (dir === 'SHORT') {
+    // Ищем swing high: high[i] >= high[i-1] && high[i] >= high[i+1]
+    let swingHigh = 0;
+    for (let i = slice.length - 2; i >= 1; i--) {
+      if (slice[i].high >= slice[i-1].high && slice[i].high >= slice[i+1].high && slice[i].high > entry) {
+        swingHigh = slice[i].high;
+        break;
+      }
+    }
+    // Fallback: максимум последних 10 свечей
+    if (!swingHigh || swingHigh <= entry) {
+      swingHigh = Math.max(...cds.slice(-10).map(c => c.high));
+    }
+    // Если всё ещё <= entry — берём максимум последних 20 свечей
+    if (!swingHigh || swingHigh <= entry) {
+      swingHigh = Math.max(...cds.slice(-20).map(c => c.high));
+    }
+    const sl = swingHigh * (1 + BUFFER);
+    const slPct = (sl - entry) / entry;
+    if (slPct < MIN_PCT) return entry * (1 + MIN_PCT);
+    if (slPct > MAX_PCT) return entry * (1 + MAX_PCT);
+    return sl;
+
+  } else { // LONG
+    // Ищем swing low: low[i] <= low[i-1] && low[i] <= low[i+1]
+    let swingLow = Infinity;
+    for (let i = slice.length - 2; i >= 1; i--) {
+      if (slice[i].low <= slice[i-1].low && slice[i].low <= slice[i+1].low && slice[i].low < entry) {
+        swingLow = slice[i].low;
+        break;
+      }
+    }
+    // Fallback: минимум последних 10 свечей
+    if (!isFinite(swingLow) || swingLow >= entry) {
+      swingLow = Math.min(...cds.slice(-10).map(c => c.low));
+    }
+    if (!isFinite(swingLow) || swingLow >= entry) {
+      swingLow = Math.min(...cds.slice(-20).map(c => c.low));
+    }
+    const sl = swingLow * (1 - BUFFER);
+    const slPct = (entry - sl) / entry;
+    if (slPct < MIN_PCT) return entry * (1 - MIN_PCT);
+    if (slPct > MAX_PCT) return entry * (1 - MAX_PCT);
+    return sl;
+  }
+}
 function cvdFromCandles(cds){let cum=0;return cds.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cum+=b/r*c.volume;return cum;});}
 function fmt(n,d=2){if(n==null)return'—';if(Math.abs(n)>=1e9)return(n/1e9).toFixed(1)+'B';if(Math.abs(n)>=1e6)return(n/1e6).toFixed(1)+'M';if(Math.abs(n)>=1000)return n.toLocaleString('en',{maximumFractionDigits:0});if(Math.abs(n)<0.0001)return n.toFixed(6);if(Math.abs(n)<0.01)return n.toFixed(5);if(Math.abs(n)<1)return n.toFixed(4);return n.toFixed(d);}
 function fmtAge(ts){const s=Math.floor((Date.now()-ts)/1000);if(s<60)return s+'с';if(s<3600)return Math.floor(s/60)+'м';return Math.floor(s/3600)+'ч';}
@@ -808,9 +866,13 @@ function analyzeFull(cds1h,cds15m){
   if(isPumped&&isExhausted)phase=2;
   if(isPumped&&isExhausted&&hasBreakdown)phase=3;
   const readyToShort=phase===3&&totalScore>=10;
-  const atrv=atrCalc(cds15m),entry=p15,sl=entry+atrv*1.5;
-  const tp1=Math.max(e20n||0,entry-atrv*2),tp2=Math.max(e50n||0,entry-atrv*4);
-  const rr=sl>entry?Math.abs(tp1-entry)/Math.abs(sl-entry):0;
+  const atrv=atrCalc(cds15m),entry=p15;
+  const sl=findSwingSL(cds15m.length>14?cds15m:cds1h, entry, 'SHORT');
+  const slDist=sl-entry;
+  const tp1Base=entry-slDist*2.0;
+  const tp1=(e20n&&e20n<entry&&e20n>tp1Base)?e20n:tp1Base;
+  const tp2=entry-slDist*3.5;
+  const rr=slDist>0?+((entry-tp1)/slDist).toFixed(2):0;
   return{phase,readyToShort,totalScore,pumpPct,pumpSpeed,atrRatio,distE20,volRatio,isPumped,
     exSigs,exScore,isExhausted,rsiNow,macdT,rsiDiv,bkSigs,bkScore,hasBreakdown,cvdFalling,cvdDiv,
     entry,sl,tp1,tp2,rr,atrv,e20_1h:e20n,e50_1h:e50n,e20_15m:e20_15n,price15m:p15,
@@ -1191,40 +1253,53 @@ async function scoreForIdea(sym){
 
     if(shortConf>=MIN_CONF&&shortConf>=longConf&&shortConf>=earlyPumpConf){
       const entry=p15;
-      // Minimum SL: 2.5%, TP: 5%, R/R >= 2.0
-      const atrSL = Math.max(atrv*1.5, entry*0.025);
-      const sl = entry + atrSL;
-      const atrTP = Math.max(atrv*3, entry*0.05);
-      const tp1 = entry - atrTP;
-      const tp2 = entry - atrTP*2;
-      const rr = +(atrTP/atrSL).toFixed(2);
+      // SL — по локальному swing high на 15m (не фиксированный %)
+      const sl = findSwingSL(cds15m.length>14?cds15m:cds1h, entry, 'SHORT');
+      const slDist = sl - entry; // всегда > 0
+      // TP обеспечивает R/R 2.0; если есть EMA50 ниже — берём его как ориентир
+      const tpBase = entry - slDist * 2.0;
+      const tpE50  = (e50n && e50n < entry) ? e50n : null;
+      const tp1 = tpE50 && tpE50 > tpBase ? tpE50 : tpBase;
+      const tp2 = entry - slDist * 3.5;
+      const rr = slDist > 0 ? +((entry - tp1) / slDist).toFixed(2) : 2.0;
       Object.assign(res,{bestDir:'SHORT',bestConf:shortConf,bestSigs:shortSigs,
         entry,sl,tp1,tp2,rr,atrv,
         why:`+${pumpPct.toFixed(1)}% за 8ч, ${dist.toFixed(1)}% от EMA20. ${shortSigs.slice(0,2).join(', ')}.`});
     } else if(earlyPumpConf>=72&&earlyPumpConf>=longConf){
       const entry=p15;
-      const slDist = Math.max(atrv*1.5, entry*0.025);
-      const tpDist = Math.max(atrv*3, entry*0.05);
-      const sl=entry-slDist, tp1=entry+tpDist, tp2=entry+tpDist*2;
+      // SL — по локальному swing low на 15m
+      const sl = findSwingSL(cds15m.length>14?cds15m:cds1h, entry, 'LONG');
+      const slDist = entry - sl; // > 0
+      const tpBase = entry + slDist * 2.0;
+      const tpE20  = (e20n && e20n > entry) ? e20n : null;
+      const tp1 = tpE20 && tpE20 < tpBase ? tpE20 : tpBase;
+      const tp2 = entry + slDist * 3.5;
       Object.assign(res,{bestDir:'LONG',bestConf:earlyPumpConf,bestSigs:earlyPumpSigs,
-        entry,sl,tp1,tp2,rr:+((tp1-entry)/(entry-sl||1)).toFixed(2),atrv,
+        entry,sl,tp1,tp2,rr:slDist>0?+((tp1-entry)/slDist).toFixed(2):2.0,atrv,
         why:earlyPumpSigs.join(', '),earlyPump:true});
     } else if(longConf>=MIN_CONF&&longDir){
       const entry=p15;
-      const slDist = Math.max(atrv*1.5, entry*0.025);
-      const tpDist = Math.max(atrv*3, entry*0.05);
-      const sl=entry-slDist, tp1=entry+tpDist, tp2=entry+tpDist*2;
+      // SL — по локальному swing low на 15m
+      const sl = findSwingSL(cds15m.length>14?cds15m:cds1h, entry, 'LONG');
+      const slDist = entry - sl; // > 0
+      const tpBase = entry + slDist * 2.0;
+      const tpE50  = (e50n && e50n > entry) ? e50n : null;
+      const tp1 = tpE50 && tpE50 < tpBase ? tpE50 : tpBase;
+      const tp2 = entry + slDist * 3.5;
       Object.assign(res,{bestDir:'LONG',bestConf:longConf,bestSigs:longSigs,
-        entry,sl,tp1,tp2,rr:+((tp1-entry)/(entry-sl||1)).toFixed(2),atrv,
+        entry,sl,tp1,tp2,rr:slDist>0?+((tp1-entry)/slDist).toFixed(2):2.0,atrv,
         why:longSigs.join(', ')});
     } else {
       // Зарождающийся памп (наблюдение)
       const isNewPump=pumpPct>=PUMP_THRESH&&pumpSpeed>=5&&volRatio>=1.5;
       if(isNewPump){
+        // Для наблюдения тоже используем swing SL если есть 15m данные
+        const slPump = (cds15m.length>14) ? findSwingSL(cds15m, price, 'SHORT') : price*1.025;
+        const slDistPump = slPump - price;
         Object.assign(res,{bestDir:'ПАМП',bestConf:Math.min(90,50+pumpPct+volRatio*4),
           bestSigs:[`+${pumpPct.toFixed(1)}% за 8ч`,`⚡ +${pumpSpeed.toFixed(1)}%/2ч`,`Vol×${volRatio.toFixed(1)}`],
           why:`Резкий памп +${pumpPct.toFixed(1)}%, Vol×${volRatio.toFixed(1)}`,
-          isPumpSignal:true,entry:price,sl:price*0.975,tp1:price*1.05,tp2:price*1.10,rr:2.0,atrv});
+          isPumpSignal:true,entry:price,sl:slPump,tp1:price-slDistPump*2,tp2:price-slDistPump*3.5,rr:2.0,atrv});
       }
     }
     // Store strategy_conf (pure structural score, before positioning/execution layers)
