@@ -1585,6 +1585,7 @@ async function openSym(sym){
   S.sym=sym; S.cds1h=c1h; S.cds15m=c15m;
   S.cvdData=cvdFromCandles(c15m.slice(-80));
   S.analysis=analyzeFull(c1h,c15m);
+  S.phase=0; // фиксируем: карточка монеты открыта — WR-таб не перезаписывает её
   const sname=sym.replace('USDT','');
   ['sym-label','ctf1h','ctf15m'].forEach(id=>{
     const el=document.getElementById(id);
@@ -1627,6 +1628,7 @@ async function loadSym(sym,idea=null){
 // ═══════════════════════════════════════════════════════
 function showCoinCard(idea,analysis){
   const dz=document.getElementById('dynamic-zone');if(!dz)return;
+  S.phase=0;           // карточка монеты — WR/phase-обновления не трогают dynamic-zone
   S.activeCardIdea = idea; // track for positioning/execution layer updates
   const a=analysis||S.analysis;
   const dc=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
