@@ -594,6 +594,7 @@ const WR_HISTORY_KEY = 'pf_wr_history_v1';
 const ACTIVE_KEY = 'pf_active_v1';
 let PUMP_THRESH = 15;
 let MIN_CONF = 70;
+const MIN_TP_PCT = 5.0; // минимальный потенциал TP — меньше 5% не берём
 
 // ═══════════════════════════════════════════════════════
 //  ORDER BOOK & FLOW STATE
@@ -1442,6 +1443,9 @@ async function runIdeas(manual=false){
         if(res.status!=='fulfilled'||!res.value||!res.value.bestDir)return;
         const r=res.value;
         if(r.bestConf<MIN_CONF)return;
+        // Фильтр по минимальному потенциалу TP (не менее 5%)
+        const _tpDist=r.entry>0&&r.tp1>0?Math.abs(r.tp1-r.entry)/r.entry*100:0;
+        if(_tpDist<MIN_TP_PCT){console.log('[FILTER]',r.sym,'TP только',_tpDist.toFixed(1)+'% < '+MIN_TP_PCT+'% → пропускаем');return;}
         const lastTs=S.ideaDedup[r.sym];
         if(lastTs&&now-lastTs<7200000)return; // 2h dedup
         S.ideaDedup[r.sym]=now;
