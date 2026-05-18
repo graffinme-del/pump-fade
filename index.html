@@ -1855,36 +1855,55 @@ async function fetchPrice(sym){try{const r=await fetch(`${FAPI}/ticker/price?sym
 
 function wrOpenSym(sym){openSym(sym);}
 
-// Проверка одного сетапа по историческим 1h свечам (поиск первого касания TP/SL)
+// Проверка одного сетапа по историческим 15m свечам (точнее чем 1h)
+// Для длинных периодов делает несколько запросов (limit 1000 × 15m = 10.4 дня)
 async function checkRecordWithKlines(rec){
   var startTs = rec.signalTime || rec.ts || 0;
   var endTs   = Date.now();
-  var url = FAPI+'/klines?symbol='+rec.sym+'&interval=1h&startTime='+startTs+'&endTime='+endTs+'&limit=500';
-  var r = await fetch(url);
-  var klines = await r.json();
-  if(!Array.isArray(klines)||klines.length===0) return null;
+  var INTERVAL = '15m';
+  var INTERVAL_MS = 15*60*1000;
+  var LIMIT = 1000;
+  var allKlines = [];
 
-  for(var i=0;i<klines.length;i++){
-    var k    = klines[i];
-    var kTs  = k[0]+3600000; // close time
+  // Грузим свечи батчами если период > 10 дней
+  var cursor = startTs;
+  for(var attempt=0; attempt<5; attempt++){
+    var url = FAPI+'/klines?symbol='+rec.sym+'&interval='+INTERVAL+'&startTime='+cursor+'&endTime='+endTs+'&limit='+LIMIT;
+    var r = await fetch(url);
+    if(!r.ok) break;
+    var batch = await r.json();
+    if(!Array.isArray(batch)||batch.length===0) break;
+    allKlines = allKlines.concat(batch);
+    if(batch.length < LIMIT) break; // получили все
+    cursor = batch[batch.length-1][0] + INTERVAL_MS; // следующий батч
+    if(cursor >= endTs) break;
+    await new Promise(function(res){ setTimeout(res, 100); }); // пауза между батчами
+  }
+
+  if(!allKlines.length) return null;
+
+  for(var i=0;i<allKlines.length;i++){
+    var k    = allKlines[i];
+    var kTs  = k[0] + INTERVAL_MS;
     var high = parseFloat(k[2]);
     var low  = parseFloat(k[3]);
 
     if(rec.dir==='SHORT'){
-      // Консервативно: сначала проверяем SL (рост вверх), потом TP (падение вниз)
+      // SL выше entry (цена пошла вверх — плохо), TP ниже entry (цена упала — хорошо)
+      // Проверяем SL первым (консервативно для памп-фейда)
       if(high >= rec.sl)
         return {result:'loss', closePrice:rec.sl, pnl:(rec.entry-rec.sl)/rec.entry*100, closedAt:kTs};
       if(low  <= rec.tp)
         return {result:'win',  closePrice:rec.tp, pnl:(rec.entry-rec.tp)/rec.entry*100, closedAt:kTs};
     } else { // LONG
-      // Консервативно: сначала SL (падение вниз), потом TP (рост вверх)
+      // SL ниже entry, TP выше entry
       if(low  <= rec.sl)
         return {result:'loss', closePrice:rec.sl, pnl:(rec.sl-rec.entry)/rec.entry*100, closedAt:kTs};
       if(high >= rec.tp)
         return {result:'win',  closePrice:rec.tp, pnl:(rec.tp-rec.entry)/rec.entry*100, closedAt:kTs};
     }
   }
-  return null; // TP/SL ещё не достигнуты
+  return null; // TP/SL ещё не достигнуты за этот период
 }
 
 // Пересчитать ВСЕ незакрытые сетапы (pending + expired) по историческим 1h свечам
@@ -2072,6 +2091,18 @@ function showWinrates(){
   var avgW=wins.length>0?wins.reduce(function(s,w){return s+(w.pnl||0);},0)/wins.length:0;
   var avgL=losses.length>0?losses.reduce(function(s,w){return s+(w.pnl||0);},0)/losses.length:0;
   var maxPnlAll=allData.reduce(function(m,w){return Math.max(m,w.maxPnl||0);},0);
+  // Breakdown по направлению
+  var shortWins=wins.filter(function(w){return w.dir==='SHORT';});
+  var shortLoss=losses.filter(function(w){return w.dir==='SHORT';});
+  var longWins=wins.filter(function(w){return w.dir==='LONG';});
+  var longLoss=losses.filter(function(w){return w.dir==='LONG';});
+  var shortTotal=shortWins.length+shortLoss.length;
+  var longTotal=longWins.length+longLoss.length;
+  var shortWR=shortTotal>0?(shortWins.length/shortTotal*100).toFixed(0):'—';
+  var longWR=longTotal>0?(longWins.length/longTotal*100).toFixed(0):'—';
+  // Expected Value: WR*avgWin + (1-WR)*avgLoss
+  var ev = total>0 ? ((wins.length/total)*avgW + (losses.length/total)*avgL) : null;
+  var avgRR = (avgW>0&&avgL<0) ? (avgW/Math.abs(avgL)).toFixed(2) : null;
   var sorted=[].concat(allData).sort(function(a,b){
     if(a.result==='pending'&&b.result!=='pending')return -1;
     if(a.result!=='pending'&&b.result==='pending')return 1;
@@ -2108,10 +2139,16 @@ function showWinrates(){
     +'<div class="wr-box"><div class="wr-v" style="color:var(--amber);">'+pend.length+'</div><div class="wr-l">⏳ Ожидают</div></div>'
     +'</div>'
     +(total>0
-      ?'<div style="display:flex;gap:12px;font-size:9px;color:var(--muted);margin-bottom:6px;">'
-       +'<span>Ср. прибыль: <b style="color:var(--green);">+'+avgW.toFixed(2)+'%</b></span>'
-       +'<span>Ср. убыток: <b style="color:var(--red);">'+avgL.toFixed(2)+'%</b></span>'
-       +'<span>Макс PnL: <b style="color:var(--blue);">+'+maxPnlAll.toFixed(2)+'%</b></span>'
+      ?'<div style="display:flex;gap:8px;font-size:9px;color:var(--muted);margin-bottom:4px;flex-wrap:wrap;">'
+       +'<span>Ср.прибыль: <b style="color:var(--green);">+'+(avgW||0).toFixed(2)+'%</b></span>'
+       +'<span>Ср.убыток: <b style="color:var(--red);">'+(avgL||0).toFixed(2)+'%</b></span>'
+       +(avgRR?'<span>R/R: <b style="color:var(--blue);">'+avgRR+'</b></span>':'')
+       +(ev!==null?'<span>EV/сделка: <b style="color:'+(ev>=0?'var(--green)':'var(--red)')+';">'+(ev>=0?'+':'')+ev.toFixed(2)+'%</b></span>':'')
+       +'</div>'
+       // Breakdown SHORT / LONG
+       +'<div style="display:flex;gap:8px;font-size:9px;margin-bottom:6px;">'
+       +(shortTotal>0?'<span style="background:var(--red-bg);border:1px solid var(--red-b);border-radius:4px;padding:2px 7px;">SHORT: <b style="color:'+(parseFloat(shortWR)>=50?'var(--green)':'var(--red)')+';">'+shortWR+'%</b> <span style="color:var(--dim);">('+shortWins.length+'/'+shortTotal+')</span></span>':'')
+       +(longTotal>0?'<span style="background:var(--green-bg);border:1px solid var(--green-b);border-radius:4px;padding:2px 7px;">LONG: <b style="color:'+(parseFloat(longWR)>=50?'var(--green)':'var(--red)')+';">'+longWR+'%</b> <span style="color:var(--dim);">('+longWins.length+'/'+longTotal+')</span></span>':'')
        +'</div>'
        +'<div style="height:4px;background:var(--s3);border-radius:2px;margin-bottom:8px;">'
        +'<div style="height:100%;width:'+(wr==='—'?0:wr)+'%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:2px;"></div></div>'
