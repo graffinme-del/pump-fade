@@ -1887,55 +1887,107 @@ async function checkRecordWithKlines(rec){
   return null; // TP/SL ещё не достигнуты
 }
 
-// Пересчитать все pending и expired по историческим свечам
+// Пересчитать ВСЕ незакрытые сетапы (pending + expired) по историческим 1h свечам
 async function recheckWithKlines(){
-  // Восстанавливаем expired (без результата) обратно в pending
-  S.winrates.forEach(function(w){
-    if((w.result==='expired'||w.result==='pending')&&(w.pnl===null||w.pnl===undefined)){
-      w.result='pending';
-    }
+  var dz=document.getElementById('dynamic-zone');
+
+  // Собираем ВСЕ незакрытые: pending и expired из S.winrates
+  var liveTargets = S.winrates.filter(function(w){ return w.result!=='win'&&w.result!=='loss'; });
+
+  // И из истории: тоже все незакрытые
+  var hist = loadWRHistory();
+  var histTargets = hist.filter(function(w){ return w.result!=='win'&&w.result!=='loss'; })
+    .map(function(w){ return Object.assign({},w,{_fromHistory:true}); });
+
+  // Дедупликация: не брать из истории то, что уже есть в live
+  var liveKeys = new Set(liveTargets.map(function(w){ return w.sym+'_'+(w.signalTime||w.ts||0); }));
+  histTargets = histTargets.filter(function(w){
+    return !liveKeys.has(w.sym+'_'+(w.signalTime||w.ts||0));
   });
-  var targets = S.winrates.filter(function(w){ return w.result==='pending'; });
-  var hist    = loadWRHistory();
-  var histPend = hist.filter(function(w){ return w.result==='pending'||(w.result==='expired'&&(w.pnl===null||w.pnl===undefined)); });
 
-  var allTargets = targets.concat(histPend.map(function(w){ return Object.assign({},w,{_fromHistory:true}); }));
-  if(!allTargets.length){ showToast('Нет pending записей для проверки'); return; }
+  var allTargets = liveTargets.concat(histTargets);
+  if(!allTargets.length){
+    showToast('Нет незакрытых сетапов для проверки');
+    return;
+  }
 
-  showToast('📡 Проверяю '+allTargets.length+' сетапов по свечам...');
-  var resolved=0, stillPending=0;
+  // Прогресс в UI
+  function showProgress(done, total, wins, losses, errors){
+    if(!dz) return;
+    var pct = total>0 ? Math.round(done/total*100) : 0;
+    var el = document.getElementById('wr-klines-progress');
+    if(el){
+      el.innerHTML =
+        '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;">📡 Проверяю по свечам: '+done+'/'+total+' ('+pct+'%)</div>'+
+        '<div style="height:4px;background:var(--s3);border-radius:2px;margin-bottom:8px;">'+
+          '<div style="height:100%;width:'+pct+'%;background:#3b82f6;border-radius:2px;transition:width .2s;"></div>'+
+        '</div>'+
+        '<div style="font-size:10px;color:var(--muted);">✅ Win: '+wins+' &nbsp; ❌ Loss: '+losses+' &nbsp; ⚠ Ошибки: '+errors+'</div>';
+    }
+  }
+
+  // Показываем панель прогресса
+  if(dz){
+    dz.innerHTML = '<div class="fade" style="padding:16px 12px;" id="wr-klines-progress"></div>';
+  }
+  showProgress(0, allTargets.length, 0, 0, 0);
+
+  var wins=0, losses=0, errors=0, resolved=0;
+
   for(var i=0;i<allTargets.length;i++){
-    var rec=allTargets[i];
-    if(!rec.sym||!rec.entry||!rec.tp||!rec.sl) continue;
+    var rec = allTargets[i];
+    if(!rec.sym||!rec.entry||!rec.tp||!rec.sl){
+      errors++;
+      showProgress(i+1, allTargets.length, wins, losses, errors);
+      continue;
+    }
     try{
-      await new Promise(function(res){setTimeout(res,120);}); // пауза 120мс между запросами
+      // Пауза между запросами, чтобы не попасть под rate limit
+      if(i>0) await new Promise(function(res){ setTimeout(res, 150); });
+
       var outcome = await checkRecordWithKlines(rec);
       if(outcome){
-        rec.result    = outcome.result;
-        rec.closePrice= outcome.closePrice;
-        rec.pnl       = +outcome.pnl.toFixed(3);
-        rec.closedAt  = outcome.closedAt;
-        rec.elapsed   = Math.floor((outcome.closedAt-(rec.signalTime||rec.ts||0))/60000);
+        rec.result     = outcome.result;
+        rec.closePrice = outcome.closePrice;
+        rec.pnl        = +outcome.pnl.toFixed(3);
+        rec.closedAt   = outcome.closedAt;
+        rec.elapsed    = Math.floor((outcome.closedAt-(rec.signalTime||rec.ts||0))/60000);
         resolved++;
-        console.log('[WR Klines]', rec.sym, rec.dir, '→', rec.result, rec.pnl.toFixed(2)+'%');
-        // Если запись из истории — обновляем её там
-        if(rec._fromHistory){
-          var idx=hist.findIndex(function(h){
-            return h.sym===rec.sym&&(h.signalTime||h.ts||0)===(rec.signalTime||rec.ts||0);
-          });
-          if(idx>=0) hist[idx]=Object.assign({},rec,{_fromHistory:undefined});
-          else hist.push(Object.assign({},rec,{_fromHistory:undefined}));
-        }
-      } else {
-        stillPending++;
+        if(outcome.result==='win') wins++; else losses++;
+        console.log('[WR Klines]', rec.sym, rec.dir, '→', rec.result.toUpperCase(),
+          (rec.pnl>=0?'+':'')+rec.pnl.toFixed(2)+'%');
       }
-    }catch(e){ console.warn('[WR Klines] Ошибка:', rec.sym, e.message); }
+    }catch(e){
+      errors++;
+      console.warn('[WR Klines] Ошибка:', rec.sym, e.message);
+    }
+    showProgress(i+1, allTargets.length, wins, losses, errors);
   }
-  // Сохраняем обновлённую историю
-  try{ localStorage.setItem(WR_HISTORY_KEY, JSON.stringify(hist)); }catch(e){}
+
+  // Применяем результаты: обновляем S.winrates
+  liveTargets.forEach(function(rec){
+    var idx = S.winrates.findIndex(function(w){
+      return w.sym===rec.sym && (w.signalTime||w.ts||0)===(rec.signalTime||rec.ts||0);
+    });
+    if(idx>=0) S.winrates[idx] = rec;
+  });
+
+  // Обновляем историю
+  histTargets.forEach(function(rec){
+    var clean = Object.assign({},rec,{_fromHistory:undefined});
+    var idx = hist.findIndex(function(h){
+      return h.sym===clean.sym && (h.signalTime||h.ts||0)===(clean.signalTime||clean.ts||0);
+    });
+    if(idx>=0) hist[idx] = clean;
+    else hist.push(clean);
+  });
+
+  // Сохраняем всё
   saveWR();
+  try{ localStorage.setItem(WR_HISTORY_KEY, JSON.stringify(hist)); }catch(e){}
+
   showWinrates();
-  showToast('✅ Готово: '+resolved+' закрыто, '+stillPending+' ещё ожидают TP/SL');
+  showToast('✅ Готово: '+resolved+' закрыто ('+wins+' win / '+losses+' loss), ошибок: '+errors);
 }
 
 // Старый пересчёт (только текущая цена)
