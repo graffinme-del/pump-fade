@@ -666,61 +666,162 @@ function rsi(c,p=14){const r=Array(p).fill(null);let ag=0,al=0;for(let i=1;i<=p;
 function macd(c){const f=ema(c,12),s=ema(c,26);const ml=c.map((_,i)=>f[i]!=null&&s[i]!=null?f[i]-s[i]:null);const valid=ml.filter(v=>v!=null);const sr=ema(valid,9);let si=0;const sig=ml.map(v=>v!=null?sr[si++]:null);const h=ml.map((v,i)=>v!=null&&sig[i]!=null?v-sig[i]:null);return{ml,sig,h};}
 function atrCalc(cds,p=14){if(cds.length<2)return 0;const trs=cds.slice(1).map((c,i)=>Math.max(c.high-c.low,Math.abs(c.high-cds[i].close),Math.abs(c.low-cds[i].close)));return trs.slice(-p).reduce((s,v)=>s+v,0)/Math.min(p,trs.length);}
 
-// ── SL по локальным уровням swing high/low ──────────────────
-// Ищет последний swing high (для SHORT) или swing low (для LONG)
-// в окне candles (15m), возвращает цену SL с буфером 0.15%
-// Ограничение: мин 0.4%, макс 5% от entry
-function findSwingSL(cds, entry, dir) {
-  const BUFFER = 0.0015;  // 0.15% за уровень
-  const MIN_PCT = 0.004;  // минимум 0.4%
-  const MAX_PCT = 0.05;   // максимум 5%
-  const lookback = Math.min(cds.length, 30);
-  const slice = cds.slice(-lookback);
+// ═══════════════════════════════════════════════════════
+//  СТРУКТУРНЫЕ УРОВНИ SL / TP
+//  SL — за реальным pivot high/low (не просто соседняя свеча!)
+//  TP — ближайший значимый уровень куда цена вероятно дойдёт
+//  Никаких фиксированных процентов!
+// ═══════════════════════════════════════════════════════
+
+// Возвращает массив pivot high или pivot low со «силой» N
+// Pivot high: high[i] > high[j] для всех j в [i-N .. i+N], j≠i
+// Pivot low:  low[i]  < low[j]  для всех j в [i-N .. i+N], j≠i
+function _structPivots(cds, type, N) {
+  const result = [];
+  const n = cds.length;
+  for (let i = N; i < n - N; i++) {
+    if (type === 'high') {
+      const h = cds[i].high;
+      let ok = true;
+      for (let j = i - N; j <= i + N; j++) {
+        if (j !== i && cds[j].high >= h) { ok = false; break; }
+      }
+      if (ok) result.push(h);
+    } else {
+      const l = cds[i].low;
+      let ok = true;
+      for (let j = i - N; j <= i + N; j++) {
+        if (j !== i && cds[j].low <= l) { ok = false; break; }
+      }
+      if (ok) result.push(l);
+    }
+  }
+  return result;
+}
+
+// SL по структурным pivot уровням
+// SHORT: SL выше ближайшего pivot HIGH на 1h (сила N=3), fallback 15m (N=2)
+// LONG:  SL ниже ближайшего pivot LOW  на 1h (сила N=3), fallback 15m (N=2)
+// Буфер 0.3% за уровень. Мин 0.8%, макс 10%.
+function findStructuralSL(cds1h, cds15m, entry, dir) {
+  const BUFFER  = 0.003;   // 0.3% буфер за уровень
+  const MIN_DIST = 0.008;  // мин 0.8%  от entry
+  const MAX_DIST = 0.10;   // макс 10% от entry
+  const s1h  = cds1h  && cds1h.length  >= 10 ? cds1h.slice(-60)  : null;
+  const s15m = cds15m && cds15m.length >= 10 ? cds15m.slice(-80) : null;
 
   if (dir === 'SHORT') {
-    // Ищем swing high: high[i] >= high[i-1] && high[i] >= high[i+1]
-    let swingHigh = 0;
-    for (let i = slice.length - 2; i >= 1; i--) {
-      if (slice[i].high >= slice[i-1].high && slice[i].high >= slice[i+1].high && slice[i].high > entry) {
-        swingHigh = slice[i].high;
-        break;
+    // Ищем ближайший pivot high ВЫШЕ entry на 1h (N=3)
+    let level = null;
+    if (s1h) {
+      const p = _structPivots(s1h, 'high', 3).filter(v => v > entry);
+      if (p.length) level = Math.min(...p);
+    }
+    // Fallback: 15m pivot high (N=2) — менее значимые, но ближе
+    if (!level) {
+      if (s15m) {
+        const p = _structPivots(s15m, 'high', 2).filter(v => v > entry);
+        if (p.length) level = Math.min(...p);
       }
     }
-    // Fallback: максимум последних 10 свечей
-    if (!swingHigh || swingHigh <= entry) {
-      swingHigh = Math.max(...cds.slice(-10).map(c => c.high));
+    // Финальный fallback: просто максимум последних 20 свечей 1h
+    if (!level) {
+      const src = s1h || s15m;
+      if (src) level = Math.max(...src.slice(-20).map(c => c.high));
     }
-    // Если всё ещё <= entry — берём максимум последних 20 свечей
-    if (!swingHigh || swingHigh <= entry) {
-      swingHigh = Math.max(...cds.slice(-20).map(c => c.high));
+    if (!level) return entry * (1 + MIN_DIST);
+
+    let sl = level * (1 + BUFFER);
+    let d  = (sl - entry) / entry;
+
+    // Слишком близко — ищем следующий уровень выше
+    if (d < MIN_DIST) {
+      const src = s1h || s15m;
+      if (src) {
+        const N = s1h ? 3 : 2;
+        const next = _structPivots(src, 'high', N)
+          .filter(v => (v * (1 + BUFFER) - entry) / entry >= MIN_DIST)
+          .sort((a, b) => a - b);
+        if (next.length) { sl = next[0] * (1 + BUFFER); d = (sl - entry) / entry; }
+        else { sl = entry * (1 + MIN_DIST); d = MIN_DIST; }
+      } else { sl = entry * (1 + MIN_DIST); d = MIN_DIST; }
     }
-    const sl = swingHigh * (1 + BUFFER);
-    const slPct = (sl - entry) / entry;
-    if (slPct < MIN_PCT) return entry * (1 + MIN_PCT);
-    if (slPct > MAX_PCT) return entry * (1 + MAX_PCT);
-    return sl;
+    return d > MAX_DIST ? entry * (1 + MAX_DIST) : sl;
 
   } else { // LONG
-    // Ищем swing low: low[i] <= low[i-1] && low[i] <= low[i+1]
-    let swingLow = Infinity;
-    for (let i = slice.length - 2; i >= 1; i--) {
-      if (slice[i].low <= slice[i-1].low && slice[i].low <= slice[i+1].low && slice[i].low < entry) {
-        swingLow = slice[i].low;
-        break;
+    let level = null;
+    if (s1h) {
+      const p = _structPivots(s1h, 'low', 3).filter(v => v < entry);
+      if (p.length) level = Math.max(...p); // ближайший снизу
+    }
+    if (!level) {
+      if (s15m) {
+        const p = _structPivots(s15m, 'low', 2).filter(v => v < entry);
+        if (p.length) level = Math.max(...p);
       }
     }
-    // Fallback: минимум последних 10 свечей
-    if (!isFinite(swingLow) || swingLow >= entry) {
-      swingLow = Math.min(...cds.slice(-10).map(c => c.low));
+    if (!level) {
+      const src = s1h || s15m;
+      if (src) level = Math.min(...src.slice(-20).map(c => c.low));
     }
-    if (!isFinite(swingLow) || swingLow >= entry) {
-      swingLow = Math.min(...cds.slice(-20).map(c => c.low));
+    if (!level) return entry * (1 - MIN_DIST);
+
+    let sl = level * (1 - BUFFER);
+    let d  = (entry - sl) / entry;
+
+    if (d < MIN_DIST) {
+      const src = s1h || s15m;
+      if (src) {
+        const N = s1h ? 3 : 2;
+        const next = _structPivots(src, 'low', N)
+          .filter(v => (entry - v * (1 - BUFFER)) / entry >= MIN_DIST)
+          .sort((a, b) => b - a);
+        if (next.length) { sl = next[0] * (1 - BUFFER); d = (entry - sl) / entry; }
+        else { sl = entry * (1 - MIN_DIST); d = MIN_DIST; }
+      } else { sl = entry * (1 - MIN_DIST); d = MIN_DIST; }
     }
-    const sl = swingLow * (1 - BUFFER);
-    const slPct = (entry - sl) / entry;
-    if (slPct < MIN_PCT) return entry * (1 - MIN_PCT);
-    if (slPct > MAX_PCT) return entry * (1 - MAX_PCT);
-    return sl;
+    return d > MAX_DIST ? entry * (1 - MAX_DIST) : sl;
+  }
+}
+
+// TP по ближайшему структурному уровню (НЕЗАВИСИМ от SL!)
+// SHORT: ближайший значимый уровень поддержки НИЖЕ entry
+// LONG:  ближайший значимый уровень сопротивления ВЫШЕ entry
+// Кандидаты: pivot low/high на 1h + EMA20 + EMA50
+// Мин расстояние 1.5% (не ставим TP вплотную к entry)
+function findStructuralTP(cds1h, cds15m, entry, dir, e20, e50) {
+  const MIN_DIST = 0.015; // мин 1.5%
+  const s1h  = cds1h  && cds1h.length  >= 10 ? cds1h.slice(-80)  : null;
+  const s15m = cds15m && cds15m.length >= 10 ? cds15m.slice(-100) : null;
+
+  if (dir === 'SHORT') {
+    let cands = [];
+    // Pivot lows на 1h (N=3) — значимые уровни поддержки
+    if (s1h) cands.push(..._structPivots(s1h, 'low', 3));
+    // EMA уровни как цели
+    if (e20 && e20 > 0) cands.push(e20);
+    if (e50 && e50 > 0) cands.push(e50);
+    // Fallback: pivot lows на 15m если мало кандидатов
+    if (cands.length < 2 && s15m) cands.push(..._structPivots(s15m, 'low', 3));
+
+    // Фильтр: строго ниже entry на MIN_DIST
+    cands = cands.filter(c => c < entry * (1 - MIN_DIST));
+    if (cands.length) return Math.max(...cands); // ближайший уровень поддержки
+
+    // Финальный fallback: ATR × 3
+    return entry - atrCalc(s1h || s15m) * 3;
+
+  } else { // LONG
+    let cands = [];
+    if (s1h) cands.push(..._structPivots(s1h, 'high', 3));
+    if (e20 && e20 > 0) cands.push(e20);
+    if (e50 && e50 > 0) cands.push(e50);
+    if (cands.length < 2 && s15m) cands.push(..._structPivots(s15m, 'high', 3));
+
+    cands = cands.filter(c => c > entry * (1 + MIN_DIST));
+    if (cands.length) return Math.min(...cands); // ближайшее сопротивление
+
+    return entry + atrCalc(s1h || s15m) * 3;
   }
 }
 function cvdFromCandles(cds){let cum=0;return cds.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cum+=b/r*c.volume;return cum;});}
@@ -867,12 +968,11 @@ function analyzeFull(cds1h,cds15m){
   if(isPumped&&isExhausted&&hasBreakdown)phase=3;
   const readyToShort=phase===3&&totalScore>=10;
   const atrv=atrCalc(cds15m),entry=p15;
-  const sl=findSwingSL(cds15m.length>14?cds15m:cds1h, entry, 'SHORT');
-  const slDist=sl-entry;
-  const tp1Base=entry-slDist*2.0;
-  const tp1=(e20n&&e20n<entry&&e20n>tp1Base)?e20n:tp1Base;
-  const tp2=entry-slDist*3.5;
-  const rr=slDist>0?+((entry-tp1)/slDist).toFixed(2):0;
+  const sl  = findStructuralSL(cds1h, cds15m, entry, 'SHORT');
+  const tp1 = findStructuralTP(cds1h, cds15m, entry, 'SHORT', e20n, e50n);
+  const tp2 = tp1 - Math.abs(tp1 - entry) * 0.5; // вторая цель — дальше на 50%
+  const slDist = sl - entry;
+  const rr = slDist > 0 ? +((entry - tp1) / slDist).toFixed(2) : 0;
   return{phase,readyToShort,totalScore,pumpPct,pumpSpeed,atrRatio,distE20,volRatio,isPumped,
     exSigs,exScore,isExhausted,rsiNow,macdT,rsiDiv,bkSigs,bkScore,hasBreakdown,cvdFalling,cvdDiv,
     entry,sl,tp1,tp2,rr,atrv,e20_1h:e20n,e50_1h:e50n,e20_15m:e20_15n,price15m:p15,
@@ -1253,53 +1353,53 @@ async function scoreForIdea(sym){
 
     if(shortConf>=MIN_CONF&&shortConf>=longConf&&shortConf>=earlyPumpConf){
       const entry=p15;
-      // SL — по локальному swing high на 15m (не фиксированный %)
-      const sl = findSwingSL(cds15m.length>14?cds15m:cds1h, entry, 'SHORT');
-      const slDist = sl - entry; // всегда > 0
-      // TP обеспечивает R/R 2.0; если есть EMA50 ниже — берём его как ориентир
-      const tpBase = entry - slDist * 2.0;
-      const tpE50  = (e50n && e50n < entry) ? e50n : null;
-      const tp1 = tpE50 && tpE50 > tpBase ? tpE50 : tpBase;
-      const tp2 = entry - slDist * 3.5;
-      const rr = slDist > 0 ? +((entry - tp1) / slDist).toFixed(2) : 2.0;
+      // SL — структурный pivot HIGH на 1h (N=3), fallback 15m
+      const sl  = findStructuralSL(cds1h, cds15m, entry, 'SHORT');
+      // TP — ближайший уровень поддержки НИЖЕ entry (pivot low / EMA), независим от SL
+      const tp1 = findStructuralTP(cds1h, cds15m, entry, 'SHORT', e20n, e50n);
+      const tp2 = tp1 - Math.abs(tp1 - entry) * 0.5; // вторая цель — ещё дальше
+      const slDist = sl - entry;
+      const rr = slDist > 0 ? +((entry - tp1) / slDist).toFixed(2) : 0;
       Object.assign(res,{bestDir:'SHORT',bestConf:shortConf,bestSigs:shortSigs,
         entry,sl,tp1,tp2,rr,atrv,
         why:`+${pumpPct.toFixed(1)}% за 8ч, ${dist.toFixed(1)}% от EMA20. ${shortSigs.slice(0,2).join(', ')}.`});
+
     } else if(earlyPumpConf>=72&&earlyPumpConf>=longConf){
       const entry=p15;
-      // SL — по локальному swing low на 15m
-      const sl = findSwingSL(cds15m.length>14?cds15m:cds1h, entry, 'LONG');
-      const slDist = entry - sl; // > 0
-      const tpBase = entry + slDist * 2.0;
-      const tpE20  = (e20n && e20n > entry) ? e20n : null;
-      const tp1 = tpE20 && tpE20 < tpBase ? tpE20 : tpBase;
-      const tp2 = entry + slDist * 3.5;
+      // SL — структурный pivot LOW на 1h
+      const sl  = findStructuralSL(cds1h, cds15m, entry, 'LONG');
+      // TP — ближайшее сопротивление ВЫШЕ entry
+      const tp1 = findStructuralTP(cds1h, cds15m, entry, 'LONG', e20n, e50n);
+      const tp2 = tp1 + Math.abs(tp1 - entry) * 0.5;
+      const slDist = entry - sl;
       Object.assign(res,{bestDir:'LONG',bestConf:earlyPumpConf,bestSigs:earlyPumpSigs,
-        entry,sl,tp1,tp2,rr:slDist>0?+((tp1-entry)/slDist).toFixed(2):2.0,atrv,
+        entry,sl,tp1,tp2,rr:slDist>0?+((tp1-entry)/slDist).toFixed(2):0,atrv,
         why:earlyPumpSigs.join(', '),earlyPump:true});
+
     } else if(longConf>=MIN_CONF&&longDir){
       const entry=p15;
-      // SL — по локальному swing low на 15m
-      const sl = findSwingSL(cds15m.length>14?cds15m:cds1h, entry, 'LONG');
-      const slDist = entry - sl; // > 0
-      const tpBase = entry + slDist * 2.0;
-      const tpE50  = (e50n && e50n > entry) ? e50n : null;
-      const tp1 = tpE50 && tpE50 < tpBase ? tpE50 : tpBase;
-      const tp2 = entry + slDist * 3.5;
+      // SL — структурный pivot LOW на 1h
+      const sl  = findStructuralSL(cds1h, cds15m, entry, 'LONG');
+      // TP — ближайшее сопротивление ВЫШЕ entry
+      const tp1 = findStructuralTP(cds1h, cds15m, entry, 'LONG', e20n, e50n);
+      const tp2 = tp1 + Math.abs(tp1 - entry) * 0.5;
+      const slDist = entry - sl;
       Object.assign(res,{bestDir:'LONG',bestConf:longConf,bestSigs:longSigs,
-        entry,sl,tp1,tp2,rr:slDist>0?+((tp1-entry)/slDist).toFixed(2):2.0,atrv,
+        entry,sl,tp1,tp2,rr:slDist>0?+((tp1-entry)/slDist).toFixed(2):0,atrv,
         why:longSigs.join(', ')});
+
     } else {
       // Зарождающийся памп (наблюдение)
       const isNewPump=pumpPct>=PUMP_THRESH&&pumpSpeed>=5&&volRatio>=1.5;
       if(isNewPump){
-        // Для наблюдения тоже используем swing SL если есть 15m данные
-        const slPump = (cds15m.length>14) ? findSwingSL(cds15m, price, 'SHORT') : price*1.025;
-        const slDistPump = slPump - price;
+        const slPump = findStructuralSL(cds1h, cds15m, price, 'SHORT');
+        const tpPump = findStructuralTP(cds1h, cds15m, price, 'SHORT', e20n, e50n);
+        const sdPump = slPump - price;
         Object.assign(res,{bestDir:'ПАМП',bestConf:Math.min(90,50+pumpPct+volRatio*4),
           bestSigs:[`+${pumpPct.toFixed(1)}% за 8ч`,`⚡ +${pumpSpeed.toFixed(1)}%/2ч`,`Vol×${volRatio.toFixed(1)}`],
           why:`Резкий памп +${pumpPct.toFixed(1)}%, Vol×${volRatio.toFixed(1)}`,
-          isPumpSignal:true,entry:price,sl:slPump,tp1:price-slDistPump*2,tp2:price-slDistPump*3.5,rr:2.0,atrv});
+          isPumpSignal:true,entry:price,sl:slPump,tp1:tpPump,tp2:tpPump-Math.abs(tpPump-price)*0.5,
+          rr:sdPump>0?+((price-tpPump)/sdPump).toFixed(2):0,atrv});
       }
     }
     // Store strategy_conf (pure structural score, before positioning/execution layers)
