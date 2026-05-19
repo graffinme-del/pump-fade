@@ -646,7 +646,15 @@ function saveWR(){try{localStorage.setItem(WR_KEY,JSON.stringify(S.winrates));}c
 const S = {
   sym:'SOLUSDT', cds1h:[], cds15m:[],
   prices:{}, oi:null, fr:null,
-  ideas:[], ideaDedup:{},
+  ideas:[], ideaDedup:(function(){
+    // Грузим dedup из localStorage, чистим записи старше 4h
+    try{
+      const raw=JSON.parse(localStorage.getItem('pf_idea_dedup')||'{}');
+      const cutoff=Date.now()-14400000;
+      Object.keys(raw).forEach(k=>{if(raw[k]<cutoff)delete raw[k];});
+      return raw;
+    }catch{return {};}
+  })(),
   volData:[],
   analysis:null,
   cvdData:[],
@@ -1450,8 +1458,9 @@ async function runIdeas(manual=false){
         // Фильтр 2: R/R ≥ 1.5 (награда должна превышать риск)
         if((r.rr||0)<MIN_RR){console.log('[FILTER] RR',r.sym,(r.rr||0).toFixed(2)+'x');return;}
         const lastTs=S.ideaDedup[r.sym];
-        if(lastTs&&now-lastTs<14400000)return; // 4h dedup (было 2h)
+        if(lastTs&&now-lastTs<14400000)return; // 4h dedup
         S.ideaDedup[r.sym]=now;
+        try{localStorage.setItem('pf_idea_dedup',JSON.stringify(S.ideaDedup));}catch{}
         // Get 24h volume from candidates array
         const candItem = candidates.find(cc=>cc.sym===r.sym);
         const quoteVol24h = candItem ? candItem.vol : 0;
@@ -3585,53 +3594,64 @@ async function runActiveMonitor(){
 
       const newAlerts = [];
 
-      // 1. SL пробит — критично
+      // 1. SL пробит — критично (уведомление ОДИН раз)
       if(rec.sl>0){
         const slHit = rec.dir==='SHORT'?lp>=rec.sl:lp<=rec.sl;
         if(slHit){
           newAlerts.push({type:'danger', msg:`🚨 SL ПРОБИТ! Цена $${fmt(lp)}`});
-          notify(`🚨 SL · ${rec.sym.replace('USDT','')}`, `Цена пробила стоп $${fmt(lp)}`);
-          playAlert();
+          if(!rec._slNotified){
+            rec._slNotified = true;
+            notify(`🚨 SL · ${rec.sym.replace('USDT','')}`, `Цена пробила стоп $${fmt(lp)}`);
+            playAlert();
+          }
           rec.slHit = true;
         } else {
-          // Дистанция до SL
+          rec._slNotified = false; // сбрасываем если цена вернулась
           const distToSL = rec.dir==='SHORT'
-            ? (lp-rec.sl)/lp*100
-            : (rec.sl-lp)/lp*100;
-          if(distToSL>0 && distToSL<1.0){
-            const urgency = distToSL<0.3?'danger':'warn';
+            ? (rec.sl-lp)/lp*100
+            : (lp-rec.sl)/lp*100;
+          if(distToSL>0 && distToSL<1.5){
+            const urgency = distToSL<0.5?'danger':'warn';
             newAlerts.push({type:urgency, msg:`⛔ SL близко: ${distToSL.toFixed(2)}% (${fmt(rec.sl)})`});
-            if(distToSL<0.5&&!rec._slWarnedAt||(now-(rec._slWarnedAt||0))>60000){
-              notify(`⛔ ${rec.sym.replace('USDT','')} SL близко!`, `${distToSL.toFixed(2)}% до стопа`);
+            // Уведомление не чаще раз в 5 минут
+            if(!rec._slWarnedAt||(now-rec._slWarnedAt)>300000){
               rec._slWarnedAt = now;
+              notify(`⛔ ${rec.sym.replace('USDT','')} SL близко!`, `${distToSL.toFixed(2)}% до стопа`);
             }
           }
         }
       }
 
-      // 2. TP достигнут
+      // 2. TP достигнут (уведомление ОДИН раз)
       if(rec.tp1>0){
         const tpHit = rec.dir==='SHORT'?lp<=rec.tp1:lp>=rec.tp1;
         if(tpHit){
           newAlerts.push({type:'success', msg:`🎯 TP ДОСТИГНУТ! +${rec.pnlPct?.toFixed(2)}%`});
-          notify(`🎯 TP · ${rec.sym.replace('USDT','')}`, `+${rec.pnlPct?.toFixed(2)}% — цель достигнута!`);
-          playAlert();
+          if(!rec._tpNotified){
+            rec._tpNotified = true;
+            notify(`🎯 TP · ${rec.sym.replace('USDT','')}`, `+${rec.pnlPct?.toFixed(2)}% — цель достигнута!`);
+            playAlert();
+          }
         } else {
+          rec._tpNotified = false;
           const distToTP = rec.dir==='SHORT'
-            ? (rec.tp1-lp)/lp*100
-            : (lp-rec.tp1)/lp*100;
+            ? (lp-rec.tp1)/lp*100
+            : (rec.tp1-lp)/lp*100;
           if(distToTP>0 && distToTP<1.0){
             newAlerts.push({type:'success', msg:`🎯 TP близко: ${distToTP.toFixed(2)}% (${fmt(rec.tp1)})`});
           }
         }
       }
 
-      // 3. Резкое движение против позиции за 15 сек
-      if(Math.abs(chgPct)>1.0){
+      // 3. Резкое движение против позиции (деdup 5 минут, порог 2% вместо 1%)
+      if(Math.abs(chgPct)>2.0){
         const isAgainst = rec.dir==='SHORT' ? chgPct>0 : chgPct<0;
         if(isAgainst){
-          newAlerts.push({type:'warn', msg:`⚠️ Движение против позиции: ${chgPct>0?'+':''}${chgPct.toFixed(2)}%`});
-          notify(`⚠️ ${rec.sym.replace('USDT','')} — разворот?`, `${chgPct>0?'+':''}${chgPct.toFixed(2)}% за последний интервал`);
+          newAlerts.push({type:'warn', msg:`⚠️ Движение против: ${chgPct>0?'+':''}${chgPct.toFixed(2)}%`});
+          if(!rec._moveAgainstAt||(now-rec._moveAgainstAt)>300000){
+            rec._moveAgainstAt = now;
+            notify(`⚠️ ${rec.sym.replace('USDT','')} — против позиции`, `${chgPct>0?'+':''}${chgPct.toFixed(2)}% за интервал`);
+          }
         }
       }
       // 4. Strong momentum with position
@@ -4231,196 +4251,6 @@ setInterval(()=>{
 
 // Notification permission
 if(typeof Notification!=='undefined'&&Notification.permission==='default'){Notification.requestPermission();}
-</script>
-
-<script>
-// ═══════════════════════════════════════════════════════
-//  DIRECTIONAL QUALITY TRACKER (DQ)
-//  Только читает S.ideas — существующий код не изменён
-//  Метрика: точность направления за 4h и 8h (без Entry/SL/TP)
-// ═══════════════════════════════════════════════════════
-(function(){
-  const DQ_KEY='pf_dq_v1';
-
-  function dqLoad(){try{return JSON.parse(localStorage.getItem(DQ_KEY)||'[]');}catch{return[];}}
-  function dqSave(log){try{if(log.length>500)log=log.slice(0,500);localStorage.setItem(DQ_KEY,JSON.stringify(log));}catch(e){}}
-
-  let _log=dqLoad();
-  let _seen=new Set(_log.map(r=>r.sym+'_'+r.ts));
-
-  // Сканируем S.ideas и записываем новые сигналы
-  function dqScan(){
-    if(!window.S||!S.ideas||!S.ideas.length)return;
-    const now=Date.now();
-    let changed=false;
-    S.ideas.forEach(idea=>{
-      const dir=idea.dir||'';
-      if(!idea.sym||!dir||dir==='?'||!idea.entry||idea.entry<=0)return;
-      const key=idea.sym+'_'+(idea.ts||0);
-      if(_seen.has(key))return;
-      _seen.add(key);
-      _log.unshift({
-        sym:idea.sym,dir,conf:idea.conf||0,
-        price:idea.entry,ts:idea.ts||now,loggedAt:now,
-        sig:(idea.sigs&&idea.sigs[0]?idea.sigs[0].substring(0,40):''),
-        c4:null,c8:null
-      });
-      changed=true;
-    });
-    if(changed){if(_log.length>500)_log=_log.slice(0,500);dqSave(_log);}
-  }
-
-  // Проверяем цены для сигналов у которых наступило время
-  async function dqCheck(){
-    const now=Date.now();
-    let changed=false;
-    const toCheck=_log.filter(r=>r.price>0&&(!r.c4||!r.c8));
-    if(!toCheck.length)return false;
-    for(const rec of toCheck){
-      const need4=!rec.c4&&now-rec.loggedAt>=4*3600000;
-      const need8=!rec.c8&&now-rec.loggedAt>=8*3600000;
-      if(!need4&&!need8)continue;
-      try{
-        const r=await fetch('https://fapi.binance.com/fapi/v1/ticker/price?symbol='+rec.sym);
-        const j=await r.json();
-        const p=parseFloat(j.price);
-        if(!p||p<=0)continue;
-        const pct=parseFloat(((p-rec.price)/rec.price*100).toFixed(2));
-        const correct=rec.dir==='LONG'?pct>0:rec.dir==='SHORT'?pct<0:null;
-        const result={price:p,pct,correct,at:now};
-        if(need4){rec.c4=result;changed=true;}
-        if(need8){rec.c8=result;changed=true;}
-      }catch(e){}
-      await new Promise(res=>setTimeout(res,120));
-    }
-    if(changed)dqSave(_log);
-    return changed;
-  }
-
-  // Статистика по одному полю
-  function dqStats(field){
-    const checked=_log.filter(r=>r[field]&&r[field].correct!==null);
-    const correct=checked.filter(r=>r[field].correct).length;
-    const total=checked.length;
-    const moves=checked.filter(r=>r[field].correct).map(r=>Math.abs(r[field].pct));
-    const avgMove=moves.length?(moves.reduce((a,b)=>a+b,0)/moves.length).toFixed(1):'—';
-    return{correct,total,acc:total>0?(correct/total*100).toFixed(0):'—',avgMove};
-  }
-
-  function accClr(v){if(v==='—')return'var(--muted)';const n=parseInt(v);return n>=60?'var(--green)':n>=45?'var(--amber)':'var(--red)';}
-
-  // Рендер панели
-  function dqRender(){
-    const panel=document.getElementById('dq-panel');
-    if(!panel)return;
-    const s4=dqStats('c4'),s8=dqStats('c8');
-    const now=Date.now();
-    const pending=_log.filter(r=>!r.c4).length;
-
-    const rows=!_log.length
-      ?'<div style="padding:16px;text-align:center;font-size:11px;color:var(--muted);">Нет данных.<br><span style="font-size:9px;color:var(--dim);">Запустите сканирование — сигналы запишутся автоматически.</span></div>'
-      :_log.slice(0,60).map(rec=>{
-        const c4=rec.c4,c8=rec.c8,dc=rec.dir==='LONG'?'var(--green)':rec.dir==='SHORT'?'var(--red)':'var(--amber)';
-        const wait4=Math.max(0,Math.ceil((rec.loggedAt+4*3600000-now)/60000));
-        const wait8=Math.max(0,Math.ceil((rec.loggedAt+8*3600000-now)/60000));
-        const fmt4=c4?(c4.correct
-          ?`<span style="color:var(--green);font-weight:700;">4h:${c4.pct>=0?'+':''}${c4.pct}% ✓</span>`
-          :`<span style="color:var(--red);">4h:${c4.pct>=0?'+':''}${c4.pct}% ✗</span>`)
-          :`<span style="color:var(--dim);">4h:${wait4>0?wait4+'м':'скоро'}</span>`;
-        const fmt8=c8?(c8.correct
-          ?`<span style="color:var(--green);font-weight:700;">8h:${c8.pct>=0?'+':''}${c8.pct}% ✓</span>`
-          :`<span style="color:var(--red);">8h:${c8.pct>=0?'+':''}${c8.pct}% ✗</span>`)
-          :`<span style="color:var(--dim);">8h:${wait8>0?wait8+'м':'скоро'}</span>`;
-        const age=Math.floor((now-rec.loggedAt)/60000);
-        const ageStr=age<60?age+'м':Math.floor(age/60)+'ч';
-        return `<div style="display:grid;grid-template-columns:52px 52px 36px 1fr 1fr 24px;gap:3px;align-items:center;padding:3px 6px;background:var(--s1);border:1px solid var(--border);border-radius:3px;margin-bottom:2px;">
-          <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${dc};">${rec.sym.replace('USDT','')}</span>
-          <span style="font-size:8px;color:${dc};font-weight:700;">${rec.dir==='LONG'?'▲ LONG':rec.dir==='SHORT'?'▼ SHORT':'⚡ ПАМП'}</span>
-          <span style="font-size:8px;color:var(--muted);">${(rec.conf||0).toFixed(0)}/100</span>
-          ${fmt4}${fmt8}
-          <span style="font-size:8px;color:var(--dim);text-align:right;">${ageStr}</span>
-        </div>`;
-      }).join('');
-
-    panel.innerHTML=`
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <span style="font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;">🎯 Качество направлений (DQ)</span>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:8px;color:var(--dim);">${_log.length} сиг · ${pending} ожид.</span>
-          <button id="dq-refresh-btn" style="font-size:8px;color:var(--sky);border:1px solid var(--blue-b);border-radius:2px;padding:2px 6px;background:var(--blue-bg);cursor:pointer;">↻ Проверить</button>
-          <button id="dq-clear-btn" style="font-size:8px;color:var(--muted);border:1px solid var(--border);border-radius:2px;padding:2px 6px;background:var(--s2);cursor:pointer;">Очистить</button>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px;">
-        <div style="background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:8px;text-align:center;">
-          <div style="font-family:var(--mono);font-size:20px;font-weight:800;color:${accClr(s4.acc)};">${s4.acc}${s4.acc!=='—'?'%':''}</div>
-          <div style="font-size:8px;color:var(--dim);margin-top:1px;">Точность 4h</div>
-          <div style="font-size:9px;color:var(--muted);">${s4.correct}/${s4.total}</div>
-        </div>
-        <div style="background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:8px;text-align:center;">
-          <div style="font-family:var(--mono);font-size:20px;font-weight:800;color:${accClr(s8.acc)};">${s8.acc}${s8.acc!=='—'?'%':''}</div>
-          <div style="font-size:8px;color:var(--dim);margin-top:1px;">Точность 8h</div>
-          <div style="font-size:9px;color:var(--muted);">${s8.correct}/${s8.total}</div>
-        </div>
-        <div style="background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:8px;text-align:center;">
-          <div style="font-family:var(--mono);font-size:20px;font-weight:800;color:var(--blue);">${s4.avgMove}${s4.avgMove!=='—'?'%':''}</div>
-          <div style="font-size:8px;color:var(--dim);margin-top:1px;">Avg ход 4h</div>
-          <div style="font-size:9px;color:var(--muted);">верные сигналы</div>
-        </div>
-        <div style="background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:8px;text-align:center;">
-          <div style="font-family:var(--mono);font-size:20px;font-weight:800;color:var(--blue);">${s8.avgMove}${s8.avgMove!=='—'?'%':''}</div>
-          <div style="font-size:8px;color:var(--dim);margin-top:1px;">Avg ход 8h</div>
-          <div style="font-size:9px;color:var(--muted);">верные сигналы</div>
-        </div>
-      </div>
-      <div style="font-size:8px;color:var(--muted);margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid var(--border);">
-        ✓ верное направление &nbsp;·&nbsp; ✗ неверное &nbsp;·&nbsp; цифра = минут до проверки
-      </div>
-      <div style="max-height:240px;overflow-y:auto;">${rows}</div>`;
-
-    document.getElementById('dq-refresh-btn')?.addEventListener('click',async()=>{
-      const btn=document.getElementById('dq-refresh-btn');
-      if(btn)btn.textContent='...';
-      await dqCheck();
-      dqRender();
-    });
-    document.getElementById('dq-clear-btn')?.addEventListener('click',()=>{
-      _log=[];_seen=new Set();dqSave(_log);dqRender();
-    });
-  }
-
-  // Добавляем вкладку в phase-tabs (DOM-манипуляция, HTML не изменён)
-  function dqAddTab(){
-    const tabs=document.getElementById('phase-tabs');
-    if(!tabs||document.getElementById('dq-tab-btn'))return;
-    const btn=document.createElement('div');
-    btn.id='dq-tab-btn';
-    btn.className='ptab';
-    btn.innerHTML='<span style="font-size:9px;">🎯 КАЧЕСТВО</span>';
-    btn.addEventListener('click',()=>{
-      document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));
-      btn.classList.add('active');
-      S.phase=-1;
-      const dz=document.getElementById('dynamic-zone');
-      if(dz){
-        dz.innerHTML='<div id="dq-panel" class="fade" style="background:var(--s1);border:1px solid var(--border);border-radius:6px;padding:12px;"></div>';
-        dqRender();
-      }
-    });
-    tabs.appendChild(btn);
-  }
-
-  // Инициализация — ждём загрузки и 1.5с для инициализации S
-  function dqInit(){
-    dqAddTab();
-    dqScan();
-    setInterval(dqScan,60000);
-    setInterval(async()=>{const changed=await dqCheck();if(changed&&S.phase===-1)dqRender();},5*60000);
-  }
-
-  if(document.readyState==='complete'){setTimeout(dqInit,1500);}
-  else{window.addEventListener('load',()=>setTimeout(dqInit,1500));}
-})();
 </script>
 </body>
 </html>
