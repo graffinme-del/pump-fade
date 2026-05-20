@@ -342,14 +342,14 @@ button:hover{opacity:.85;}
     <span id="btc-regime-badge" style="margin-left:6px;font-size:8px;font-weight:700;letter-spacing:.5px;padding:2px 5px;border:1px solid var(--dim);border-radius:3px;color:var(--dim);"></span>
   </div>
   <div class="tdiv"></div>
-  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v16.05 14:16</span>
+  <span style="font-size:8px;color:var(--dim);font-family:var(--mono);margin-right:4px;">v20.05 fixes</span>
   <button id="mute-btn" onclick="toggleMute()" style="font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:3px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);" title="Звук вкл/выкл">🔔</button>
   <button id="claude-btn" class="off" onclick="promptClaudeKey()">🔑 Claude</button>
   <!-- theme toggle disabled -->
 </div>
 
 <!-- SESSION BAR -->
-<div id="session-bar" style="display:flex;align-items:center;gap:0;padding:0 14px;height:22px;border-bottom:1px solid var(--border);background:var(--bg);font-family:var(--mono);font-size:9px;overflow:hidden;flex-shrink:0;"></div>
+<div id="session-bar" style="display:flex;flex-direction:column;justify-content:center;gap:2px;padding:3px 14px 4px;border-bottom:1px solid var(--border);background:var(--bg);font-family:var(--mono);font-size:9px;overflow:hidden;flex-shrink:0;min-height:30px;"></div>
 
 <!-- PUMP ALERT -->
 <div id="pump-alert">
@@ -1780,7 +1780,7 @@ async function openSym(sym){
     const el=document.getElementById(id);
     if(el) el.textContent=id==='sym-label'?sname:id==='ctf1h'?`1H · ${sname}`:`15M · ${sname}`;
   });
-  redrawCharts(); fetchFutures(sym);
+  redrawCharts(); fetchSymPrice(sym); fetchFutures(sym);
   showCoinCard(idea,S.analysis||{});
 }
 
@@ -1803,6 +1803,8 @@ async function loadSym(sym,idea=null){
     const pl=$('pump-label');
     if(pl){pl.textContent=`${a.isPumped?'🔴':'📊'} +${a.pumpPct.toFixed(1)}% · ${a.distE20.toFixed(1)}% от EMA20`;pl.style.color=a.isPumped?'var(--red)':a.pumpPct>PUMP_THRESH/2?'var(--orange)':'var(--muted)';}
   }
+  // Fetch live price for this sym (for cc-prog bar — REST fallback if not in WS stream)
+  fetchSymPrice(sym);
   // Fetch futures (and update coin card display)
   fetchFutures(sym);
   // Draw charts
@@ -1897,8 +1899,13 @@ function showCoinCard(idea,analysis){
   })()}
   <div id="cc-active-alerts" style="display:none;margin:6px 0 2px;border-radius:8px;overflow:hidden;"></div>
   <div class="cc-prog">
-    <div class="cc-prog-meta"><span>${idea.entry>0?'Entry $'+fmt(idea.entry):''}</span><span style="color:#3b82f6;font-weight:700;">${idea.verdictReason||'Тренд сломается'}</span><span>${idea.tp1>0?'TP $'+fmt(idea.tp1):''}</span></div>
-    <div class="cc-prog-bar"><div class="cc-prog-fill" style="width:0%;"></div></div>
+    <div class="cc-prog-meta">
+      <span>${idea.entry>0?'Entry <b>$'+fmt(idea.entry)+'</b>':''}</span>
+      <span id="cc-prog-price" style="font-weight:700;color:var(--dim);">$—</span>
+      <span>${idea.tp1>0?'TP <b>$'+fmt(idea.tp1)+'</b>':''}</span>
+    </div>
+    <div class="cc-prog-bar"><div id="cc-prog-fill" class="cc-prog-fill" style="width:0%;"></div></div>
+    ${idea.verdictReason?`<div style="font-size:9px;color:var(--dim);margin-top:3px;text-align:center;">${idea.verdictReason}</div>`:''}
   </div>
   <div class="cc-stats">
     <div class="cc-st"><div class="cc-st-l">Памп 8h</div><div class="cc-st-v" style="color:${(idea.pumpPct||0)>=PUMP_THRESH?'var(--red)':'var(--amber)'};">+${(idea.pumpPct||0).toFixed(1)}%</div></div>
@@ -2925,6 +2932,18 @@ function getCapLabel(v){
   if(v>5e6)  return {label:'Низкая', color:'var(--orange)',icon:'🟠'};
   return           {label:'Мелкая', color:'var(--red)',   icon:'🔴'};
 }
+// Fetch current price via REST (for coins not in WS stream, populates S.prices[sym])
+async function fetchSymPrice(sym){
+  try{
+    const r=await fetch(`${FAPI}/ticker/price?symbol=${sym}`);
+    const j=await r.json();
+    if(j&&j.price){
+      const prev=S.prices[sym];
+      S.prices[sym]={price:+j.price, change:prev?.change||0};
+    }
+  }catch{}
+}
+
 async function fetchFutures(sym){
   try{const r=await fetch(`${FAPI}/openInterest?symbol=${sym}`);const j=await r.json();if(j.openInterest)S.oi=+j.openInterest;}catch{S.oi=null;}
   try{const r=await fetch(`${FAPI}/fundingRate?symbol=${sym}&limit=1`);const j=await r.json();if(Array.isArray(j)&&j[0])S.fr=+j[0].fundingRate*100;}catch{S.fr=null;}
@@ -3845,37 +3864,27 @@ function updateSessionBar(){
   const utcFrac=utcH+utcM/60;
   const utcStr=String(utcH).padStart(2,'0')+':'+String(utcM).padStart(2,'0')+' UTC';
 
-  // Active session check
-  const active=SESSIONS.filter(s=>utcFrac>=s.start&&utcFrac<s.end);
-  const activeName=active.map(s=>s.name).join('+');
-
-  // Build 24h bar — 1px per 24min = 24h * 60min / 60px
-  const W=bar.offsetWidth||300;
-  const pxPerH=W/24;
-  let html=`<div style="position:relative;width:100%;height:14px;border-radius:2px;overflow:hidden;background:var(--s2);">`;
-  // Session blocks
-  for(const s of SESSIONS){
-    const x=s.start/24*100, w=(s.end-s.start)/24*100;
-    html+=`<div style="position:absolute;top:0;left:${x}%;width:${w}%;height:100%;background:${s.bg};"></div>`;
-  }
-  // Current time needle
-  const nowPct=utcFrac/24*100;
-  html+=`<div style="position:absolute;top:0;left:${nowPct}%;width:1.5px;height:100%;background:white;opacity:.8;"></div>`;
-  html+=`</div>`;
-
-  // Labels
+  // Labels row — each session with dot + name + remaining/hours
   const sessionLabels=SESSIONS.map(s=>{
     const isActive=utcFrac>=s.start&&utcFrac<s.end;
-    const endH=String(s.end).padStart(2,'0')+':00';
     const rem=isActive?Math.round((s.end-utcFrac)*60):null;
-    return `<span style="display:flex;align-items:center;gap:3px;padding:0 7px 0 0;${isActive?'opacity:1':'opacity:.4'}">
-      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${s.color};flex-shrink:0;"></span>
+    return `<span style="display:inline-flex;align-items:center;gap:3px;padding-right:10px;${isActive?'opacity:1':'opacity:.38'}">
+      <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${s.color};flex-shrink:0;"></span>
       <span style="color:${isActive?s.color:'var(--dim)'};">${s.name}</span>
-      ${isActive&&rem!==null?`<span style="color:var(--muted);">${rem}м</span>`:`<span style="color:var(--dim);">${String(s.start).padStart(2,'0')}–${endH}</span>`}
+      ${isActive&&rem!==null?`<span style="color:var(--muted);">${rem}м</span>`:`<span style="color:var(--dim);">${String(s.start).padStart(2,'0')}–${String(s.end).padStart(2,'0')}</span>`}
     </span>`;
   }).join('');
 
-  bar.innerHTML=`${html}<div style="display:flex;align-items:center;gap:0;margin-top:2px;">${sessionLabels}<span style="margin-left:auto;color:var(--dim);font-size:8px;">${utcStr}</span></div>`;
+  // Timeline bar — session blocks + needle
+  const nowPct=(utcFrac/24*100).toFixed(2);
+  const blocks=SESSIONS.map(s=>{
+    const x=(s.start/24*100).toFixed(2), w=((s.end-s.start)/24*100).toFixed(2);
+    return `<div style="position:absolute;top:0;left:${x}%;width:${w}%;height:100%;background:${s.bg};"></div>`;
+  }).join('');
+  const timelineHtml=`<div style="position:relative;width:100%;height:4px;border-radius:2px;overflow:hidden;background:var(--s2);">${blocks}<div style="position:absolute;top:0;left:${nowPct}%;width:2px;height:100%;background:#fff;opacity:.7;transform:translateX(-50%);"></div></div>`;
+
+  // Assemble: labels row on top, timeline bar below
+  bar.innerHTML=`<div style="display:flex;align-items:center;width:100%;">${sessionLabels}<span style="margin-left:auto;color:var(--dim);font-size:8px;white-space:nowrap;">${utcStr}</span></div>${timelineHtml}`;
 }
 
 // ── Симуляция комиссий + проскальзывание ─────────────────
@@ -3908,6 +3917,38 @@ function updateTopbar(){
   }
   const sec=Math.max(0,Math.round((S.nextRefresh-Date.now())/1000));
   const rt=document.getElementById('refresh-timer');if(rt){rt.textContent=`↻${sec}с`;rt.style.color=sec<5?'#f59e0b':'#475569';}
+
+  // ── Live cc-prog update ─────────────────────────────────
+  const progFill=document.getElementById('cc-prog-fill');
+  const progPrice=document.getElementById('cc-prog-price');
+  if(progFill||progPrice){
+    // find the idea for the currently open card
+    const idea=S.activeCardIdea;
+    const priceData=idea?S.prices[idea.sym]:null;
+    if(idea&&priceData&&idea.entry>0&&idea.tp1>0){
+      const cur=priceData.price;
+      // progress toward TP (0%=entry, 100%=TP)
+      const range=idea.dir==='SHORT'?(idea.entry-idea.tp1):(idea.tp1-idea.entry);
+      const moved=idea.dir==='SHORT'?(idea.entry-cur):(cur-idea.entry);
+      const pct=range>0?Math.max(0,Math.min(100,moved/range*100)):0;
+      // PnL %
+      const pnlPct=idea.dir==='SHORT'?(idea.entry-cur)/idea.entry*100:(cur-idea.entry)/idea.entry*100;
+      const pnlSign=pnlPct>=0?'+':'';
+      if(progFill){
+        progFill.style.width=pct+'%';
+        if(pct>=99) progFill.style.background='#22c55e';
+        else if(pnlPct>0) progFill.style.background='linear-gradient(90deg,#3b82f6,#22c55e)';
+        else progFill.style.background='#ef4444';
+      }
+      if(progPrice){
+        progPrice.textContent='$'+fmt(cur)+'  '+pnlSign+pnlPct.toFixed(2)+'%';
+        progPrice.style.color=pnlPct>0?'#22c55e':pnlPct<0?'#f87171':'var(--dim)';
+      }
+    } else if(progPrice){
+      progPrice.textContent='$—';
+      progPrice.style.color='var(--dim)';
+    }
+  }
 }
 
 function notify(title,body){
@@ -4872,7 +4913,7 @@ setInterval(()=>{
   if(S.sym){
     fetchCds(S.sym,'1h',120).then(c=>{if(c.length){S.cds1h=c;if(S.cds1h.length)drawCandles('chart1h',S.cds1h,null);if(S.cds1h.length)drawVolume(S.cds1h);}}).catch(()=>{});
     fetchCds(S.sym,'15m',80).then(c=>{if(c.length){S.cds15m=c;S.cvdData=cvdFromCandles(c.slice(-80));drawCandles('chart15m',S.cds15m,null);drawCVD(S.cvdData);}}).catch(()=>{});
-    fetchFutures(S.sym);
+    fetchFutures(S.sym); fetchSymPrice(S.sym);
   }
   S.nextRefresh=Date.now()+REFRESH_INTERVAL;
 },REFRESH_INTERVAL);
