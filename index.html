@@ -1348,11 +1348,28 @@ async function scoreForIdea(sym){
       }
     }
 
-    // BTC коррекция
+    // BTC коррекция (краткосрочная — по 1h изменению)
     if(typeof BTC_STATE!=='undefined'&&BTC_STATE.change1m){
       var _btcCh=BTC_STATE.change1h||0;
       if(_btcCh<-0.5){if(longConf>0)longConf=Math.max(0,longConf-Math.abs(_btcCh)*4);if(shortConf>0)shortConf=Math.min(96,shortConf+Math.abs(_btcCh)*2);}
       if(_btcCh>0.5){if(shortConf>0)shortConf=Math.max(0,shortConf-_btcCh*4);if(longConf>0)longConf=Math.min(96,longConf+_btcCh*2);}
+    }
+    // BTC режим (структурный — trend-up/down из classifyBTCRegime)
+    // В бычьем BTC шортить опасно → штраф к shortConf
+    // В медвежьем BTC лонги опасны → штраф к longConf
+    if(typeof BTC_STATE!=='undefined'&&BTC_STATE.regime){
+      const reg=BTC_STATE.regime;
+      if((reg==='trend-up'||reg==='mild-up')&&shortConf>0){
+        const pen=reg==='trend-up'?15:8;
+        shortConf=Math.max(0,shortConf-pen);
+        if(shortSigs.length)shortSigs=[...shortSigs,`⚠ BTC ${reg==='trend-up'?'тренд':'мягкий'} ↑ (-${pen})`];
+        console.log('[REGIME] BTC',reg,'→ shortConf-',pen,'для',sym);
+      }
+      if((reg==='trend-down'||reg==='mild-down')&&longConf>0){
+        const pen=reg==='trend-down'?12:6;
+        longConf=Math.max(0,longConf-pen);
+        if(longSigs.length)longSigs=[...longSigs,`⚠ BTC ${reg==='trend-down'?'тренд':'мягкий'} ↓ (-${pen})`];
+      }
     }
 
     // ── Выбор лучшего сигнала ──────────────────────────────
@@ -1384,7 +1401,7 @@ async function scoreForIdea(sym){
       const slDist = entry - sl;
       Object.assign(res,{bestDir:'LONG',bestConf:earlyPumpConf,bestSigs:earlyPumpSigs,
         entry,sl,tp1,tp2,rr:slDist>0?+((tp1-entry)/slDist).toFixed(2):0,atrv,
-        why:earlyPumpSigs.join(', '),earlyPump:true});
+        why:earlyPumpSigs.join(', '),earlyPump:true,isEarlyPump:true});
 
     } else if(longConf>=MIN_CONF&&longDir){
       const entry=p15;
@@ -1451,7 +1468,9 @@ async function runIdeas(manual=false){
       results.forEach((res,ri)=>{
         if(res.status!=='fulfilled'||!res.value||!res.value.bestDir)return;
         const r=res.value;
-        if(r.bestConf<MIN_CONF)return;
+        // earlyPump (Старт пампа) имеет собственный порог 72 — не убиваем глобальным MIN_CONF
+        const minForThis = r.isEarlyPump ? 72 : MIN_CONF;
+        if(r.bestConf<minForThis)return;
         // Фильтр 1: минимальный потенциал TP ≥ 5%
         const _tpDist=r.entry>0&&r.tp1>0?Math.abs(r.tp1-r.entry)/r.entry*100:0;
         if(_tpDist<MIN_TP_PCT){console.log('[FILTER] TP',r.sym,_tpDist.toFixed(1)+'%');return;}
@@ -1810,6 +1829,7 @@ function showCoinCard(idea,analysis){
     <div class="cc-lv" style="border-color:${tpPct>0?'#86efac':''};"><div class="cc-lv-l">Тейк-профит</div><div class="cc-lv-v" style="color:var(--green);">${idea.tp1>0?'$'+fmt(idea.tp1):'—'}</div>${tpPct>0?`<div class="cc-lv-p" style="color:var(--green);">-${tpPct.toFixed(1)}%</div>`:''}</div>
     <div class="cc-lv"><div class="cc-lv-l">R/R</div><div class="cc-lv-v" style="color:var(--blue);">${idea.rr>0?idea.rr.toFixed(1)+'×':'—'}</div>${tpPct>0?`<div class="cc-lv-p" style="color:var(--muted);">~${tpPct.toFixed(1)}%</div>`:''}</div>
   </div>
+  <div id="cc-active-alerts" style="display:none;margin:6px 0 2px;border-radius:8px;overflow:hidden;"></div>
   <div class="cc-prog">
     <div class="cc-prog-meta"><span>${idea.entry>0?'Entry $'+fmt(idea.entry):''}</span><span style="color:#3b82f6;font-weight:700;">${idea.verdictReason||'Тренд сломается'}</span><span>${idea.tp1>0?'TP $'+fmt(idea.tp1):''}</span></div>
     <div class="cc-prog-bar"><div class="cc-prog-fill" style="width:0%;"></div></div>
@@ -1869,6 +1889,8 @@ function showCoinCard(idea,analysis){
   fetchFutures(idea.sym);
   // Render initial narrative (updates in real-time via updateConfDisplay)
   updateNarrativeDisplay(idea);
+  // Show active monitoring alerts immediately if this coin is being tracked
+  updateActiveAlertsInCard(idea.sym);
   // Start OB & Flow tracking for this coin
   stopCardOBTracking();
   startOBTracking(idea);
@@ -3761,13 +3783,77 @@ CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
         } catch(e) { console.warn('Deep check error:', rec.sym, e.message); }
       }
 
-      if(newAlerts.length) rec.alerts = [...newAlerts, ...(rec.alerts||[])].slice(0,8);
+      // Всегда заменяем — когда условие улучшилось, старый алерт исчезает
+      rec.alerts = newAlerts.slice(0, 6);
+      // Обновляем секцию алертов в карточке монеты (если открыта)
+      updateActiveAlertsInCard(rec.sym);
     } catch(e){}
   }));
   saveActive();
   // Проверяем flow алерты для активных позиций
   checkActiveFlowAlerts();
   if(ideasTab==='active') renderIdeas();
+}
+
+// ═══════════════════════════════════════════════════════
+//  ACTIVE ALERTS IN COIN CARD
+// ═══════════════════════════════════════════════════════
+function updateActiveAlertsInCard(sym) {
+  // Only update if the currently open card matches this symbol
+  if (!S.activeCardIdea || S.activeCardIdea.sym !== sym) return;
+  const el = document.getElementById('cc-active-alerts');
+  if (!el) return;
+
+  const rec = S.activeTrack.find(t => t.sym === sym);
+  const alerts = rec && rec.alerts && rec.alerts.length ? rec.alerts : [];
+
+  if (!alerts.length) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+
+  // Color + icon per alert type
+  function alertStyle(txt) {
+    const t = txt.toLowerCase();
+    if (t.includes('пробит') || t.includes('sl') || t.includes('стоп')) {
+      return { bg: 'rgba(239,68,68,0.15)', border: '#ef4444', icon: '🛑', color: '#fca5a5' };
+    }
+    if (t.includes('достигнут') || t.includes('tp') || t.includes('тейк') || t.includes('профит')) {
+      return { bg: 'rgba(34,197,94,0.15)', border: '#22c55e', icon: '✅', color: '#86efac' };
+    }
+    if (t.includes('close') || t.includes('close to') || t.includes('близко') || t.includes('⚠') || t.includes('warn')) {
+      return { bg: 'rgba(245,158,11,0.15)', border: '#f59e0b', icon: '⚠️', color: '#fcd34d' };
+    }
+    if (t.includes('против') || t.includes('движение') || t.includes('against') || t.includes('📉') || t.includes('📈')) {
+      return { bg: 'rgba(249,115,22,0.15)', border: '#f97316', icon: '📊', color: '#fdba74' };
+    }
+    return { bg: 'rgba(59,130,246,0.12)', border: '#3b82f6', icon: '📌', color: '#93c5fd' };
+  }
+
+  el.style.display = 'block';
+  el.innerHTML = alerts.map(txt => {
+    const s = alertStyle(txt);
+    return `<div style="
+      background:${s.bg};
+      border-left:3px solid ${s.border};
+      padding:8px 10px;
+      margin-bottom:3px;
+      border-radius:4px;
+      display:flex;
+      align-items:flex-start;
+      gap:7px;
+    ">
+      <span style="font-size:14px;flex-shrink:0;line-height:1.3;">${s.icon}</span>
+      <span style="
+        font-size:13px;
+        font-weight:600;
+        color:${s.color};
+        line-height:1.35;
+        flex:1;
+      ">${txt}</span>
+    </div>`;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════
