@@ -1199,7 +1199,7 @@ async function scoreForIdea(sym){
     {
       const prevAbove = cds1h.slice(-5,-1).filter(c=>c.close>(e20_1h[n1h-2]||0)).length >= 3;
       if (prevAbove && price < e20n && volRatio > 1.3 && rsiNow < 60) {
-        const c = Math.min(84, 50 + (trend4h==='bear'?10:0) + volRatio*2 + (cvdFalling?8:0) + patBonus);
+        const c = Math.min(89, 60 + (trend4h==='bear'?10:0) + volRatio*2 + (cvdFalling?8:0) + patBonus);
         const s = ['📉 Пробой EMA20 ↓ на 1h', `Vol×${volRatio.toFixed(1)}, RSI ${rsiNow.toFixed(0)}`];
         if (cvdFalling) s.push('CVD ↓');
         shortCandidates.push({conf:c, sigs:s});
@@ -1225,7 +1225,7 @@ async function scoreForIdea(sym){
         const wickTop15 = (last15.high - Math.max(last15.open,last15.close)) / barR15;
         const bearish15 = last15.close < last15.open || (wickTop15>=0.4 && (last15.close-last15.low)/barR15<=0.55);
         if (bearish15) {
-          const c = Math.min(85, 55 + atrCtx*5 + (roc6-2.2)*3 + patBonus);
+          const c = Math.min(88, 66 + atrCtx*5 + (roc6-2.2)*3 + patBonus);
           const s = [`↩ Разворот: 4h ATR ${atrCtx.toFixed(2)}%, ROC +${roc6.toFixed(1)}%`, '15m отказ на вершине'];
           if (cvdFalling) s.push('CVD ↓');
           shortCandidates.push({conf:c, sigs:s});
@@ -1236,7 +1236,7 @@ async function scoreForIdea(sym){
     // S6. Пробой поддержки с объёмом
     if (volRatio > 2.0 && bodyRatio > 0.6 && lastC.close < lastC.open && rsiNow < 55 && rsiNow > 35) {
       if (price < e20n && price < e50n && cvdFalling) {
-        const c = Math.min(78, 46 + volRatio*4 + (trend4h==='bear'?8:0) + patBonus);
+        const c = Math.min(87, 56 + volRatio*4 + (trend4h==='bear'?8:0) + patBonus);
         const s = [`📉 Пробой поддержки ×${volRatio.toFixed(1)}`, `Body ${(bodyRatio*100).toFixed(0)}%, RSI ${rsiNow.toFixed(0)}`];
         allPatterns.filter(p=>p.dir==='bear').forEach(p=>s.push(`🕯 ${p.name}`));
         shortCandidates.push({conf:c, sigs:s});
@@ -1305,11 +1305,9 @@ async function scoreForIdea(sym){
 
     // L5. RSI перепроданность
     if (rsiNow < 32 && rsiNow15 < 38) {
-      const c = Math.min(82, 54 + (hTurningUp?10:0) + (rsiNow<25?8:0) + (!cvdFalling?5:0));
-      if (c >= MIN_CONF) {
-        const s = [`📉 RSI перепроданность: 1h ${rsiNow.toFixed(0)}, 15m ${rsiNow15.toFixed(0)}`, hTurningUp?'MACD ↑':''].filter(Boolean);
-        longCandidates.push({conf:c, sigs:s});
-      }
+      const c = Math.min(87, 62 + (hTurningUp?10:0) + (rsiNow<25?8:0) + (!cvdFalling?5:0) + (trend4h==='bull'?4:0));
+      const s = [`📉 RSI перепроданность: 1h ${rsiNow.toFixed(0)}, 15m ${rsiNow15.toFixed(0)}`, hTurningUp?'MACD ↑':'', trend4h==='bull'?'4h бычий':''].filter(Boolean);
+      longCandidates.push({conf:c, sigs:s});
     }
 
     const bestLong = longCandidates.reduce((b,c)=>c.conf>b.conf?c:b, {conf:0,sigs:[]});
@@ -1361,13 +1359,13 @@ async function scoreForIdea(sym){
     if(typeof BTC_STATE!=='undefined'&&BTC_STATE.regime){
       const reg=BTC_STATE.regime;
       if((reg==='trend-up'||reg==='mild-up')&&shortConf>0){
-        const pen=reg==='trend-up'?15:8;
+        const pen=reg==='trend-up'?10:5;
         shortConf=Math.max(0,shortConf-pen);
         if(shortSigs.length)shortSigs=[...shortSigs,`⚠ BTC ${reg==='trend-up'?'тренд':'мягкий'} ↑ (-${pen})`];
         console.log('[REGIME] BTC',reg,'→ shortConf-',pen,'для',sym);
       }
       if((reg==='trend-down'||reg==='mild-down')&&longConf>0){
-        const pen=reg==='trend-down'?12:6;
+        const pen=reg==='trend-down'?8:4;
         longConf=Math.max(0,longConf-pen);
         if(longSigs.length)longSigs=[...longSigs,`⚠ BTC ${reg==='trend-down'?'тренд':'мягкий'} ↓ (-${pen})`];
       }
