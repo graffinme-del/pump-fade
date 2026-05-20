@@ -348,6 +348,9 @@ button:hover{opacity:.85;}
   <!-- theme toggle disabled -->
 </div>
 
+<!-- SESSION BAR -->
+<div id="session-bar" style="display:flex;align-items:center;gap:0;padding:0 14px;height:22px;border-bottom:1px solid var(--border);background:var(--bg);font-family:var(--mono);font-size:9px;overflow:hidden;flex-shrink:0;"></div>
+
 <!-- PUMP ALERT -->
 <div id="pump-alert">
   <span id="pump-alert-text">🔥</span>
@@ -1467,6 +1470,19 @@ async function runIdeas(manual=false){
       results.forEach((res,ri)=>{
         if(res.status!=='fulfilled'||!res.value||!res.value.bestDir)return;
         const r=res.value;
+        // ── ПАМП → сначала 5 мин в Сигналах, потом в Наблюдение ──
+        if(r.isPumpSignal && r.bestDir==='ПАМП'){
+          // Если уже в наблюдении — обновляем peak, не показываем повторно в сигналах
+          if(WATCH_LIST[r.sym]?.type==='pump'){ addPumpToWatch(r); return; }
+          // Если ещё не в сигналах — добавляем с флагом autoWatch
+          const existingIdea = newIdeas.find(n=>n.sym===r.sym) || S.ideas.find(n=>n.sym===r.sym);
+          if(!existingIdea){
+            // упадёт в newIdeas ниже, помечаем для автоперевода
+            r._pumpAutoWatch = true;
+          } else {
+            return; // уже есть, пропускаем
+          }
+        }
         // earlyPump (Старт пампа) имеет собственный порог 72 — не убиваем глобальным MIN_CONF
         const minForThis = r.isEarlyPump ? 72 : MIN_CONF;
         if(r.bestConf<minForThis)return;
@@ -1488,7 +1504,7 @@ async function runIdeas(manual=false){
           pumpPct:r.pumpPct,pumpSpeed:r.pumpSpeed,dist:r.dist,
           volRatio:r.volRatio,rsiNow:r.rsiNow,atrRatio:r.atrRatio,
           bodyRatio:r.bodyRatio,trend4h:r.trend4h,cvdFalling:r.cvdFalling,
-          cvdDiv:r.cvdDiv,isPump:r.isPumpSignal,ts:now,
+          cvdDiv:r.cvdDiv,isPump:r.isPumpSignal,pumpAutoWatch:r._pumpAutoWatch||false,ts:now,
           cds1h:r.cds1h,cds15m:r.cds15m,allPatterns:r.allPatterns||[],
           strategy_conf:r.strategy_conf||r.bestConf||0,
           pos_mult:1.0,pos_state:'neutral',pos_notes:[],exec_adj:0,
@@ -1508,10 +1524,11 @@ async function runIdeas(manual=false){
               target.verdictConf = parseInt(v.confidence)||0;
               target.verdictChecked = true;
               if (v.verdict === 'SKIP') {
-                target.skipAt = Date.now(); // удалить через 15 мин
+                target.skipAt = Date.now(); // удалить через 30 мин
               } else if (v.verdict === 'WAIT') {
                 addToWatch(target);
-                S.ideas = S.ideas.filter(i => i.sym !== ideaObj.sym);
+                target.waitAt = Date.now(); // оставляем в списке, удалим через 45 мин
+                // НЕ удаляем из S.ideas — сигнал остаётся виден в панели
               } else if (v.verdict === 'GO') {
                 target.goAt = Date.now(); // удалить через 15 мин если не взят в работу
                 notify('✦ GO · ' + target.sym.replace('USDT',''), target.verdictReason);
@@ -1531,7 +1548,11 @@ async function runIdeas(manual=false){
     newIdeas.sort((a,b)=>(a.isPump&&!b.isPump)?-1:(!a.isPump&&b.isPump)?1:b.conf-a.conf);
     // Merge
     const stale=now-3600000;
-    S.ideas=[...newIdeas,...S.ideas.filter(o=>o.ts>stale&&!newIdeas.find(n=>n.sym===o.sym))].slice(0,30);
+    const pumpStale=now-7200000; // ПАМП живут 2 часа
+    S.ideas=[...newIdeas,...S.ideas.filter(o=>{
+      const ttl=o.isPump?pumpStale:stale;
+      return o.ts>ttl&&!newIdeas.find(n=>n.sym===o.sym);
+    })].slice(0,30);
     // Pump alert
     const hot=newIdeas.filter(i=>i.isPump&&i.pumpPct>=PUMP_THRESH);
     if(hot.length){
@@ -1611,21 +1632,52 @@ function renderIdeas(){
   if (ideasTab === 'watch') {
     const watchItems = Object.values(WATCH_LIST);
     if (!watchItems.length) {
-      list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет монет под наблюдением.<br><span style="font-size:9px;color:var(--dim);">Сюда попадают WAIT сигналы.<br>Агент перепроверяет каждые 5м.</span></div>';
+      list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет монет под наблюдением.<br><span style="font-size:9px;color:var(--dim);">Пампы попадают сюда автоматически.<br>WAIT-сигналы — от агента.</span></div>';
       return;
     }
-    list.innerHTML = watchItems.map(w => `<div class="idea-card" onclick="openSym('${w.idea.sym}')" style="border-left:3px solid var(--amber);">
-      <div class="idea-hd">
-        <span class="idea-sym" style="color:var(--amber);" onclick="event.stopPropagation();openSym('${w.idea.sym}')">${w.idea.sym.replace('USDT','')}</span>
-        <span class="idea-dir-badge" style="background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-b);">⏳ WAIT</span>
-      </div>
-      <div style="font-size:9px;color:var(--muted);margin-bottom:2px;">${w.idea.verdictReason||'Ожидаем подтверждения...'}</div>
-      <div style="font-size:9px;color:var(--muted);">${w.idea.sigs?.[0]||''}</div>
-      <div style="display:flex;justify-content:space-between;margin-top:4px;">
-        <span class="idea-age">${Math.floor((Date.now()-w.addedAt)/60000)}м · ${w.checks} проверок из ${w.maxChecks}</span>
-        <span style="font-family:var(--mono);font-size:9px;color:var(--muted);">${w.idea.conf?.toFixed(0)||0}/100</span>
-      </div>
-    </div>`).join('');
+    list.innerHTML = watchItems.map(w => {
+      const sym = w.idea.sym;
+      const age = Math.floor((Date.now()-w.addedAt)/60000);
+
+      if (w.type === 'pump') {
+        const pl = pumpPhaseLabel(w.pumpPhase, w.pumpCancelled);
+        const d = w.lastPumpData;
+        const exDone = d ? d.exSigs.slice(0,2).map(s=>`<span style="font-size:8px;color:var(--muted);">• ${s.t}</span>`).join('') : '';
+        const bkDone = d ? d.bkSigs.slice(0,2).map(s=>`<span style="font-size:8px;color:var(--muted);">• ${s.t}</span>`).join('') : '';
+        const phaseBar = [1,2,3].map(p=>`<span style="display:inline-block;width:26px;height:5px;border-radius:2px;margin-right:2px;background:${w.pumpPhase>=p?(p===3?'var(--green)':p===2?'var(--amber)':'var(--red)'):'var(--s2)'};"></span>`).join('');
+        const borderColor = w.pumpCancelled?'var(--muted)':w.pumpPhase>=3?'var(--green)':w.pumpPhase===2?'var(--amber)':'var(--red)';
+        return `<div class="idea-card" onclick="openSym('${sym}')" style="border-left:3px solid ${borderColor};">
+          <div class="idea-hd">
+            <span class="idea-sym" style="color:var(--amber);" onclick="event.stopPropagation();openSym('${sym}')">${sym.replace('USDT','')}</span>
+            <span style="font-size:9px;font-weight:700;color:${pl.color};">${pl.icon} ${pl.text}</span>
+          </div>
+          <div style="margin:4px 0 3px;">${phaseBar}</div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:2px;">
+            +${(w.idea.pumpPct||0).toFixed(1)}% памп · RSI ${(w.lastPumpData?.rsiNow||w.idea.rsiNow||0).toFixed(0)} · Vol×${(w.idea.volRatio||0).toFixed(1)}
+          </div>
+          ${exDone?`<div style="line-height:1.6;">${exDone}</div>`:''}
+          ${bkDone?`<div style="line-height:1.6;">${bkDone}</div>`:''}
+          <div style="display:flex;justify-content:space-between;margin-top:4px;align-items:center;">
+            <span class="idea-age">${age}м · ${w.checks} скан.${w.pumpCancelled?'':' · '+w.timeEst}</span>
+            <span style="font-size:8px;color:var(--muted);">${w.pumpPhase}/3</span>
+          </div>
+        </div>`;
+      }
+
+      // WAIT card
+      return `<div class="idea-card" onclick="openSym('${sym}')" style="border-left:3px solid var(--amber);">
+        <div class="idea-hd">
+          <span class="idea-sym" style="color:var(--amber);" onclick="event.stopPropagation();openSym('${sym}')">${sym.replace('USDT','')}</span>
+          <span class="idea-dir-badge" style="background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-b);">⏳ WAIT</span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-bottom:2px;">${w.idea.verdictReason||'Ожидаем подтверждения...'}</div>
+        <div style="font-size:9px;color:var(--muted);">${w.idea.sigs?.[0]||''}</div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;">
+          <span class="idea-age">${age}м · ${w.checks} проверок из ${w.maxChecks}</span>
+          <span style="font-family:var(--mono);font-size:9px;color:var(--muted);">${w.idea.conf?.toFixed(0)||0}/100</span>
+        </div>
+      </div>`;
+    }).join('');
     return;
   }
 
@@ -1668,7 +1720,7 @@ function renderIdeas(){
         ${idea.verdict==='GO' ?
           `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--green-bg);color:var(--green);">✦ GO${idea.verdictConf>10?' '+idea.verdictConf+'%':''}</span>${idea.goAt?`<span style="font-size:8px;color:var(--amber);margin-left:3px;">⏱${Math.max(0,15-Math.floor((Date.now()-idea.goAt)/60000))}м</span>`:''}` :
           idea.verdict==='WAIT' ?
-          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--amber-bg);color:var(--amber);">⏳ WAIT</span>` :
+          `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;background:var(--amber-bg);color:var(--amber);">⏳ WAIT</span>${idea.waitAt?`<span style="font-size:8px;color:var(--amber);margin-left:3px;">${Math.max(0,45-Math.floor((Date.now()-idea.waitAt)/60000))}м</span>`:''}` :
           idea.verdict==='SKIP' ? '' :
           idea.verdictChecked ?
           `<span style="font-size:8px;color:var(--dim);">—</span>` :
@@ -1820,6 +1872,7 @@ function showCoinCard(idea,analysis){
     <div class="cc-sl-sep">=</div>
     <div class="cc-sl-item"><div class="cc-sl-lbl">Final</div><div class="cc-sl-val" id="cc-sl-final" style="font-size:11px;color:${confColor};">${confPct.toFixed(0)}</div></div>
   </div>
+  <div id="cc-pump-readiness" style="display:none;padding:8px 12px 9px;border-bottom:1px solid var(--border);"></div>
   <div class="cc-narrative" id="cc-narrative">
     <div id="cc-narrative-text"><span style="color:var(--dim);font-size:10px;">Анализ накапливается...</span></div>
   </div>
@@ -1829,6 +1882,17 @@ function showCoinCard(idea,analysis){
     <div class="cc-lv" style="border-color:${tpPct>0?'#86efac':''};"><div class="cc-lv-l">Тейк-профит</div><div class="cc-lv-v" style="color:var(--green);">${idea.tp1>0?'$'+fmt(idea.tp1):'—'}</div>${tpPct>0?`<div class="cc-lv-p" style="color:var(--green);">-${tpPct.toFixed(1)}%</div>`:''}</div>
     <div class="cc-lv"><div class="cc-lv-l">R/R</div><div class="cc-lv-v" style="color:var(--blue);">${idea.rr>0?idea.rr.toFixed(1)+'×':'—'}</div>${tpPct>0?`<div class="cc-lv-p" style="color:var(--muted);">~${tpPct.toFixed(1)}%</div>`:''}</div>
   </div>
+  ${(()=>{
+    const fi=calcFeeImpact(idea.entry,idea.sl,idea.tp1,idea.dir);
+    if(!fi) return '';
+    const rrOk=fi.netRr>=1.5, rrWarn=fi.netRr>=1.0&&fi.netRr<1.5;
+    const rrCol=rrOk?'var(--green)':rrWarn?'var(--amber)':'var(--red)';
+    return `<div style="padding:4px 12px 5px;border-bottom:1px solid var(--border);display:flex;gap:10px;font-size:9px;font-family:var(--mono);">
+      <span style="color:var(--muted);">Комиссии ~${fi.feePct}%</span>
+      <span style="color:${rrCol};font-weight:700;">R/R с комиссиями: ${fi.netRr}×</span>
+      <span style="color:var(--muted);">TP-нетто: ${fi.netTp>0?'+':''}${fi.netTp}%</span>
+    </div>`;
+  })()}
   <div id="cc-active-alerts" style="display:none;margin:6px 0 2px;border-radius:8px;overflow:hidden;"></div>
   <div class="cc-prog">
     <div class="cc-prog-meta"><span>${idea.entry>0?'Entry $'+fmt(idea.entry):''}</span><span style="color:#3b82f6;font-weight:700;">${idea.verdictReason||'Тренд сломается'}</span><span>${idea.tp1>0?'TP $'+fmt(idea.tp1):''}</span></div>
@@ -1876,13 +1940,27 @@ function showCoinCard(idea,analysis){
   const ccCandles=document.getElementById('cc-candles');
   if(ccCandles){
     const pats=idea.allPatterns||[];
+    const tradeDir=idea.dir||'';
     if(!pats.length){
       ccCandles.innerHTML='<span style="font-size:8px;color:var(--dim);">—</span>';
     } else {
-      ccCandles.innerHTML=pats.slice(0,5).map(p=>{
-        const c=p.dir==='bear'?'var(--red)':'var(--green)';
-        const sym=p.dir==='bear'?'▼':'▲';
-        return `<span style="display:block;font-size:8px;color:${c};">${sym} ${p.name}${p.tf?' <span style="color:var(--dim);">('+p.tf+')</span>':''}</span>`;
+      ccCandles.innerHTML=pats.slice(0,6).map(p=>{
+        const isBear=p.dir==='bear';
+        // Совпадение с направлением сделки: bear+SHORT=за, bear+LONG=против
+        let compat='', compatCol='var(--muted)';
+        if(tradeDir==='SHORT'){
+          compat=isBear?' — за SHORT':' — против SHORT';
+          compatCol=isBear?'var(--green)':'var(--red)';
+        } else if(tradeDir==='LONG'){
+          compat=!isBear?' — за LONG':' — против LONG';
+          compatCol=!isBear?'var(--green)':'var(--red)';
+        }
+        const patCol=isBear?'var(--red)':'var(--green)';
+        const sym=isBear?'🔴':'🟢';
+        return `<span style="display:flex;justify-content:space-between;font-size:8px;margin-bottom:2px;">
+          <span style="color:${patCol};">${sym} ${p.name}${p.tf?' <span style="color:var(--dim);">('+p.tf+')</span>':''}</span>
+          <span style="color:${compatCol};font-weight:600;">${compat}</span>
+        </span>`;
       }).join('');
     }
   }
@@ -1891,6 +1969,8 @@ function showCoinCard(idea,analysis){
   updateNarrativeDisplay(idea);
   // Show active monitoring alerts immediately if this coin is being tracked
   updateActiveAlertsInCard(idea.sym);
+  // Show pump readiness block if this coin is in pump watch
+  updatePumpReadinessInCard(idea.sym);
   // Start OB & Flow tracking for this coin
   stopCardOBTracking();
   startOBTracking(idea);
@@ -2880,22 +2960,60 @@ function updateFuturesDisplay(){
       const up=S.oiChange4h>=0;
       ccOiChange.innerHTML=`<span class="oi-arr ${up?'oi-up':'oi-dn'}" style="font-size:9px;margin-left:4px;">${up?'↑':'↓'} ${up?'+':''}${S.oiChange4h.toFixed(1)}% 4ч</span>`;
       const oiSub=document.getElementById('cc-oi-sub');
-      if(oiSub)oiSub.textContent=S.oiChange4h<0?'OI падает — позиции закрываются':'OI растёт';
+      if(oiSub){
+        const dir=S.activeCardIdea?.dir||'';
+        const priceUp=S.oiChange4h>=0; // упрощение: OI↑ = цена ↑
+        let oiMsg='', oiColor='var(--muted)';
+        if(up && priceUp){
+          if(dir==='SHORT'){
+            oiMsg='🔴 OI↑ + цена↑ = новые лонги. Импульс не выдохся'; oiColor='var(--red)';
+          } else {
+            oiMsg='🟢 OI↑ + цена↑ = свежие лонги подтверждают'; oiColor='var(--green)';
+          }
+        } else if(up && !priceUp){
+          if(dir==='SHORT'){
+            oiMsg='🟢 OI↑ + цена↓ = новые шорты. Давление продолжается'; oiColor='var(--green)';
+          } else {
+            oiMsg='🔴 OI↑ + цена↓ = агрессивные шорты. Давление вниз'; oiColor='var(--red)';
+          }
+        } else if(!up){
+          oiMsg='OI↓ — позиции закрываются, волатильность снижается'; oiColor='var(--muted)';
+        }
+        oiSub.textContent=oiMsg; oiSub.style.color=oiColor;
+      }
     }
   }
-  // Coin card: Funding Rate
+  // Coin card: Funding Rate с интерпретацией
   const ccFR=document.getElementById('cc-fr');
   if(ccFR){
     ccFR.textContent=S.fr!=null?`${S.fr>0?'+':''}${S.fr.toFixed(4)}%`:'—';
-    ccFR.style.color=S.fr!=null?(S.fr>0.05?'var(--red)':S.fr<-0.05?'var(--green)':'var(--text2)'):'var(--muted)';
+    ccFR.style.color=S.fr!=null?(S.fr>0.03?'var(--red)':S.fr<-0.03?'var(--green)':'var(--text2)'):'var(--muted)';
   }
   const ccWarn=document.getElementById('cc-fr-warn');
-  if(ccWarn){
-    if(S.fr!=null&&Math.abs(S.fr)>0.05){
-      ccWarn.textContent=S.fr>0?'⚠ Лонги перегреты':'⚠ Шорты перегреты';
-      ccWarn.style.cssText=`font-size:9px;padding:3px 5px;border-radius:2px;margin-top:3px;font-weight:600;background:${S.fr>0?'var(--red-bg)':'var(--green-bg)'};color:${S.fr>0?'var(--red)':'var(--green)'};`;
+  if(ccWarn && S.fr!=null){
+    const dir=S.activeCardIdea?.dir||'';
+    const fr=S.fr;
+    let msg='', bg='', col='';
+    if(fr > 0.05){
+      if(dir==='SHORT'){
+        msg='🟢 Лонги перегреты — шортить комфортно'; bg='var(--green-bg)'; col='var(--green)';
+      } else {
+        msg='⚠ Лонги перегреты — риск ликвидаций при просадке'; bg='var(--amber-bg)'; col='var(--amber)';
+      }
+    } else if(fr < -0.03){
+      if(dir==='SHORT'){
+        msg='🔴 Несовместимо с SHORT — преобладание шортов, риск squeeze'; bg='var(--red-bg)'; col='var(--red)';
+      } else {
+        msg='🟢 Шорты перегреты — лонг с попутным ветром'; bg='var(--green-bg)'; col='var(--green)';
+      }
+    } else if(Math.abs(fr)<=0.03){
+      msg=`Фандинг нейтральный (${fr>0?'+':''}${fr.toFixed(4)}%)`; bg='var(--s2)'; col='var(--muted)';
+    }
+    if(msg){
+      ccWarn.textContent=msg;
+      ccWarn.style.cssText=`font-size:9px;padding:3px 6px;border-radius:2px;margin-top:3px;font-weight:600;background:${bg};color:${col};display:block;`;
     } else ccWarn.textContent='';
-  }
+  } else if(ccWarn) ccWarn.textContent='';
   // Coin card: Taker ratio 4h
   const ccTaker=document.getElementById('cc-taker');
   if(ccTaker&&S.takerRatio!=null){
@@ -3088,8 +3206,17 @@ function updateConfDisplay(idea){
   if(numEl){ numEl.textContent=confPct.toFixed(0); numEl.style.color=confColor; }
   const probEl = document.getElementById('cc-prob-lbl');
   if(probEl){
-    probEl.textContent = confPct>=83?'высокая':confPct>=70?'средняя':confPct>=55?'слабая':'низкая';
-    probEl.style.color = confColor;
+    // SKIP с уверенностью >70% → принудительно "СЛАБАЯ"
+    const skipOverride = idea && idea.verdict==='SKIP' && (idea.verdictConf||0)>=70;
+    if(skipOverride){
+      probEl.textContent='слабая';
+      probEl.style.color='var(--muted)';
+      probEl.title=idea.verdictReason||'AI: SKIP';
+    } else {
+      probEl.textContent = confPct>=83?'высокая':confPct>=70?'средняя':confPct>=55?'слабая':'низкая';
+      probEl.style.color = confColor;
+      probEl.title='';
+    }
   }
 
   // Update breakdown row
@@ -3701,6 +3828,75 @@ function setLiveStatus(s){
   else if(s==='scanning'){dot.className='scanning';txt.textContent='SCAN';txt.className='scanning';}
 }
 
+// ── Сессионная разметка Asia/London/NY (UTC) ──────────────
+const SESSIONS = [
+  {name:'Asia',   start:0,  end:8,  color:'#3b82f6', bg:'rgba(59,130,246,.13)'},
+  {name:'London', start:8,  end:16, color:'#a78bfa', bg:'rgba(167,139,250,.13)'},
+  {name:'NY',     start:13, end:21, color:'#22c55e', bg:'rgba(34,197,94,.13)'},
+];
+
+function updateSessionBar(){
+  const bar=document.getElementById('session-bar');
+  if(!bar)return;
+  const now=new Date();
+  const utcH=now.getUTCHours(), utcM=now.getUTCMinutes();
+  const utcFrac=utcH+utcM/60;
+  const utcStr=String(utcH).padStart(2,'0')+':'+String(utcM).padStart(2,'0')+' UTC';
+
+  // Active session check
+  const active=SESSIONS.filter(s=>utcFrac>=s.start&&utcFrac<s.end);
+  const activeName=active.map(s=>s.name).join('+');
+
+  // Build 24h bar — 1px per 24min = 24h * 60min / 60px
+  const W=bar.offsetWidth||300;
+  const pxPerH=W/24;
+  let html=`<div style="position:relative;width:100%;height:14px;border-radius:2px;overflow:hidden;background:var(--s2);">`;
+  // Session blocks
+  for(const s of SESSIONS){
+    const x=s.start/24*100, w=(s.end-s.start)/24*100;
+    html+=`<div style="position:absolute;top:0;left:${x}%;width:${w}%;height:100%;background:${s.bg};"></div>`;
+  }
+  // Current time needle
+  const nowPct=utcFrac/24*100;
+  html+=`<div style="position:absolute;top:0;left:${nowPct}%;width:1.5px;height:100%;background:white;opacity:.8;"></div>`;
+  html+=`</div>`;
+
+  // Labels
+  const sessionLabels=SESSIONS.map(s=>{
+    const isActive=utcFrac>=s.start&&utcFrac<s.end;
+    const endH=String(s.end).padStart(2,'0')+':00';
+    const rem=isActive?Math.round((s.end-utcFrac)*60):null;
+    return `<span style="display:flex;align-items:center;gap:3px;padding:0 7px 0 0;${isActive?'opacity:1':'opacity:.4'}">
+      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${s.color};flex-shrink:0;"></span>
+      <span style="color:${isActive?s.color:'var(--dim)'};">${s.name}</span>
+      ${isActive&&rem!==null?`<span style="color:var(--muted);">${rem}м</span>`:`<span style="color:var(--dim);">${String(s.start).padStart(2,'0')}–${endH}</span>`}
+    </span>`;
+  }).join('');
+
+  bar.innerHTML=`${html}<div style="display:flex;align-items:center;gap:0;margin-top:2px;">${sessionLabels}<span style="margin-left:auto;color:var(--dim);font-size:8px;">${utcStr}</span></div>`;
+}
+
+// ── Симуляция комиссий + проскальзывание ─────────────────
+function calcFeeImpact(entry, sl, tp1, dir) {
+  const TAKER = 0.00045; // 0.045% taker (Binance Futures)
+  const SLIP  = 0.0002;  // 0.02% проскальзывание (avg altcoin)
+  const roundTrip = (TAKER + SLIP) * 2; // вход + выход
+  const feePct = roundTrip * 100; // % от позиции
+
+  if(!entry || !sl || !tp1) return null;
+  const raw_rr = dir==='LONG'
+    ? (tp1-entry)/(entry-sl)
+    : (entry-tp1)/(sl-entry);
+  const slDist = Math.abs(entry-sl)/entry*100;
+  const tpDist = Math.abs(tp1-entry)/entry*100;
+  const netTp  = tpDist - feePct;
+  const netSl  = slDist + feePct;
+  const netRr  = netSl>0 ? netTp/netSl : 0;
+  const edgePct= netTp - netSl / (raw_rr||1); // упрощённый edge при WR=50%
+
+  return {feePct:+feePct.toFixed(3), netRr:+netRr.toFixed(2), netTp:+netTp.toFixed(2), netSl:+netSl.toFixed(2), rawRr:+raw_rr.toFixed(2)};
+}
+
 function updateTopbar(){
   const t=S.prices[S.sym];
   if(t){
@@ -4013,6 +4209,49 @@ CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
 // ═══════════════════════════════════════════════════════
 //  ACTIVE ALERTS IN COIN CARD
 // ═══════════════════════════════════════════════════════
+// Обновить блок "Готовность к входу" в карточке для памп-наблюдений
+function updatePumpReadinessInCard(sym) {
+  const el = document.getElementById('cc-pump-readiness');
+  if (!el) return;
+  const w = WATCH_LIST[sym];
+  if (!w || w.type !== 'pump') { el.style.display = 'none'; return; }
+
+  const d = w.lastPumpData;
+  const pl = pumpPhaseLabel(w.pumpPhase, w.pumpCancelled);
+  const phaseBar = [1,2,3].map(p =>
+    `<span style="display:inline-block;width:28px;height:6px;border-radius:3px;margin-right:3px;background:${
+      w.pumpPhase>=p ? (p===3?'var(--green)':p===2?'var(--amber)':'var(--red)') : 'var(--s3)'
+    };"></span>`
+  ).join('');
+
+  // Фазовые сигналы
+  const exHtml = d && d.exSigs.length
+    ? d.exSigs.map(s=>`<span style="display:inline-block;font-size:8px;padding:1px 5px;margin:1px 2px 1px 0;border-radius:3px;background:rgba(245,158,11,.12);color:var(--amber);">✓ ${s.t}</span>`).join('')
+    : '';
+  const bkHtml = d && d.bkSigs.length
+    ? d.bkSigs.map(s=>`<span style="display:inline-block;font-size:8px;padding:1px 5px;margin:1px 2px 1px 0;border-radius:3px;background:rgba(239,68,68,.12);color:var(--red);">✓ ${s.t}</span>`).join('')
+    : '';
+
+  const readyNote = w.pumpCancelled
+    ? '<span style="font-size:9px;color:var(--muted);">Памп возобновился — сетап отменён</span>'
+    : w.pumpPhase >= 3
+      ? '<span style="font-size:9px;font-weight:700;color:var(--green);">⚡ Триггер-свеча подтверждена — входить сейчас</span>'
+      : `<span style="font-size:9px;color:var(--muted);">Ожидаемое истощение: ${w.timeEst}</span>`;
+
+  el.style.display = 'block';
+  el.style.borderLeft = `3px solid ${pl.color}`;
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+      <span style="font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);">Готовность к входу</span>
+      <span style="font-size:11px;font-weight:800;color:${pl.color};">${pl.icon} ${pl.text}</span>
+    </div>
+    <div style="margin-bottom:6px;">${phaseBar}</div>
+    ${exHtml ? `<div style="margin-bottom:3px;">${exHtml}</div>` : ''}
+    ${bkHtml ? `<div style="margin-bottom:4px;">${bkHtml}</div>` : ''}
+    <div>${readyNote}</div>
+  `;
+}
+
 function updateActiveAlertsInCard(sym) {
   // Only update if the currently open card matches this symbol
   if (!S.activeCardIdea || S.activeCardIdea.sym !== sym) return;
@@ -4277,19 +4516,72 @@ function renderActiveTab(list){
 }
 
 // ═══════════════════════════════════════════════════════
-//  WATCH LIST — монеты на перепроверке (WAIT от Claude)
+//  WATCH LIST — 2 типа: памп-наблюдение + WAIT от Claude
 // ═══════════════════════════════════════════════════════
-const WATCH_LIST = {}; // {sym: {idea, addedAt, checks, maxChecks}}
-const WATCH_INTERVAL_MS = 5 * 60 * 1000; // перепроверка каждые 5 мин
-const WATCH_MAX_TIME = 2 * 60 * 60 * 1000; // макс 2 часа
+const WATCH_LIST = {};
+const WATCH_INTERVAL_MS = 5 * 60 * 1000;
+const WATCH_MAX_TIME    = 3 * 60 * 60 * 1000; // 3 часа макс
 
+// Оценка времени до истощения по скорости пампа
+function pumpTimeEst(pumpSpeed, pumpPct) {
+  // pumpSpeed = % за 2h, pumpPct = % за 8h
+  if (pumpSpeed > 10) return '~15–30 мин';
+  if (pumpSpeed > 6)  return '~30–60 мин';
+  if (pumpSpeed > 3)  return '~60–90 мин';
+  if (pumpPct > 20)   return '~90–120 мин'; // большой памп, медленно остывает
+  return '~90–150 мин';
+}
+
+// Текстовый статус по фазе
+function pumpPhaseLabel(phase, cancelled) {
+  if (cancelled)  return {icon:'⚫', text:'ОТМЕНЁН',   color:'var(--muted)'};
+  if (phase >= 3) return {icon:'🟢', text:'ВХОД',      color:'var(--green)'};
+  if (phase === 2) return {icon:'🟡', text:'ИСТОЩЕНИЕ', color:'var(--amber)'};
+  return              {icon:'🔴', text:'ПАМП ИДЁТ',  color:'var(--red)'};
+}
+
+// Добавить памп в наблюдение (вызывается из runIdeas)
+function addPumpToWatch(r) {
+  const sym = r.sym;
+  if (WATCH_LIST[sym]) {
+    // Уже наблюдаем — обновляем peakPrice если памп продолжается
+    if (r.entry > (WATCH_LIST[sym].peakPrice || 0)) {
+      WATCH_LIST[sym].peakPrice = r.entry;
+    }
+    return;
+  }
+  const now = Date.now();
+  WATCH_LIST[sym] = {
+    type: 'pump',
+    idea: {
+      sym, dir:'ПАМП', conf: r.bestConf||75,
+      entry: r.entry, sl: r.sl, tp1: r.tp1, tp2: r.tp2, rr: r.rr, atrv: r.atrv,
+      pumpPct: r.pumpPct, pumpSpeed: r.pumpSpeed, volRatio: r.volRatio,
+      rsiNow: r.rsiNow, cds1h: r.cds1h, cds15m: r.cds15m,
+      sigs: r.bestSigs||[], ts: now, isPump: true,
+    },
+    addedAt: now,
+    checks: 0,
+    maxChecks: 36,           // 36 × 5мин = 3 часа
+    pumpPhase: 1,            // начинаем с фазы 1 (памп идёт)
+    pumpCancelled: false,
+    peakPrice: r.entry,      // отслеживаем пик
+    timeEst: pumpTimeEst(r.pumpSpeed||0, r.pumpPct||0),
+    lastPumpData: null,
+  };
+  showToast(`🔴 ${sym.replace('USDT','')} ПАМП +${(r.pumpPct||0).toFixed(1)}% → Наблюдение`);
+  renderWatchBadge();
+}
+
+// Добавить WAIT-сигнал в наблюдение (вызывается из вердикта Claude)
 function addToWatch(idea) {
-  if (WATCH_LIST[idea.sym]) return; // уже наблюдаем
+  if (WATCH_LIST[idea.sym]) return;
   WATCH_LIST[idea.sym] = {
-    idea: {...idea}, // копия на момент добавления
+    type: 'wait',
+    idea: {...idea},
     addedAt: Date.now(),
     checks: 0,
-    maxChecks: 24, // 24 × 5мин = 2 часа
+    maxChecks: 24,
   };
   showToast(`👁 ${idea.sym.replace('USDT','')} → Наблюдение`);
   renderWatchBadge();
@@ -4306,32 +4598,113 @@ function renderWatchBadge() {
   renderIdeas();
 }
 
+// ── Обновление памп-фазы по свежим данным analyzePumpFade ──
+async function updatePumpWatch(sym) {
+  const w = WATCH_LIST[sym];
+  if (!w || w.type !== 'pump') return;
+
+  try {
+    const a = await analyzePumpFade(sym);
+    if (!a) return;
+    w.lastPumpData = a;
+    w.checks++;
+
+    const nowPrice = a.price15m || a.entry;
+    // Если новый пик — памп возобновился
+    if (nowPrice > w.peakPrice * 1.015) {
+      w.peakPrice = nowPrice;
+      w.pumpPhase = 1;
+      w.pumpCancelled = false;
+      w.timeEst = pumpTimeEst(a.pumpSpeed, a.pumpPct);
+      renderWatchBadge();
+      return;
+    }
+
+    // Если цена ушла обратно к базе (памп отменён)
+    if (nowPrice < w.peakPrice * 0.97 && a.phase <= 1 && !a.isExhausted) {
+      w.pumpCancelled = true;
+      w.pumpPhase = 0;
+      renderWatchBadge();
+      // Через 30 мин убираем из наблюдения
+      setTimeout(() => removeFromWatch(sym, 'cancelled'), 30 * 60 * 1000);
+      showToast(`⚫ ${sym.replace('USDT','')} — памп отменён`);
+      return;
+    }
+
+    // Обновляем фазу
+    w.pumpPhase = a.phase;
+    w.idea.rsiNow = a.rsiNow;
+    w.idea.pumpPct = a.pumpPct;
+
+    // Фаза 3 + readyToShort → выталкиваем в сигналы как SHORT
+    if (a.readyToShort && a.phase >= 3) {
+      const shortIdea = {
+        sym, dir:'SHORT', conf: Math.min(92, 72 + a.totalScore),
+        entry: a.entry, sl: a.sl, tp1: a.tp1, tp2: a.tp2, rr: a.rr, atrv: a.atrv,
+        pumpPct: a.pumpPct, pumpSpeed: a.pumpSpeed,
+        volRatio: a.volRatio, rsiNow: a.rsiNow,
+        cds1h: w.idea.cds1h, cds15m: w.idea.cds15m,
+        sigs: [
+          `▼ Памп ${a.pumpPct.toFixed(1)}% истощён`,
+          ...a.exSigs.slice(0,2).map(s=>s.t),
+          ...a.bkSigs.slice(0,1).map(s=>s.t),
+        ],
+        why: `Pump Fade: ${a.exSigs.slice(0,2).map(s=>s.t).join(', ')}`,
+        isPumpFade: true, fromPumpWatch: true,
+        ts: Date.now(), strategy_conf: Math.min(92, 72+a.totalScore),
+        pos_mult:1.0, pos_state:'pump-fade', pos_notes:[], exec_adj:0,
+        verdict:null, verdictReason:'', verdictConf:0,
+      };
+      // Убираем из наблюдения, добавляем в сигналы
+      removeFromWatch(sym, 'ready');
+      if (!S.ideas.find(i => i.sym === sym)) {
+        S.ideas.unshift(shortIdea);
+      }
+      logSignalQuality(shortIdea);
+      notify(`🟢 ВХОД · ${sym.replace('USDT','')} SHORT`, `Памп истощён, шортить сейчас`);
+      showToast(`🟢 ${sym.replace('USDT','')} → ВХОД (SHORT)`);
+      renderIdeas();
+      return;
+    }
+
+    // Таймаут
+    if (Date.now() - w.addedAt > WATCH_MAX_TIME || w.checks >= w.maxChecks) {
+      removeFromWatch(sym, 'timeout');
+      showToast(`⏱ ${sym.replace('USDT','')} — наблюдение истекло`);
+    } else {
+      renderWatchBadge();
+      updatePumpReadinessInCard(sym); // обновить карточку если открыта
+    }
+  } catch(e) { console.warn('pumpWatch err', sym, e); }
+}
+
 async function runWatchChecks() {
   const syms = Object.keys(WATCH_LIST);
-  if (!syms.length || !getClaudeKey()) return;
+  if (!syms.length) return;
 
   for (const sym of syms) {
     const w = WATCH_LIST[sym];
     if (!w) continue;
 
-    // Превысили лимит времени?
+    if (w.type === 'pump') {
+      await updatePumpWatch(sym);
+      await new Promise(r => setTimeout(r, 1500));
+      continue;
+    }
+
+    // ── WAIT-наблюдение (требует Claude) ──
+    if (!getClaudeKey()) continue;
+
     if (Date.now() - w.addedAt > WATCH_MAX_TIME || w.checks >= w.maxChecks) {
       removeFromWatch(sym, 'timeout');
       showToast(`⏱ ${sym.replace('USDT','')} — время наблюдения истекло`);
       continue;
     }
-
     w.checks++;
 
-    // Получаем свежие данные
     try {
       const fresh = await scoreForIdea(sym);
-      if (!fresh || !fresh.bestDir) {
-        removeFromWatch(sym, 'no setup');
-        continue;
-      }
-
-      // Обновляем идею свежими данными
+      if (!fresh || !fresh.bestDir) { removeFromWatch(sym, 'no setup'); continue; }
       w.idea = {...w.idea, ...fresh,
         dir: fresh.bestDir, conf: fresh.bestConf,
         sigs: fresh.bestSigs, why: fresh.why,
@@ -4339,35 +4712,23 @@ async function runWatchChecks() {
         dist: fresh.dist, volRatio: fresh.volRatio,
         rsiNow: fresh.rsiNow, cvdFalling: fresh.cvdFalling,
       };
-
-      // Перепрашиваем Claude
       const verdict = await getAIVerdict(w.idea);
       if (!verdict) continue;
-
       if (verdict.verdict === 'GO') {
-        // Сигнал подтверждён!
         w.idea.verdict = 'GO';
         w.idea.verdictReason = verdict.reason;
         w.idea.verdictConf = verdict.confidence;
-        // Добавляем в основной список сигналов
-        if (!S.ideas.find(i => i.sym === sym)) {
-          S.ideas.unshift(w.idea);
-        }
+        if (!S.ideas.find(i => i.sym === sym)) S.ideas.unshift(w.idea);
         notify(`✅ GO · ${sym.replace('USDT','')}`, verdict.reason || 'Сигнал подтверждён');
         showToast(`✅ ${sym.replace('USDT','')} → GO!`);
         removeFromWatch(sym, 'confirmed');
-        // ✅ FIX: Track winrate for WAIT→GO signals too
         if (w.idea.entry && w.idea.sl && w.idea.tp1) scheduleWinrateCheck(w.idea);
         renderIdeas();
-
       } else if (verdict.verdict === 'SKIP') {
         removeFromWatch(sym, 'skipped');
         showToast(`⏭ ${sym.replace('USDT','')} — пропускаем`);
       }
-      // WAIT — продолжаем наблюдать
-    } catch(e) { /* skip on error */ }
-
-    // Пауза между запросами
+    } catch(e) { /* skip */ }
     await new Promise(r => setTimeout(r, 3000));
   }
   renderWatchBadge();
@@ -4503,6 +4864,8 @@ setTimeout(()=>runIdeas(false),2000);
 
 // Timers
 setInterval(updateTopbar,1000);
+setInterval(updateSessionBar, 30*1000); // каждые 30 сек
+setTimeout(updateSessionBar, 500);       // сразу при загрузке
 setInterval(()=>{
   if(S.sym){
     fetchCds(S.sym,'1h',120).then(c=>{if(c.length){S.cds1h=c;if(S.cds1h.length)drawCandles('chart1h',S.cds1h,null);if(S.cds1h.length)drawVolume(S.cds1h);}}).catch(()=>{});
@@ -4516,16 +4879,33 @@ setInterval(function(){
   var now=Date.now();
   var before=S.ideas.length;
   S.ideas=S.ideas.filter(function(idea){
-    // Удаляем GO через 15 мин если не в работе
+    // Памп: через 5 мин → переводим в Наблюдение
+    if(idea.pumpAutoWatch && idea.isPump && !WATCH_LIST[idea.sym]){
+      if(now - idea.ts >= 5*60*1000){
+        addPumpToWatch({
+          sym:idea.sym, bestConf:idea.conf, bestSigs:idea.sigs||[],
+          entry:idea.entry, sl:idea.sl, tp1:idea.tp1, tp2:idea.tp2, rr:idea.rr, atrv:idea.atrv,
+          pumpPct:idea.pumpPct, pumpSpeed:idea.pumpSpeed, volRatio:idea.volRatio,
+          rsiNow:idea.rsiNow, cds1h:idea.cds1h, cds15m:idea.cds15m,
+        });
+        showToast('👁 '+idea.sym.replace('USDT','')+' → Наблюдение (памп)');
+        return false; // убрать из Сигналов
+      }
+    }
+    // Удаляем GO через 25 мин если не в работе
     if(idea.verdict==='GO'&&idea.goAt&&!isActiveTrack(idea.sym)){
-      if(now-idea.goAt>15*60*1000){
-        showToast('⏱ '+idea.sym.replace('USDT','')+' GO истёк (15м)');
+      if(now-idea.goAt>25*60*1000){
+        showToast('⏱ '+idea.sym.replace('USDT','')+' GO истёк (25м)');
         return false;
       }
     }
-    // Удаляем SKIP через 15 мин
+    // Удаляем SKIP через 30 мин
     if(idea.verdict==='SKIP'&&idea.skipAt){
-      if(now-idea.skipAt>15*60*1000)return false;
+      if(now-idea.skipAt>30*60*1000)return false;
+    }
+    // Удаляем WAIT через 45 мин
+    if(idea.verdict==='WAIT'&&idea.waitAt){
+      if(now-idea.waitAt>45*60*1000)return false;
     }
     return true;
   });
