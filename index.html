@@ -468,6 +468,7 @@ button:hover{opacity:.85;}
         <span style="font-family:var(--mono);font-size:11px;font-weight:800;">4</span> ВХОД
       </div>
       <div class="ptab" onclick="setPhase(5,this)" style="font-size:9px;">📊 WINRATES</div>
+      <div class="ptab" onclick="setPhase(6,this)" style="font-size:9px;">● КАЧЕСТВО</div>
     </div>
 
     <!-- Dynamic zone -->
@@ -1495,6 +1496,7 @@ async function runIdeas(manual=false){
           pos_mult:1.0,pos_state:'neutral',pos_notes:[],exec_adj:0,
           verdict:null, verdictReason:'', verdictConf:0};
         newIdeas.push(ideaObj);
+        logSignalQuality(ideaObj); // Directional accuracy logger
         // Async AI verdict (Claude) — staggered to avoid rate limits
         if (getClaudeKey()) {
           const verdictDelay = (newIdeas.length - 1) * 3000;
@@ -1931,6 +1933,7 @@ function showPhaseContent(phase){
   const dz=document.getElementById('dynamic-zone');if(!dz)return;
   if(phase===0)return; // карточка монеты открыта — не перетираем
   if(phase===5){showWinrates();return;}
+  if(phase===6){showQuality();return;}
   const phaseNames={1:'🔴 Памп',2:'🟡 Истощение',3:'🔴 Слом структуры',4:'✅ Готов к входу'};
   const sigNames={1:'Фаза 1: памп +15%+ от EMA20',2:'Фаза 2: признаки истощения RSI/MACD/CVD',3:'Фаза 3: слом EMA20 на 15m',4:'Все фазы пройдены — сигнал на вход'};
   // Filter ideas by phase
@@ -1962,6 +1965,220 @@ function showPhaseContent(phase){
       </div>`;
     }).join('')}
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  КАЧЕСТВО — Directional Accuracy Logger
+// ═══════════════════════════════════════════════════════
+//
+//  Для каждого сигнала логируем: sym, dir, entry, conf, ts
+//  Через 4h и 8h проверяем цену через Binance API.
+//  Метрика: LONG → цена выросла ≥3% за 4h → pass
+//           SHORT → цена упала ≥3% за 4h → pass
+//  Всё хранится в localStorage 'pf_quality_log'
+//  Максимум 500 записей, старше 7 дней удаляем.
+// ─────────────────────────────────────────────────────
+const QUAL_KEY      = 'pf_quality_log';
+const QUAL_HIT_4H   = 3.0;   // % для pass на 4h
+const QUAL_HIT_8H   = 4.0;   // % для pass на 8h
+const QUAL_MAX      = 500;
+const QUAL_TTL      = 7 * 24 * 3600 * 1000; // 7 дней
+
+function qualLoadLog() {
+  try { return JSON.parse(localStorage.getItem(QUAL_KEY) || '[]'); } catch { return []; }
+}
+function qualSaveLog(log) {
+  try { localStorage.setItem(QUAL_KEY, JSON.stringify(log)); } catch {}
+}
+
+// Вызывается при каждом новом сигнале (из runIdeas)
+function logSignalQuality(idea) {
+  if (!idea || !idea.sym || !idea.entry || !idea.dir) return;
+  const log = qualLoadLog();
+  // Не дублируем: тот же sym + dir в последние 4h
+  const cutoff = Date.now() - 4 * 3600 * 1000;
+  if (log.some(e => e.sym === idea.sym && e.dir === idea.dir && e.ts > cutoff)) return;
+  log.push({
+    sym:    idea.sym,
+    dir:    idea.dir,
+    entry:  idea.entry,
+    conf:   Math.round(idea.conf || 0),
+    sigs:   (idea.sigs || []).slice(0, 2),
+    ts:     Date.now(),
+    check4h: null,   // {price, pct, pass} — заполняется через 4h
+    check8h: null,   // {price, pct, pass} — заполняется через 8h
+  });
+  // Обрезаем старые
+  const clean = log
+    .filter(e => Date.now() - e.ts < QUAL_TTL)
+    .slice(-QUAL_MAX);
+  qualSaveLog(clean);
+}
+
+// Периодическая проверка (каждые 5 минут)
+async function checkQualityLog() {
+  const log = qualLoadLog();
+  const now = Date.now();
+  let changed = false;
+
+  const toCheck = log.filter(e =>
+    (e.check4h === null && now - e.ts >= 4 * 3600 * 1000) ||
+    (e.check8h === null && now - e.ts >= 8 * 3600 * 1000)
+  );
+  if (!toCheck.length) return;
+
+  // Batch: unique syms
+  const syms = [...new Set(toCheck.map(e => e.sym))];
+  const prices = {};
+  await Promise.allSettled(syms.map(async sym => {
+    try {
+      const r = await fetch(`${FAPI}/ticker/price?symbol=${sym}`);
+      const j = await r.json();
+      if (j.price) prices[sym] = parseFloat(j.price);
+    } catch {}
+  }));
+
+  for (const e of log) {
+    const p = prices[e.sym];
+    if (!p || !e.entry) continue;
+    const pct = (p - e.entry) / e.entry * 100;  // положительный = цена выросла
+
+    if (e.check4h === null && now - e.ts >= 4 * 3600 * 1000) {
+      const dirPct = e.dir === 'LONG' || e.dir === 'ПАМП' ? pct : -pct;
+      e.check4h = { price: p, pct: +pct.toFixed(2), dirPct: +dirPct.toFixed(2), pass: dirPct >= QUAL_HIT_4H };
+      changed = true;
+    }
+    if (e.check8h === null && now - e.ts >= 8 * 3600 * 1000) {
+      const dirPct = e.dir === 'LONG' || e.dir === 'ПАМП' ? pct : -pct;
+      e.check8h = { price: p, pct: +pct.toFixed(2), dirPct: +dirPct.toFixed(2), pass: dirPct >= QUAL_HIT_8H };
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    qualSaveLog(log);
+    // Если открыт таб КАЧЕСТВО — обновляем
+    if (S.phase === 6) showQuality();
+  }
+}
+
+function showQuality(){
+  const dz=document.getElementById('dynamic-zone');if(!dz)return;
+  const log=qualLoadLog();
+  const now=Date.now();
+
+  // — разбиваем лог на checked / pending
+  const checked4h = log.filter(e=>e.check4h!==null);
+  const pending    = log.filter(e=>e.check4h===null && now-e.ts < 4*3600*1000);
+  const waiting    = log.filter(e=>e.check4h===null && now-e.ts >= 4*3600*1000);
+
+  // — Directional accuracy 4h
+  function acc(entries, field){
+    const done=entries.filter(e=>e[field]!==null);
+    if(!done.length)return null;
+    const pass=done.filter(e=>e[field].pass).length;
+    return {pass, total:done.length, pct:Math.round(pass/done.length*100)};
+  }
+  const a4h = acc(log, 'check4h');
+  const a8h = acc(log, 'check8h');
+  const a4hL = acc(log.filter(e=>e.dir==='LONG'),  'check4h');
+  const a4hS = acc(log.filter(e=>e.dir==='SHORT'), 'check4h');
+  const a4hP = acc(log.filter(e=>e.dir==='ПАМП'),  'check4h');
+
+  // — breakdown по conf-бакетам
+  const bHigh = acc(log.filter(e=>e.conf>=83), 'check4h');
+  const bMid  = acc(log.filter(e=>e.conf>=78&&e.conf<83), 'check4h');
+  const bLow  = acc(log.filter(e=>e.conf<78),  'check4h');
+
+  function statCard(label, a, color){
+    if(!a) return `<div style="flex:1;padding:8px;background:var(--s2);border-radius:6px;border:1px solid var(--border);min-width:70px;">
+      <div style="font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;">${label}</div>
+      <div style="font-size:13px;font-weight:800;color:var(--muted);">—</div>
+      <div style="font-size:8px;color:var(--dim);">нет данных</div>
+    </div>`;
+    const c=a.pct>=60?'var(--green)':a.pct>=45?'var(--amber)':'var(--red)';
+    return `<div style="flex:1;padding:8px;background:var(--s2);border-radius:6px;border:1px solid var(--border);min-width:70px;">
+      <div style="font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;">${label}</div>
+      <div style="font-size:18px;font-weight:800;color:${color||c};">${a.pct}%</div>
+      <div style="font-size:8px;color:var(--dim);">${a.pass}/${a.total} сигналов</div>
+    </div>`;
+  }
+
+  function logRow(e){
+    const age=now-e.ts;
+    const ageStr=age<3600000?Math.floor(age/60000)+'м':age<86400000?(age/3600000).toFixed(1)+'ч':(age/86400000).toFixed(0)+'д';
+    const dc=e.dir==='LONG'?'var(--green)':e.dir==='ПАМП'?'var(--amber)':'var(--red)';
+    const r4=e.check4h;
+    const r8=e.check8h;
+    function cell(r){
+      if(!r) return `<span style="color:var(--dim);font-size:9px;">⏳</span>`;
+      const c=r.pass?'var(--green)':'var(--red)';
+      const sign=r.dirPct>=0?'+':'';
+      return `<span style="color:${c};font-size:9px;font-weight:700;">${r.pass?'✓':'✗'} ${sign}${r.dirPct}%</span>`;
+    }
+    const sig=(e.sigs||[]).slice(0,1).join('').substring(0,28);
+    return `<div style="display:grid;grid-template-columns:52px 34px 32px 1fr 64px 64px;align-items:center;gap:3px;padding:4px 8px;border-bottom:1px solid var(--border);">
+      <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${dc};">${e.sym.replace('USDT','')}</span>
+      <span style="font-size:8px;font-weight:700;color:${dc};">${e.dir}</span>
+      <span style="font-family:var(--mono);font-size:9px;color:var(--muted);">${e.conf}</span>
+      <span style="font-size:8px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sig||ageStr+' назад'}</span>
+      ${cell(r4)}
+      ${cell(r8)}
+    </div>`;
+  }
+
+  const totalLogged=log.length;
+  const recentRows=log.slice().reverse().slice(0,50);
+
+  dz.innerHTML=`<div class="fade" style="overflow-y:auto;max-height:100%;">
+
+  <!-- Заголовок -->
+  <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div style="font-size:11px;font-weight:800;color:var(--text2);">📐 Directional Accuracy</div>
+      <div style="font-size:9px;color:var(--dim);">Цена пошла в нужную сторону на ≥${QUAL_HIT_4H}% за 4h / ≥${QUAL_HIT_8H}% за 8h · Всего в логе: ${totalLogged}</div>
+    </div>
+    <button onclick="qualLoadLog();showQuality();" style="font-size:9px;padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--s3);color:var(--muted);cursor:pointer;">↻ Обновить</button>
+  </div>
+
+  <!-- Статкарточки -->
+  <div style="display:flex;gap:6px;padding:8px 10px;flex-wrap:wrap;border-bottom:1px solid var(--border);">
+    ${statCard('Accuracy 4h', a4h)}
+    ${statCard('Accuracy 8h', a8h)}
+    ${statCard('LONG 4h', a4hL, 'var(--green)')}
+    ${statCard('SHORT 4h', a4hS, 'var(--red)')}
+    ${statCard('ПАМП 4h', a4hP, 'var(--amber)')}
+  </div>
+
+  <!-- По conf-бакетам -->
+  <div style="display:flex;gap:6px;padding:8px 10px;flex-wrap:wrap;border-bottom:1px solid var(--border);">
+    ${statCard('Conf ≥83', bHigh)}
+    ${statCard('Conf 78-82', bMid)}
+    ${statCard('Conf <78', bLow)}
+    <div style="flex:1;padding:8px;background:var(--s2);border-radius:6px;border:1px solid var(--border);min-width:70px;">
+      <div style="font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;">Ожидают 4h</div>
+      <div style="font-size:18px;font-weight:800;color:var(--muted);">${pending.length}</div>
+      <div style="font-size:8px;color:var(--dim);">${waiting.length} готовы к проверке</div>
+    </div>
+  </div>
+
+  <!-- Таблица лога -->
+  <div style="display:grid;grid-template-columns:52px 34px 32px 1fr 64px 64px;gap:3px;padding:4px 8px;background:var(--s3);border-bottom:1px solid var(--border);">
+    <span style="font-size:7px;color:var(--dim);">Монета</span>
+    <span style="font-size:7px;color:var(--dim);">Напр.</span>
+    <span style="font-size:7px;color:var(--dim);">Conf</span>
+    <span style="font-size:7px;color:var(--dim);">Сигнал</span>
+    <span style="font-size:7px;color:var(--dim);">4h ≥${QUAL_HIT_4H}%</span>
+    <span style="font-size:7px;color:var(--dim);">8h ≥${QUAL_HIT_8H}%</span>
+  </div>
+  ${recentRows.length
+    ? recentRows.map(logRow).join('')
+    : `<div style="padding:20px;text-align:center;font-size:11px;color:var(--muted);">
+        Лог пуст — сигналы начнут записываться автоматически при следующем сканировании.<br>
+        <span style="font-size:9px;color:var(--dim);">Данные проверяются через 4h и 8h после сигнала.</span>
+      </div>`
+  }
+</div>`;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -4321,6 +4538,8 @@ setInterval(checkPendingWinrates, 3*60*1000);  // ФИX: каждые 3 мин (
 setInterval(checkMidnightReset, 60*1000);      // midnight reset отдельно каждую минуту
 setInterval(()=>runActiveMonitor(), 15*1000); // Active track monitor every 15 sec
 setTimeout(()=>runActiveMonitor(), 5000); // Initial active monitor check
+setInterval(checkQualityLog, 5*60*1000); // Directional accuracy checker every 5 min
+setTimeout(()=>checkQualityLog(), 12000); // Initial quality check on load
 // Запускаем flow streams для монет, которые были "В работе" до перезагрузки страницы
 S.activeTrack.forEach(rec => startActiveFlowTracking(rec.sym));
 // Initial check on load — НЕ фильтруем записи, просто проверяем цены
