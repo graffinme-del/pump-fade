@@ -372,8 +372,8 @@ button:hover{opacity:.85;}
         </div>
       </div>
       <div class="left-sub">200 монет · все типы сетапов · min
-        <span id="min-conf-label">65</span>%
-        <input type="range" min="45" max="95" value="78" id="conf-slider"
+        <span id="min-conf-label">74</span>%
+        <input type="range" min="45" max="95" value="74" id="conf-slider"
           oninput="MIN_CONF=+this.value;document.getElementById('min-conf-label').textContent=this.value;renderIdeas()"
           style="width:45px;accent-color:var(--red);vertical-align:middle;margin-left:3px;">
       </div>
@@ -597,9 +597,9 @@ const WR_KEY = 'pf_wr_v2';
 const WR_HISTORY_KEY = 'pf_wr_history_v1';
 const ACTIVE_KEY = 'pf_active_v1';
 let PUMP_THRESH = 15;
-let MIN_CONF = 78;        // порог уверенности поднят с 70 до 78
-const MIN_TP_PCT = 5.0;   // минимальный потенциал TP — меньше 5% не берём
-const MIN_RR    = 1.5;    // минимальный R/R — риск должен быть оправдан
+let MIN_CONF = 74;        // порог уверенности (было 78 — слишком высоко)
+const MIN_TP_PCT = 2.0;   // минимальный потенциал TP (было 5% — убивало SHORT после пампа)
+const MIN_RR    = 1.1;    // минимальный R/R (было 1.5 — слишком строго)
 
 // ═══════════════════════════════════════════════════════
 //  ORDER BOOK & FLOW STATE
@@ -651,10 +651,10 @@ const S = {
   sym:'SOLUSDT', cds1h:[], cds15m:[],
   prices:{}, oi:null, fr:null,
   ideas:[], ideaDedup:(function(){
-    // Грузим dedup из localStorage, чистим записи старше 4h
+    // Грузим dedup из localStorage, чистим записи старше 2h
     try{
       const raw=JSON.parse(localStorage.getItem('pf_idea_dedup')||'{}');
-      const cutoff=Date.now()-14400000;
+      const cutoff=Date.now()-7200000;
       Object.keys(raw).forEach(k=>{if(raw[k]<cutoff)delete raw[k];});
       return raw;
     }catch{return {};}
@@ -1486,13 +1486,15 @@ async function runIdeas(manual=false){
         // earlyPump (Старт пампа) имеет собственный порог 72 — не убиваем глобальным MIN_CONF
         const minForThis = r.isEarlyPump ? 72 : MIN_CONF;
         if(r.bestConf<minForThis)return;
-        // Фильтр 1: минимальный потенциал TP ≥ 5%
+        // Фильтр 1: минимальный потенциал TP
         const _tpDist=r.entry>0&&r.tp1>0?Math.abs(r.tp1-r.entry)/r.entry*100:0;
         if(_tpDist<MIN_TP_PCT){console.log('[FILTER] TP',r.sym,_tpDist.toFixed(1)+'%');return;}
-        // Фильтр 2: R/R ≥ 1.5 (награда должна превышать риск)
+        // Фильтр 2: R/R минимум
         if((r.rr||0)<MIN_RR){console.log('[FILTER] RR',r.sym,(r.rr||0).toFixed(2)+'x');return;}
+        // Дедупликация: памп повторно через 1ч, остальные через 2ч
         const lastTs=S.ideaDedup[r.sym];
-        if(lastTs&&now-lastTs<14400000)return; // 4h dedup
+        const dedupTTL = r.isPumpSignal ? 3600000 : 7200000; // 1h для пампа, 2h для остальных
+        if(lastTs&&now-lastTs<dedupTTL)return;
         S.ideaDedup[r.sym]=now;
         try{localStorage.setItem('pf_idea_dedup',JSON.stringify(S.ideaDedup));}catch{}
         // Get 24h volume from candidates array
@@ -1599,7 +1601,7 @@ function setIdeasTab(tab) {
 function updateTabCounts() {
   const sc = document.getElementById('tab-signals-count');
   const wc = document.getElementById('tab-watch-count');
-  const minConf = parseInt(document.getElementById('conf-slider')?.value||'78');
+  const minConf = parseInt(document.getElementById('conf-slider')?.value||'74');
   if (sc) sc.textContent = S.ideas.filter(i=>i.conf>=minConf).length || '';
   if (wc) {
     const n = Object.keys(WATCH_LIST).length;
@@ -1615,7 +1617,7 @@ function updateTabCounts() {
 
 function renderIdeas(){
   const list=document.getElementById('ideas-list');if(!list)return;
-  const minConf=parseInt(document.getElementById('conf-slider')?.value||'78');
+  const minConf=parseInt(document.getElementById('conf-slider')?.value||'74');
   const filtered=S.ideas.filter(i=>i.conf>=minConf);
   const cnt=document.getElementById('ideas-count');
   if(cnt)cnt.textContent=filtered.length?`${filtered.length}`:'';
