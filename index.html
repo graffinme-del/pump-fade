@@ -996,6 +996,84 @@ function analyzeFull(cds1h,cds15m){
 }
 
 // ═══════════════════════════════════════════════════════
+//  NEW STRATEGY HELPERS
+// ═══════════════════════════════════════════════════════
+
+// ── Batch funding rate cache (один запрос для всех монет) ──
+const FUNDING_CACHE = {};
+let FUNDING_CACHE_TS = 0;
+async function refreshFundingCache(){
+  try{
+    const r=await fetch('https://fapi.binance.com/fapi/v1/premiumIndex');
+    const j=await r.json();
+    if(!Array.isArray(j))return;
+    j.forEach(item=>{
+      if(item.symbol&&item.lastFundingRate!=null)
+        FUNDING_CACHE[item.symbol]={fr:+item.lastFundingRate*100, markPrice:+item.markPrice};
+    });
+    FUNDING_CACHE_TS=Date.now();
+  }catch(e){console.warn('[FundingCache]',e);}
+}
+
+// ── Intraday VWAP + 2σ bands (из 15m-свечей с 00:00 UTC) ──
+function calcVWAP(candles15m){
+  const startTs=(()=>{const d=new Date();d.setUTCHours(0,0,0,0);return d.getTime();})();
+  const today=candles15m.filter(c=>c.time>=startTs);
+  if(today.length<4)return null;
+  let cumPV=0,cumV=0;
+  const vwapSeries=today.map(c=>{
+    const typ=(c.high+c.low+c.close)/3;
+    cumPV+=typ*c.volume;cumV+=c.volume;
+    return cumV>0?cumPV/cumV:c.close;
+  });
+  const vwap=vwapSeries[vwapSeries.length-1];
+  const stdev=Math.sqrt(today.reduce((s,c,i)=>{
+    const typ=(c.high+c.low+c.close)/3;
+    return s+(typ-vwapSeries[i])**2;
+  },0)/today.length)||vwap*0.005;
+  return{vwap,stdev,upper2:vwap+2*stdev,lower2:vwap-2*stdev,
+         upper1:vwap+stdev,lower1:vwap-stdev,count:today.length};
+}
+
+// ── Liquidity Sweep detector (15m) ──
+function detectLiqSweep(candles,lookback=25){
+  if(candles.length<lookback+3)return null;
+  const pool=candles.slice(-(lookback+2),-2);
+  const prev=candles[candles.length-2];
+  const last=candles[candles.length-1];
+  // Equal highs/lows — кластеры wick'ов (±0.3%)
+  const byHigh=h=>pool.filter(c=>Math.abs(c.high-h)/h<0.003);
+  const byLow =l=>pool.filter(c=>Math.abs(c.low -l)/l<0.003);
+  const keyHigh=pool.reduce((best,c)=>byHigh(c.high).length>byHigh(best.high).length?c:best,pool[0]).high;
+  const keyLow =pool.reduce((best,c)=>byLow(c.low).length >byLow(best.low).length ?c:best,pool[0]).low;
+  const hasEqH=byHigh(keyHigh).length>=2;
+  const hasEqL=byLow(keyLow).length>=2;
+  // Bear sweep: prev пробил keyHigh вверх, last закрылся ниже (возврат внутрь)
+  const bearSweep=prev.high>keyHigh*1.001&&last.close<keyHigh&&last.close<last.open;
+  // Bull sweep: prev пробил keyLow вниз, last закрылся выше
+  const bullSweep=prev.low<keyLow*0.999&&last.close>keyLow&&last.close>last.open;
+  return{bearSweep,bullSweep,keyHigh,keyLow,hasEqH,hasEqL,
+         bearExt:bearSweep?(prev.high-keyHigh)/keyHigh*100:0,
+         bullExt:bullSweep?(keyLow-prev.low)/keyLow*100:0};
+}
+
+// ── Asian Range (высчитываем из 1h-свечей, 00:00–06:00 UTC) ──
+const ASIAN_RANGE_MAP={};
+function getAsianRange(sym,cds1h){
+  const todayUTC=new Date();todayUTC.setUTCHours(0,0,0,0);
+  const dateKey=todayUTC.toISOString().slice(0,10);
+  const cached=ASIAN_RANGE_MAP[sym];
+  if(cached&&cached.date===dateKey)return cached;
+  const asianEnd=todayUTC.getTime()+6*3600*1000;
+  const ac=cds1h.filter(c=>c.time>=todayUTC.getTime()&&c.time<asianEnd);
+  if(ac.length<2)return null;
+  const range={high:Math.max(...ac.map(c=>c.high)),low:Math.min(...ac.map(c=>c.low)),
+               date:dateKey,count:ac.length};
+  ASIAN_RANGE_MAP[sym]=range;
+  return range;
+}
+
+// ═══════════════════════════════════════════════════════
 //  SCORE PER COIN (for scan)
 // ═══════════════════════════════════════════════════════
 async function scoreForIdea(sym){
@@ -1248,6 +1326,71 @@ async function scoreForIdea(sym){
       }
     }
 
+    // S7. Funding Scalp SHORT — экстремальный положительный фандинг (лонги перегружены)
+    {
+      const fc=FUNDING_CACHE[sym];
+      if(fc&&fc.fr>0.075){
+        const h24=Math.max(...cds1h.slice(-24).map(c=>c.high));
+        const l24=Math.min(...cds1h.slice(-24).map(c=>c.low));
+        const rng=h24>l24?(price-l24)/(h24-l24):0.5;
+        if(rng>0.65){
+          const excess=fc.fr-0.075;
+          const c=Math.min(88,60+excess*200+(rng>0.85?8:0)+(rsiNow>65?5:0)+(cvdFalling?5:0)+patBonus);
+          const s=[`💰 Funding Scalp SHORT: FR +${fc.fr.toFixed(4)}% (лонги перегружены)`,
+            `Цена в ${(rng*100).toFixed(0)}% дневного диапазона`,
+            ...(rsiNow>65?[`RSI ${rsiNow.toFixed(0)}`]:[]),
+            ...(cvdFalling?['CVD ↓']:[''])].filter(Boolean);
+          shortCandidates.push({conf:c,sigs:s});
+        }
+      }
+    }
+
+    // S8. Liquidity Sweep SHORT — снятие ликвидности выше Equal Highs на 15m
+    {
+      const sw=detectLiqSweep(cds15m,25);
+      if(sw&&sw.bearSweep&&sw.bearExt>0.05){
+        const c=Math.min(91,64+sw.bearExt*25+(sw.hasEqH?10:0)+(cvdDiv?8:0)+(cvdFalling?5:0)+patBonus);
+        const s=[`🎯 Liq Sweep SHORT: +${sw.bearExt.toFixed(2)}% выше ${fmt(sw.keyHigh)}`,
+          sw.hasEqH?'Equal Highs подтверждены ✓':'Локальный хай пробит',
+          ...(cvdDiv?['CVD дивергенция — крупные не покупали']:[]),
+          ...(cvdFalling?['CVD ↓ после sweep']:[])];
+        shortCandidates.push({conf:c,sigs:s});
+      }
+    }
+
+    // S9. VWAP Reversion SHORT — цена выше верхней полосы (+2σ)
+    {
+      const vw=calcVWAP(cds15m);
+      if(vw&&vw.count>=4&&price>vw.upper2){
+        const sigmas=(price-vw.vwap)/vw.stdev;
+        const c=Math.min(87,57+(sigmas-2)*8+(rsiNow>65?7:0)+(cvdDiv?8:0)+patBonus);
+        const s=[`📊 VWAP Reversion SHORT: +${sigmas.toFixed(1)}σ (${fmt(vw.vwap)})`,
+          `Верхняя полоса: $${fmt(vw.upper2)}`,
+          ...(rsiNow>65?[`RSI ${rsiNow.toFixed(0)} — перекупленность`]:[]),
+          ...(cvdDiv?['CVD дивергенция']:[])];
+        shortCandidates.push({conf:c,sigs:s});
+      }
+    }
+
+    // S10. Asian Range SHORT — цена у верхней границы азиатской сессии
+    {
+      const utcH=new Date().getUTCHours();
+      if(utcH>=8&&utcH<21){
+        const ar=getAsianRange(sym,cds1h);
+        if(ar&&ar.high>0){
+          const rngSz=(ar.high-ar.low)/ar.low*100;
+          const nearTop=(ar.high-price)/ar.high<0.004;
+          if(nearTop&&rngSz>0.3){
+            const c=Math.min(83,57+(rngSz>1?8:0)+(rsiNow>60?5:0)+(cvdFalling?5:0)+patBonus);
+            const s=[`🌍 Asian Range SHORT: у верхней границы $${fmt(ar.high)}`,
+              `Диапазон Азии ${rngSz.toFixed(2)}%: ${fmt(ar.low)} – ${fmt(ar.high)}`,
+              ...(rsiNow>60?[`RSI ${rsiNow.toFixed(0)}`]:[])];
+            shortCandidates.push({conf:c,sigs:s});
+          }
+        }
+      }
+    }
+
     const bestShort = shortCandidates.reduce((b,c)=>c.conf>b.conf?c:b, {conf:0,sigs:[]});
     let shortConf = bestShort.conf, shortSigs = bestShort.sigs;
 
@@ -1348,6 +1491,83 @@ async function scoreForIdea(sym){
         if(q>=72){
           earlyPumpConf=q;
           earlyPumpSigs=[`🚀 Старт пампа 5m: +${body5.toFixed(2)}%`,`Vol×${vr5.toFixed(1)}/мед`,`taker ${taker5.toFixed(2)}`,cvdD5>0?'CVD ↑':'CVD ↓'];
+        }
+      }
+    }
+
+    // L6. Funding Scalp LONG — экстремальный отрицательный фандинг (шорты перегружены)
+    {
+      const fc=FUNDING_CACHE[sym];
+      if(fc&&fc.fr<-0.075){
+        const h24=Math.max(...cds1h.slice(-24).map(c=>c.high));
+        const l24=Math.min(...cds1h.slice(-24).map(c=>c.low));
+        const rng=h24>l24?(price-l24)/(h24-l24):0.5;
+        if(rng<0.35){
+          const excess=Math.abs(fc.fr)-0.075;
+          const c=Math.min(88,60+excess*200+(rng<0.15?8:0)+(rsiNow<40?5:0)+(!cvdFalling?5:0)+longPatBonus);
+          const s=[`💰 Funding Scalp LONG: FR ${fc.fr.toFixed(4)}% (шорты перегружены)`,
+            `Цена в ${(rng*100).toFixed(0)}% дневного диапазона`,
+            ...(rsiNow<40?[`RSI ${rsiNow.toFixed(0)}`]:[])];
+          longCandidates.push({conf:c,sigs:s});
+        }
+      }
+    }
+
+    // L7. Liquidity Sweep LONG — снятие ликвидности ниже Equal Lows на 15m
+    {
+      const sw=detectLiqSweep(cds15m,25);
+      if(sw&&sw.bullSweep&&sw.bullExt>0.05){
+        const c=Math.min(91,64+sw.bullExt*25+(sw.hasEqL?10:0)+(!cvdFalling?8:0)+longPatBonus);
+        const s=[`🎯 Liq Sweep LONG: -${sw.bullExt.toFixed(2)}% ниже ${fmt(sw.keyLow)}`,
+          sw.hasEqL?'Equal Lows подтверждены ✓':'Локальный лоу пробит',
+          ...(!cvdFalling?['CVD ↑ после sweep']:[])];
+        longCandidates.push({conf:c,sigs:s});
+      }
+    }
+
+    // L8. VWAP Mean Reversion LONG — цена ниже нижней полосы (-2σ)
+    {
+      const vw=calcVWAP(cds15m);
+      if(vw&&vw.count>=4&&price<vw.lower2){
+        const sigmas=(vw.vwap-price)/vw.stdev;
+        const c=Math.min(87,57+(sigmas-2)*8+(rsiNow<40?7:0)+(!cvdFalling?5:0)+longPatBonus);
+        const s=[`📊 VWAP Reversion LONG: -${sigmas.toFixed(1)}σ от VWAP ($${fmt(vw.vwap)})`,
+          `Нижняя полоса: $${fmt(vw.lower2)}`,
+          ...(rsiNow<40?[`RSI ${rsiNow.toFixed(0)} — перепроданность`]:[])];
+        longCandidates.push({conf:c,sigs:s});
+      }
+    }
+
+    // L9. VWAP Trend Continuation LONG — откат к VWAP в бычьем 4h тренде
+    {
+      const vw=calcVWAP(cds15m);
+      if(vw&&vw.count>=6&&trend4h==='bull'){
+        const atVwap=price>=vw.lower1&&price<=vw.upper1;
+        const abovePct=cds15m.slice(-vw.count).filter(c=>c.close>vw.vwap).length/vw.count;
+        if(atVwap&&abovePct>0.6&&!cvdFalling&&volRatio<1.5){
+          const c=Math.min(86,58+(abovePct-0.6)*50+(rsiNow>45&&rsiNow<65?7:0)+longPatBonus);
+          const s=[`📊 VWAP Trend LONG: откат к VWAP в бычьем тренде`,
+            `VWAP $${fmt(vw.vwap)} · ${(abovePct*100).toFixed(0)}% дня выше · 4h бычий ✓`];
+          longCandidates.push({conf:c,sigs:s});
+        }
+      }
+    }
+
+    // L10. Asian Range LONG — цена у нижней границы азиатской сессии
+    {
+      const utcH=new Date().getUTCHours();
+      if(utcH>=8&&utcH<21){
+        const ar=getAsianRange(sym,cds1h);
+        if(ar&&ar.low>0){
+          const rngSz=(ar.high-ar.low)/ar.low*100;
+          const nearBot=(price-ar.low)/ar.low<0.004;
+          if(nearBot&&rngSz>0.3){
+            const c=Math.min(83,57+(rngSz>1?8:0)+(rsiNow<45?5:0)+(!cvdFalling?5:0)+longPatBonus);
+            const s=[`🌏 Asian Range LONG: у нижней границы $${fmt(ar.low)}`,
+              `Диапазон Азии ${rngSz.toFixed(2)}%: ${fmt(ar.low)} – ${fmt(ar.high)}`,
+              ...(rsiNow<45?[`RSI ${rsiNow.toFixed(0)}`]:[])];
+            longCandidates.push({conf:c,sigs:s});
+          }
         }
       }
     }
@@ -4928,6 +5148,10 @@ function updateBTCBanner(){
 }
 setInterval(checkBTC, 5*60*1000);
 setTimeout(checkBTC, 3000);
+
+// ── Funding cache — загружаем сразу и раз в 15 мин ──
+refreshFundingCache();
+setInterval(refreshFundingCache, 15*60*1000);
 
 // Connect WS
 connectWS();
