@@ -2471,25 +2471,25 @@ function showCoinCard(idea,analysis){
     const _ec=(_et==='SELL_STOP'||_et==='SELL_LIMIT')?'var(--red)':(_et==='BUY_STOP'||_et==='BUY_LIMIT')?'var(--green)':'var(--muted)';
     const _ebg=(_et==='SELL_STOP'||_et==='SELL_LIMIT')?'var(--red-bg)':(_et==='BUY_STOP'||_et==='BUY_LIMIT')?'var(--green-bg)':'var(--s2)';
     const _ebd=(_et==='SELL_STOP'||_et==='SELL_LIMIT')?'var(--red-b)':(_et==='BUY_STOP'||_et==='BUY_LIMIT')?'var(--green-b)':'var(--border)';
-    return \`<div class="cc-levels">
-    <div class="cc-lv" style="border-color:\${_ebd};background:\${_ebg};">
-      <div class="cc-lv-l" style="color:\${_ec};font-size:9px;font-weight:800;">\${_ico}</div>
-      <div class="cc-lv-v" style="color:\${_ec};font-size:13px;">\${idea.entry>0?'$'+fmt(idea.entry):'—'}</div>
-      <div style="font-size:7px;color:\${_ec};margin-top:2px;line-height:1.3;">\${_el}</div>
+    return `<div class="cc-levels">
+    <div class="cc-lv" style="border-color:${_ebd};background:${_ebg};">
+      <div class="cc-lv-l" style="color:${_ec};font-size:9px;font-weight:800;">${_ico}</div>
+      <div class="cc-lv-v" style="color:${_ec};font-size:13px;">${idea.entry>0?'$'+fmt(idea.entry):'—'}</div>
+      <div style="font-size:7px;color:${_ec};margin-top:2px;line-height:1.3;">${_el}</div>
     </div>
-    <div class="cc-lv" style="border-color:\${slPct>0?'#fca5a5':''};">
-      <div class="cc-lv-l">Стоп-лосс</div><div class="cc-lv-v" style="color:var(--red);">\${idea.sl>0?'$'+fmt(idea.sl):'—'}</div>
-      \${slPct>0?\`<div class="cc-lv-p" style="color:var(--red);">+\${slPct.toFixed(1)}%</div>\`:''}
+    <div class="cc-lv" style="border-color:${slPct>0?'#fca5a5':''};">
+      <div class="cc-lv-l">Стоп-лосс</div><div class="cc-lv-v" style="color:var(--red);">${idea.sl>0?'$'+fmt(idea.sl):'—'}</div>
+      ${slPct>0?`<div class="cc-lv-p" style="color:var(--red);">+${slPct.toFixed(1)}%</div>`:''}
     </div>
-    <div class="cc-lv" style="border-color:\${tpPct>0?'#86efac':''};">
-      <div class="cc-lv-l">Тейк-профит</div><div class="cc-lv-v" style="color:var(--green);">\${idea.tp1>0?'$'+fmt(idea.tp1):'—'}</div>
-      \${tpPct>0?\`<div class="cc-lv-p" style="color:var(--green);">-\${tpPct.toFixed(1)}%</div>\`:''}
+    <div class="cc-lv" style="border-color:${tpPct>0?'#86efac':''};">
+      <div class="cc-lv-l">Тейк-профит</div><div class="cc-lv-v" style="color:var(--green);">${idea.tp1>0?'$'+fmt(idea.tp1):'—'}</div>
+      ${tpPct>0?`<div class="cc-lv-p" style="color:var(--green);">-${tpPct.toFixed(1)}%</div>`:''}
     </div>
     <div class="cc-lv">
-      <div class="cc-lv-l">R/R</div><div class="cc-lv-v" style="color:var(--blue);">\${idea.rr>0?idea.rr.toFixed(1)+'×':'—'}</div>
-      \${tpPct>0?\`<div class="cc-lv-p" style="color:var(--muted);">~\${tpPct.toFixed(1)}%</div>\`:''}
+      <div class="cc-lv-l">R/R</div><div class="cc-lv-v" style="color:var(--blue);">${idea.rr>0?idea.rr.toFixed(1)+'×':'—'}</div>
+      ${tpPct>0?`<div class="cc-lv-p" style="color:var(--muted);">~${tpPct.toFixed(1)}%</div>`:''}
     </div>
-  </div>\`;
+  </div>`;
   })()}
   ${(()=>{
     const fi=calcFeeImpact(idea.entry,idea.sl,idea.tp1,idea.dir);
