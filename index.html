@@ -912,6 +912,56 @@ function findStructuralTP(cds1h, cds15m, entry, dir, e20, e50) {
     return entry + atrCalc(s1h || s15m) * 3;
   }
 }
+// ═══ ОТЛОЖЕННЫЕ ОРДЕРА ════════════════════════════════
+// SHORT: SELL STOP ниже лоу 15m, или SELL LIMIT на ретесте EMA20
+// LONG:  BUY STOP выше хая 15m, или BUY STOP на EMA20
+function calcPendingEntry(cds15m, cds1h, dir, e20n, e50n, currentPrice) {
+  const BUF = 0.0008;
+  const n = cds15m ? cds15m.length : 0;
+  if (dir === 'SHORT') {
+    const distFromEma = e20n > 0 ? (currentPrice - e20n) / e20n : 99;
+    // Цена уже возвращается к EMA20 — SELL LIMIT на ретесте
+    if (distFromEma >= 0 && distFromEma < 0.025 && e20n > 0) {
+      const lmtPrice = e20n * (1 + BUF);
+      return { price: lmtPrice, type: 'SELL_LIMIT', label: 'SELL LIMIT · EMA20 ретест', triggerLevel: e20n };
+    }
+    // SELL STOP ниже локального минимума 15m
+    if (n >= 5) {
+      const slice = cds15m.slice(-4, -1);
+      const swingLow = Math.min(...slice.map(c => c.low));
+      if (swingLow > 0 && swingLow < currentPrice) {
+        return { price: swingLow * (1 - BUF), type: 'SELL_STOP', label: 'SELL STOP · пробой лоу', triggerLevel: swingLow };
+      }
+    }
+    if (e20n > 0 && e20n < currentPrice)
+      return { price: e20n * (1 - BUF), type: 'SELL_STOP', label: 'SELL STOP · EMA20', triggerLevel: e20n };
+    return { price: currentPrice, type: 'MARKET', label: 'Рыночный', triggerLevel: currentPrice };
+  }
+  // LONG
+  if (n >= 5) {
+    const slice = cds15m.slice(-4, -1);
+    const swingHigh = Math.max(...slice.map(c => c.high));
+    if (swingHigh > 0) {
+      return { price: swingHigh * (1 + BUF), type: 'BUY_STOP', label: 'BUY STOP · пробой хая', triggerLevel: swingHigh };
+    }
+  }
+  if (e20n > 0) return { price: e20n * (1 + BUF), type: 'BUY_STOP', label: 'BUY STOP · EMA20', triggerLevel: e20n };
+  return { price: currentPrice, type: 'MARKET', label: 'Рыночный', triggerLevel: currentPrice };
+}
+
+// Бонус к скорингу за качество отложенного ордера
+function calcPendingBonus(dir, currentPrice, pendingPrice, rr) {
+  if (!pendingPrice || pendingPrice <= 0) return 0;
+  const dist = dir === 'SHORT'
+    ? (currentPrice - pendingPrice) / currentPrice
+    : (pendingPrice - currentPrice) / currentPrice;
+  let bonus = 0;
+  if (dist > 0.002 && dist < 0.06) bonus += Math.round(Math.min(7, dist * 120));
+  if ((rr || 0) >= 2.0) bonus += 4;
+  if ((rr || 0) >= 3.0) bonus += 3;
+  return Math.min(12, bonus);
+}
+
 function cvdFromCandles(cds){let cum=0;return cds.map(c=>{const b=c.close-c.open,r=c.high-c.low||0.0001;cum+=b/r*c.volume;return cum;});}
 function fmt(n,d=2){if(n==null)return'—';if(Math.abs(n)>=1e9)return(n/1e9).toFixed(1)+'B';if(Math.abs(n)>=1e6)return(n/1e6).toFixed(1)+'M';if(Math.abs(n)>=1000)return n.toLocaleString('en',{maximumFractionDigits:0});if(Math.abs(n)<0.0001)return n.toFixed(6);if(Math.abs(n)<0.01)return n.toFixed(5);if(Math.abs(n)<1)return n.toFixed(4);return n.toFixed(d);}
 function fmtAge(ts){const s=Math.floor((Date.now()-ts)/1000);if(s<60)return s+'с';if(s<3600)return Math.floor(s/60)+'м';return Math.floor(s/3600)+'ч';}
@@ -1061,10 +1111,15 @@ function analyzeFull(cds1h,cds15m){
   const tp2 = tp1 - Math.abs(tp1 - entry) * 0.5; // вторая цель — дальше на 50%
   const slDist = sl - entry;
   const rr = slDist > 0 ? +((entry - tp1) / slDist).toFixed(2) : 0;
+  const phases=[
+    {label:'📈 ПАМП',      done:isPumped,    desc:`+${pumpPct.toFixed(1)}% за 8ч, EMA ${distE20.toFixed(1)}%`},
+    {label:'😮 ИСТОЩЕНИЕ', done:isExhausted, desc:exSigs.slice(0,2).map(s=>s.t).join(' · ')||'нет сигналов'},
+    {label:'🔴 СЛОМ',      done:hasBreakdown,desc:bkSigs.slice(0,2).map(s=>s.t).join(' · ')||'нет слома'},
+  ];
   return{phase,readyToShort,totalScore,pumpPct,pumpSpeed,atrRatio,distE20,volRatio,isPumped,
     exSigs,exScore,isExhausted,rsiNow,macdT,rsiDiv,bkSigs,bkScore,hasBreakdown,cvdFalling,cvdDiv,
     entry,sl,tp1,tp2,rr,atrv,e20_1h:e20n,e50_1h:e50n,e20_15m:e20_15n,price15m:p15,
-    impulseBase:Math.min(...cds1h.slice(-8).map(c=>c.open)),cvdData:cvd15.slice(-80)};
+    phases,impulseBase:Math.min(...cds1h.slice(-8).map(c=>c.open)),cvdData:cvd15.slice(-80)};
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1889,54 +1944,60 @@ async function scoreForIdea(sym){
     const atrv=atrCalc(cds15m.length>14?cds15m:cds1h);
 
     if(shortConf>=MIN_CONF&&shortConf>=longConf&&shortConf>=earlyPumpConf){
-      const entry=p15;
-      // SL — структурный pivot HIGH на 1h (N=3), fallback 15m
+      const pendSh = calcPendingEntry(cds15m, cds1h, 'SHORT', e20n, e50n, p15);
+      const entry = pendSh.price; const entryType = pendSh.type; const entryLabel = pendSh.label;
       const sl  = findStructuralSL(cds1h, cds15m, entry, 'SHORT');
-      // TP — ближайший уровень поддержки НИЖЕ entry (pivot low / EMA), независим от SL
       const tp1 = findStructuralTP(cds1h, cds15m, entry, 'SHORT', e20n, e50n);
-      const tp2 = tp1 - Math.abs(tp1 - entry) * 0.5; // вторая цель — ещё дальше
+      const tp2 = tp1 - Math.abs(tp1 - entry) * 0.5;
       const slDist = sl - entry;
       const rr = slDist > 0 ? +((entry - tp1) / slDist).toFixed(2) : 0;
-      Object.assign(res,{bestDir:'SHORT',bestConf:shortConf,bestSigs:shortSigs,
-        entry,sl,tp1,tp2,rr,atrv,
+      const pendBonus = calcPendingBonus('SHORT', p15, entry, rr);
+      const finalConf = Math.min(96, shortConf + pendBonus);
+      Object.assign(res,{bestDir:'SHORT',bestConf:finalConf,bestSigs:shortSigs,
+        entry,entryType,entryLabel,sl,tp1,tp2,rr,atrv,exec_adj:pendBonus,
         why:`+${pumpPct.toFixed(1)}% за 8ч, ${dist.toFixed(1)}% от EMA20. ${shortSigs.slice(0,2).join(', ')}.`});
 
     } else if(earlyPumpConf>=72&&earlyPumpConf>=longConf){
-      const entry=p15;
-      // SL — структурный pivot LOW на 1h
+      const pendEP = calcPendingEntry(cds15m, cds1h, 'LONG', e20n, e50n, p15);
+      const entry = pendEP.price; const entryType = pendEP.type; const entryLabel = pendEP.label;
       const sl  = findStructuralSL(cds1h, cds15m, entry, 'LONG');
-      // TP — ближайшее сопротивление ВЫШЕ entry
       const tp1 = findStructuralTP(cds1h, cds15m, entry, 'LONG', e20n, e50n);
       const tp2 = tp1 + Math.abs(tp1 - entry) * 0.5;
       const slDist = entry - sl;
-      Object.assign(res,{bestDir:'LONG',bestConf:earlyPumpConf,bestSigs:earlyPumpSigs,
-        entry,sl,tp1,tp2,rr:slDist>0?+((tp1-entry)/slDist).toFixed(2):0,atrv,
+      const rrEP = slDist>0?+((tp1-entry)/slDist).toFixed(2):0;
+      const pendBonusEP = calcPendingBonus('LONG', p15, entry, rrEP);
+      Object.assign(res,{bestDir:'LONG',bestConf:Math.min(96,earlyPumpConf+pendBonusEP),bestSigs:earlyPumpSigs,
+        entry,entryType,entryLabel,sl,tp1,tp2,rr:rrEP,atrv,exec_adj:pendBonusEP,
         why:earlyPumpSigs.join(', '),earlyPump:true,isEarlyPump:true});
 
     } else if(longConf>=MIN_CONF&&longDir){
-      const entry=p15;
-      // SL — структурный pivot LOW на 1h
+      const pendLG = calcPendingEntry(cds15m, cds1h, 'LONG', e20n, e50n, p15);
+      const entry = pendLG.price; const entryType = pendLG.type; const entryLabel = pendLG.label;
       const sl  = findStructuralSL(cds1h, cds15m, entry, 'LONG');
-      // TP — ближайшее сопротивление ВЫШЕ entry
       const tp1 = findStructuralTP(cds1h, cds15m, entry, 'LONG', e20n, e50n);
       const tp2 = tp1 + Math.abs(tp1 - entry) * 0.5;
       const slDist = entry - sl;
-      Object.assign(res,{bestDir:'LONG',bestConf:longConf,bestSigs:longSigs,
-        entry,sl,tp1,tp2,rr:slDist>0?+((tp1-entry)/slDist).toFixed(2):0,atrv,
+      const rrLG = slDist>0?+((tp1-entry)/slDist).toFixed(2):0;
+      const pendBonusLG = calcPendingBonus('LONG', p15, entry, rrLG);
+      Object.assign(res,{bestDir:'LONG',bestConf:Math.min(96,longConf+pendBonusLG),bestSigs:longSigs,
+        entry,entryType,entryLabel,sl,tp1,tp2,rr:rrLG,atrv,exec_adj:pendBonusLG,
         why:longSigs.join(', ')});
 
     } else {
-      // Зарождающийся памп (наблюдение)
+      // Зарождающийся памп → SELL STOP ждём пробоя (не входим по рынку!)
       const isNewPump=pumpPct>=PUMP_THRESH&&pumpSpeed>=5&&volRatio>=1.5;
       if(isNewPump){
-        const slPump = findStructuralSL(cds1h, cds15m, price, 'SHORT');
-        const tpPump = findStructuralTP(cds1h, cds15m, price, 'SHORT', e20n, e50n);
-        const sdPump = slPump - price;
+        const pendPump = calcPendingEntry(cds15m, cds1h, 'SHORT', e20n, e50n, p15);
+        const entryPump = pendPump.price;
+        const slPump = findStructuralSL(cds1h, cds15m, entryPump, 'SHORT');
+        const tpPump = findStructuralTP(cds1h, cds15m, entryPump, 'SHORT', e20n, e50n);
+        const sdPump = slPump - entryPump;
+        const rrPump = sdPump>0?+((entryPump-tpPump)/sdPump).toFixed(2):0;
         Object.assign(res,{bestDir:'ПАМП',bestConf:Math.min(90,50+pumpPct+volRatio*4),
           bestSigs:[`+${pumpPct.toFixed(1)}% за 8ч`,`⚡ +${pumpSpeed.toFixed(1)}%/2ч`,`Vol×${volRatio.toFixed(1)}`],
           why:`Резкий памп +${pumpPct.toFixed(1)}%, Vol×${volRatio.toFixed(1)}`,
-          isPumpSignal:true,entry:price,sl:slPump,tp1:tpPump,tp2:tpPump-Math.abs(tpPump-price)*0.5,
-          rr:sdPump>0?+((price-tpPump)/sdPump).toFixed(2):0,atrv});
+          isPumpSignal:true,entry:entryPump,entryType:pendPump.type,entryLabel:pendPump.label,
+          sl:slPump,tp1:tpPump,tp2:tpPump-Math.abs(tpPump-entryPump)*0.5,rr:rrPump,atrv});
       }
     }
     // Store strategy_conf (pure structural score, before positioning/execution layers)
@@ -2000,18 +2061,20 @@ async function runIdeas(manual=false){
         if(_tpDist<MIN_TP_PCT){console.log('[FILTER] TP',r.sym,_tpDist.toFixed(1)+'%');return;}
         // Фильтр 2: R/R минимум
         if((r.rr||0)<MIN_RR){console.log('[FILTER] RR',r.sym,(r.rr||0).toFixed(2)+'x');return;}
-        // Дедупликация: памп повторно через 1ч, остальные через 2ч
-        const lastTs=S.ideaDedup[r.sym];
+        // Дедупликация: ключ sym_dir — SHORT/LONG и ПАМП не блокируют друг друга
+        const dedupKey = r.bestDir ? `${r.sym}_${r.bestDir}` : r.sym;
+        const lastTs=S.ideaDedup[dedupKey];
         const dedupTTL = r.isPumpSignal ? 3600000 : 7200000; // 1h для пампа, 2h для остальных
         if(lastTs&&now-lastTs<dedupTTL)return;
-        S.ideaDedup[r.sym]=now;
+        S.ideaDedup[dedupKey]=now;
         try{localStorage.setItem('pf_idea_dedup',JSON.stringify(S.ideaDedup));}catch{}
         // Get 24h volume from candidates array
         const candItem = candidates.find(cc=>cc.sym===r.sym);
         const quoteVol24h = candItem ? candItem.vol : 0;
         const ideaObj = {sym:r.sym,dir:r.bestDir,conf:r.bestConf,quoteVol24h:quoteVol24h||0,
           sigs:r.bestSigs||[],why:r.why||'',
-          entry:r.entry,sl:r.sl,tp1:r.tp1,tp2:r.tp2,rr:r.rr,atrv:r.atrv,
+          entry:r.entry,entryType:r.entryType||'MARKET',entryLabel:r.entryLabel||'Рыночный',
+          sl:r.sl,tp1:r.tp1,tp2:r.tp2,rr:r.rr,atrv:r.atrv,
           pumpPct:r.pumpPct,pumpSpeed:r.pumpSpeed,dist:r.dist,
           volRatio:r.volRatio,rsiNow:r.rsiNow,atrRatio:r.atrRatio,
           bodyRatio:r.bodyRatio,trend4h:r.trend4h,cvdFalling:r.cvdFalling,
@@ -2381,7 +2444,7 @@ function showCoinCard(idea,analysis){
     <div class="cc-sl-sep">×</div>
     <div class="cc-sl-item"><div class="cc-sl-lbl">Positioning</div><div class="cc-sl-val" id="cc-sl-pos" style="color:var(--muted);">1.00</div></div>
     <div class="cc-sl-sep">+</div>
-    <div class="cc-sl-item"><div class="cc-sl-lbl">Execution</div><div class="cc-sl-val" id="cc-sl-exec" style="color:var(--muted);">±0</div></div>
+    <div class="cc-sl-item"><div class="cc-sl-lbl">Pending</div><div class="cc-sl-val" id="cc-sl-exec" style="color:${(idea.exec_adj||0)>0?'var(--green)':'var(--muted)'};">${(idea.exec_adj||0)>0?'+':''}${(idea.exec_adj||0).toFixed(0)}</div></div>
     <div class="cc-sl-sep">=</div>
     <div class="cc-sl-item"><div class="cc-sl-lbl">Final</div><div class="cc-sl-val" id="cc-sl-final" style="font-size:11px;color:${confColor};">${confPct.toFixed(0)}</div></div>
   </div>
@@ -2401,12 +2464,33 @@ function showCoinCard(idea,analysis){
       })()}
     </div>
   </div>
-  <div class="cc-levels">
-    <div class="cc-lv"><div class="cc-lv-l">Триггер</div><div class="cc-lv-v">${idea.entry>0?'$'+fmt(idea.entry):'—'}</div></div>
-    <div class="cc-lv" style="border-color:${slPct>0?'#fca5a5':''};"><div class="cc-lv-l">Стоп-лосс</div><div class="cc-lv-v" style="color:var(--red);">${idea.sl>0?'$'+fmt(idea.sl):'—'}</div>${slPct>0?`<div class="cc-lv-p" style="color:var(--red);">+${slPct.toFixed(1)}%</div>`:''}</div>
-    <div class="cc-lv" style="border-color:${tpPct>0?'#86efac':''};"><div class="cc-lv-l">Тейк-профит</div><div class="cc-lv-v" style="color:var(--green);">${idea.tp1>0?'$'+fmt(idea.tp1):'—'}</div>${tpPct>0?`<div class="cc-lv-p" style="color:var(--green);">-${tpPct.toFixed(1)}%</div>`:''}</div>
-    <div class="cc-lv"><div class="cc-lv-l">R/R</div><div class="cc-lv-v" style="color:var(--blue);">${idea.rr>0?idea.rr.toFixed(1)+'×':'—'}</div>${tpPct>0?`<div class="cc-lv-p" style="color:var(--muted);">~${tpPct.toFixed(1)}%</div>`:''}</div>
-  </div>
+  ${(()=>{
+    const _et=idea.entryType||'MARKET';
+    const _el=idea.entryLabel||'Рыночный';
+    const _ico=_et==='SELL_STOP'?'▼ SELL STOP':_et==='SELL_LIMIT'?'▼ SELL LIMIT':_et==='BUY_STOP'?'▲ BUY STOP':_et==='BUY_LIMIT'?'▲ BUY LIMIT':'MKT';
+    const _ec=(_et==='SELL_STOP'||_et==='SELL_LIMIT')?'var(--red)':(_et==='BUY_STOP'||_et==='BUY_LIMIT')?'var(--green)':'var(--muted)';
+    const _ebg=(_et==='SELL_STOP'||_et==='SELL_LIMIT')?'var(--red-bg)':(_et==='BUY_STOP'||_et==='BUY_LIMIT')?'var(--green-bg)':'var(--s2)';
+    const _ebd=(_et==='SELL_STOP'||_et==='SELL_LIMIT')?'var(--red-b)':(_et==='BUY_STOP'||_et==='BUY_LIMIT')?'var(--green-b)':'var(--border)';
+    return \`<div class="cc-levels">
+    <div class="cc-lv" style="border-color:\${_ebd};background:\${_ebg};">
+      <div class="cc-lv-l" style="color:\${_ec};font-size:9px;font-weight:800;">\${_ico}</div>
+      <div class="cc-lv-v" style="color:\${_ec};font-size:13px;">\${idea.entry>0?'$'+fmt(idea.entry):'—'}</div>
+      <div style="font-size:7px;color:\${_ec};margin-top:2px;line-height:1.3;">\${_el}</div>
+    </div>
+    <div class="cc-lv" style="border-color:\${slPct>0?'#fca5a5':''};">
+      <div class="cc-lv-l">Стоп-лосс</div><div class="cc-lv-v" style="color:var(--red);">\${idea.sl>0?'$'+fmt(idea.sl):'—'}</div>
+      \${slPct>0?\`<div class="cc-lv-p" style="color:var(--red);">+\${slPct.toFixed(1)}%</div>\`:''}
+    </div>
+    <div class="cc-lv" style="border-color:\${tpPct>0?'#86efac':''};">
+      <div class="cc-lv-l">Тейк-профит</div><div class="cc-lv-v" style="color:var(--green);">\${idea.tp1>0?'$'+fmt(idea.tp1):'—'}</div>
+      \${tpPct>0?\`<div class="cc-lv-p" style="color:var(--green);">-\${tpPct.toFixed(1)}%</div>\`:''}
+    </div>
+    <div class="cc-lv">
+      <div class="cc-lv-l">R/R</div><div class="cc-lv-v" style="color:var(--blue);">\${idea.rr>0?idea.rr.toFixed(1)+'×':'—'}</div>
+      \${tpPct>0?\`<div class="cc-lv-p" style="color:var(--muted);">~\${tpPct.toFixed(1)}%</div>\`:''}
+    </div>
+  </div>\`;
+  })()}
   ${(()=>{
     const fi=calcFeeImpact(idea.entry,idea.sl,idea.tp1,idea.dir);
     if(!fi) return '';
@@ -2466,9 +2550,22 @@ function showCoinCard(idea,analysis){
     <div class="cc-tb cc-tb-ai"><div class="cc-tb-hd"><span>✦</span><span class="cc-tb-title">AI · Claude</span>${idea.verdict?`<span class="cc-vp" style="background:${verdictBg};color:${verdictTxt};">${idea.verdict}${idea.verdictConf?' '+idea.verdictConf+'%':''}</span>`:''}</div><div class="cc-tb-text">${idea.verdictReason||'<span style="color:var(--dim);">Нажмите ✦ AI анализ</span>'}</div></div>
   </div>
   <div class="cc-phases">
-    <div class="cc-ph-hd"><span class="cc-ph-title">Фазы истощения</span>
-    <div class="cc-ph-score">${[1,2,3].map(i=>`<div class="cc-ph-dot${i<=phaseDone?' done':''}"></div>`).join('')}<span style="font-size:8px;color:var(--amber);font-weight:700;margin-left:3px;">${phaseDone}/3</span></div></div>
-    <div class="cc-ph-tags">${phaseTags}</div>
+    <div class="cc-ph-hd">
+      <span class="cc-ph-title">Фазы памп-фейда</span>
+      <div class="cc-ph-score">
+        ${(a?.phases||[]).map(ph=>`<div class="cc-ph-dot${ph.done?' done':''}" title="${ph.label}"></div>`).join('')}
+        <span style="font-size:8px;color:var(--amber);font-weight:700;margin-left:3px;">${phaseDone}/${a?.phases?.length||3}</span>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;">
+    ${(a?.phases||[]).map(ph=>`
+      <div style="display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:4px;background:${ph.done?'var(--amber-bg)':'var(--s2)'};border:1px solid ${ph.done?'var(--amber-b)':'var(--border)'};">
+        <span style="font-size:10px;">${ph.done?'✅':'○'}</span>
+        <span style="font-size:10px;font-weight:700;color:${ph.done?'#92400e':'var(--muted)'};">${ph.label}</span>
+        ${ph.done&&ph.desc?`<span style="font-size:8px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ph.desc}</span>`:''}
+      </div>`).join('')}
+    ${!(a?.phases?.length)?'<span style="font-size:9px;color:var(--dim);padding:3px 6px;">Загрузите монету для анализа фаз</span>':''}
+    </div>
   </div>
   <div id="ob-container" class="ob-container"><div class="ob-loading ob-connecting">Загрузка стакана и flow...</div></div>
   <div class="cc-actions">
