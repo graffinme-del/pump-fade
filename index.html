@@ -2405,17 +2405,43 @@ async function loadSym(sym,idea=null){
 //  COIN CARD (dynamic zone)
 // ═══════════════════════════════════════════════════════
 // Копирует aiWarning из activeTrack прямо в DOM-элемент карточки
+// + дублирует в чат с Claude справа для видимости
 function fillAIWarn(sym){
   const el=document.getElementById('cc-ai-warn');
   if(!el)return;
   const rec=S.activeTrack?S.activeTrack.find(t=>t.sym===sym):null;
   if(rec&&rec.aiWarning){
-    el.innerHTML='<div style="background:rgba(239,68,68,0.13);border:1px solid rgba(239,68,68,0.35);border-radius:6px;padding:10px 12px;margin:6px 0 4px;font-size:10.5px;line-height:1.6;color:#fca5a5;"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--red);margin-bottom:6px;">🚨 AI ПРЕДУПРЕЖДЕНИЕ</div>'+rec.aiWarning+'</div>';
+    const tsStr=rec.aiWarningTs?new Date(rec.aiWarningTs).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'';
+    el.innerHTML='<div style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.45);border-left:4px solid var(--red);border-radius:6px;padding:12px 14px;margin:6px 0 4px;font-size:11px;line-height:1.65;color:#fca5a5;max-height:none;overflow:visible;"><div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--red);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;"><span>🚨 AI ПРЕДУПРЕЖДЕНИЕ — '+sym.replace('USDT','')+'</span><span style="font-size:8px;color:var(--muted);font-weight:600;">'+tsStr+'</span></div>'+rec.aiWarning+'</div>';
     const vt=document.getElementById('cc-ai-verdict-text');
     if(vt&&!vt.querySelector('b,span[style]'))vt.innerHTML='';
+    pushAIWarningToChat(sym, rec.aiWarning, rec.aiWarningTs);
   }else{
     el.innerHTML='';
   }
+}
+
+// Вставляет предупреждение в правый чат-блок Claude
+function pushAIWarningToChat(sym, text, ts){
+  const chatBox=document.getElementById('chat-messages')||document.getElementById('claude-chat')||document.querySelector('.chat-messages');
+  if(!chatBox)return;
+  const key=sym+'|'+(text||'').slice(0,50);
+  if(chatBox.dataset.lastWarnKey===key)return;
+  chatBox.dataset.lastWarnKey=key;
+  const tsStr=ts?new Date(ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'';
+  const msgEl=document.createElement('div');
+  msgEl.style.cssText='background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);border-left:3px solid var(--red);border-radius:6px;padding:10px 12px;margin:8px 0;font-size:11px;line-height:1.6;color:#fca5a5;';
+  msgEl.innerHTML='<div style="font-size:9px;font-weight:800;color:var(--red);margin-bottom:6px;display:flex;justify-content:space-between;"><span>🚨 АЛЕРТ ПО '+sym.replace('USDT','')+'</span><span style="color:var(--muted);font-weight:600;">'+tsStr+'</span></div>'+text;
+  chatBox.appendChild(msgEl);
+  chatBox.scrollTop=chatBox.scrollHeight;
+}
+
+// Показывает критический баннер вверху страницы, не исчезает сам
+function showUrgentBanner(sym, text){
+  let banner=document.getElementById('urgent-ai-banner');
+  if(!banner){banner=document.createElement('div');banner.id='urgent-ai-banner';banner.style.cssText='position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:99999;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;padding:14px 22px;border-radius:8px;box-shadow:0 8px 30px rgba(220,38,38,0.5);font-size:13px;max-width:560px;line-height:1.5;border:2px solid #fca5a5;animation:pulse 1.5s infinite;';document.body.appendChild(banner);}
+  const _bid='urgent-ai-banner';
+  banner.innerHTML='<div style="display:flex;justify-content:space-between;align-items:start;gap:14px;"><div style="flex:1;"><div style="font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">🚨 СРОЧНО — '+sym.replace('USDT','')+'</div><div>'+text+'</div></div><button onclick="var b=document.getElementById('+JSON.stringify(_bid)+');if(b)b.remove();" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:#fff;font-weight:800;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:11px;">✕ ОК</button></div>';
 }
 
 function showCoinCard(idea,analysis){
@@ -4970,12 +4996,18 @@ CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
                 callClaudeText(prompt, 300).then(reply => {
                   if(!reply) return;
                   rec.aiWarning = reply;
+                  rec.aiWarningTs = Date.now();
                   // Если AI говорит закрывать — критичный алерт
                   const urgentWords = ['закрыть','закрывать','выйти','стоп','опасно','срочно'];
                   const isUrgent = urgentWords.some(w=>reply.toLowerCase().includes(w));
                   if(isUrgent) {
                     notify(`🤖 AI: ${rec.sym.replace('USDT','')} — ЗАКРЫТЬ?`, reply.slice(0,100));
                     playAlert();
+                    setTimeout(() => {
+                      const stillActive = S.activeTrack.find(t => t.sym === rec.sym && t.aiWarning === reply);
+                      if (stillActive) playAlert();
+                    }, 30000);
+                    showUrgentBanner(rec.sym, reply);
                   }
                   if(ideasTab==='active') renderIdeas();
                   // Копируем текст напрямую в DOM элемент карточки — никакой перерисовки
@@ -5328,7 +5360,7 @@ function renderActiveTab(list){
         <div style="height:100%;width:${Math.min(100,rec.progress||0)}%;background:${(rec.progress||0)>70?'var(--green)':'var(--blue)'};border-radius:3px;transition:width .3s;"></div>
       </div>
       ${latestAlert?`<div style="font-size:9px;padding:3px 6px;border-radius:3px;background:var(--s2);border-left:2px solid ${alertColor};color:${alertColor};margin-top:2px;">${latestAlert.msg}</div>`:''}
-      ${rec.aiWarning?`<div style="font-size:9px;padding:4px 6px;border-radius:3px;background:var(--blue-bg);border-left:2px solid var(--blue);color:var(--blue);margin-top:3px;line-height:1.4;">🤖 AI: ${rec.aiWarning.slice(0,120)}${rec.aiWarning.length>120?'…':''}</div>`:''}
+      ${rec.aiWarning?`<div style="font-size:10px;padding:8px 10px;border-radius:5px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);border-left:3px solid var(--red);color:#fca5a5;margin-top:5px;line-height:1.5;cursor:pointer;max-height:80px;overflow:hidden;position:relative;" onclick="event.stopPropagation();this.style.maxHeight=this.style.maxHeight==='none'?'80px':'none';" title="Кликните чтобы развернуть/свернуть"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--red);margin-bottom:4px;">🚨 AI ПРЕДУПРЕЖДЕНИЕ ▼</div>${rec.aiWarning}</div>`:''}
     </div>`;
   }).join('');
 }
