@@ -593,7 +593,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // Claude model: claude-haiku-4-5 (set in callClaude)
 
 // ── CLAUDE API ──────────────────────────────────────────
-const CLAUDE_MODEL = 'claude-haiku-4-5';
+const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 function getClaudeKey(){return localStorage.getItem('claude_api_key')||'';}
 
 // Для вердиктов — возвращает JSON {verdict, confidence, reason}
@@ -672,7 +672,7 @@ const WR_HISTORY_KEY = 'pf_wr_history_v1';
 const ACTIVE_KEY = 'pf_active_v1';
 let PUMP_THRESH = 15;
 let MIN_CONF = 74;        // порог уверенности (было 78 — слишком высоко)
-const MIN_TP_PCT = 5.0;   // минимальный потенциал TP
+const MIN_TP_PCT = 3.0;   // минимальный потенциал TP (3% реально за 1-4ч интрадея)
 const MIN_RR    = 1.1;    // минимальный R/R (было 1.5 — слишком строго)
 
 // ═══════════════════════════════════════════════════════
@@ -1107,26 +1107,39 @@ function calcVWAP(candles15m){
          upper1:vwap+stdev,lower1:vwap-stdev,count:today.length};
 }
 
-// ── Liquidity Sweep detector (15m) ──
+// ── Liquidity Sweep detector v2 (15m) — из pump_fade_strategies_v2 ──
 function detectLiqSweep(candles,lookback=25){
   if(candles.length<lookback+3)return null;
   const pool=candles.slice(-(lookback+2),-2);
   const prev=candles[candles.length-2];
   const last=candles[candles.length-1];
-  // Equal highs/lows — кластеры wick'ов (±0.3%)
   const byHigh=h=>pool.filter(c=>Math.abs(c.high-h)/h<0.003);
   const byLow =l=>pool.filter(c=>Math.abs(c.low -l)/l<0.003);
   const keyHigh=pool.reduce((best,c)=>byHigh(c.high).length>byHigh(best.high).length?c:best,pool[0]).high;
   const keyLow =pool.reduce((best,c)=>byLow(c.low).length >byLow(best.low).length ?c:best,pool[0]).low;
   const hasEqH=byHigh(keyHigh).length>=2;
   const hasEqL=byLow(keyLow).length>=2;
-  // Bear sweep: prev пробил keyHigh вверх, last закрылся ниже (возврат внутрь)
-  const bearSweep=prev.high>keyHigh*1.001&&last.close<keyHigh&&last.close<last.open;
-  // Bull sweep: prev пробил keyLow вниз, last закрылся выше
-  const bullSweep=prev.low<keyLow*0.999&&last.close>keyLow&&last.close>last.open;
+  const avgVol=pool.reduce((s,c)=>s+c.volume,0)/pool.length;
+  const sweepVol=prev.volume>avgVol*1.5; // объём на свече sweep
+  // Bear sweep: пробой keyHigh > 0.3%, возврат с медвежьей структурой
+  const bearExt=(prev.high-keyHigh)/keyHigh;
+  const bearSignificant=bearExt>0.003;
+  const lastBarR=last.high-last.low||0.0001;
+  const lastUpperWick=(last.high-Math.max(last.open,last.close))/lastBarR;
+  const lastClosedBelow=last.close<keyHigh;
+  const bearishStructure=(last.close<last.open&&(last.open-last.close)/last.open>0.003)||(lastUpperWick>0.5);
+  const bearSweep=bearSignificant&&sweepVol&&lastClosedBelow&&bearishStructure;
+  // Bull sweep — симметрично
+  const bullExt=(keyLow-prev.low)/keyLow;
+  const bullSignificant=bullExt>0.003;
+  const lastLowerWick=(Math.min(last.open,last.close)-last.low)/lastBarR;
+  const lastClosedAbove=last.close>keyLow;
+  const bullishStructure=(last.close>last.open&&(last.close-last.open)/last.open>0.003)||(lastLowerWick>0.5);
+  const bullSweep=bullSignificant&&sweepVol&&lastClosedAbove&&bullishStructure;
   return{bearSweep,bullSweep,keyHigh,keyLow,hasEqH,hasEqL,
-         bearExt:bearSweep?(prev.high-keyHigh)/keyHigh*100:0,
-         bullExt:bullSweep?(keyLow-prev.low)/keyLow*100:0};
+         bearExt:bearSweep?bearExt*100:0,
+         bullExt:bullSweep?bullExt*100:0,
+         volRatio:prev.volume/(avgVol||1)};
 }
 
 // ── Asian Range (высчитываем из 1h-свечей, 00:00–06:00 UTC) ──
@@ -1332,24 +1345,51 @@ async function scoreForIdea(sym){
     const exCount = (rsiNow>70?1:0)+(hTurning?1:0)+(cvdDiv?1:0)+(atrRatio>1.5?1:0)+(cvdFalling?1:0);
     const shortCandidates = [];
 
-    // S1. Pump Exhaustion
-    if (isSharpPump && exCount >= 1) {
-      const c = Math.min(96, 38 + pumpPct*1.2 + dist*0.8 + exCount*7 + patBonus);
-      const s = [`▼ Pump Exhaustion: +${pumpPct.toFixed(1)}%, EMA ${dist.toFixed(1)}%`];
-      if (rsiNow>70) s.push(`RSI ${rsiNow.toFixed(0)} перекупленность`);
-      if (hTurning) s.push('MACD ↓ разворот');
-      if (cvdDiv)   s.push('CVD дивергенция');
-      if (cvdFalling) s.push('CVD ↓');
-      allPatterns.filter(p=>p.dir==='bear').forEach(p=>s.push(`🕯 ${p.name} (${p.tf})`));
-      shortCandidates.push({conf:c, sigs:s});
+    // S1. Pump Exhaustion — v2 (exCount≥2, strongSig обязателен)
+    if (pumpPct >= PUMP_THRESH && dist >= 6) {
+      const strongSig = cvdDiv || hTurning;
+      if (exCount >= 2 && strongSig) {
+        // Funding в скоринг (из кэша)
+        const _fc1 = FUNDING_CACHE[sym];
+        let fundingAdj = 0;
+        if (_fc1) {
+          if (_fc1.fr > 0.005) fundingAdj = 5;
+          else if (_fc1.fr < -0.005) fundingAdj = -8;
+        }
+        // Триггер-свеча 15m (+8 бонус, не обязательна)
+        const _last15 = cds15m[cds15m.length-1];
+        const _prev15 = cds15m[cds15m.length-2]||_last15;
+        const _barR15 = _last15.high - _last15.low || 0.0001;
+        const _uwPct15 = (_last15.high - Math.max(_last15.open, _last15.close)) / _barR15;
+        const triggerBonus = (_uwPct15 > 0.5) ||
+          (_last15.close < _last15.open && _prev15.close > _prev15.open) ||
+          (_last15.close < _prev15.low) ? 8 : 0;
+        const c = Math.min(96, 38 + pumpPct*1.2 + dist*0.8 + exCount*7 + patBonus + fundingAdj + triggerBonus);
+        const s = [`▼ Pump Exhaustion: +${pumpPct.toFixed(1)}%, EMA ${dist.toFixed(1)}%`];
+        if (rsiNow>70) s.push(`RSI ${rsiNow.toFixed(0)} перекупленность`);
+        if (hTurning) s.push('MACD ↓ разворот');
+        if (cvdDiv)   s.push('CVD дивергенция ⚠');
+        if (cvdFalling) s.push('CVD ↓');
+        if (fundingAdj > 0 && _fc1) s.push(`Funding +${_fc1.fr.toFixed(4)}% ✓`);
+        if (fundingAdj < 0 && _fc1) s.push(`⚠ Funding ${_fc1.fr.toFixed(4)}% (риск squeeze)`);
+        if (triggerBonus > 0) s.push('🕯 Триггер-свеча 15m ✓');
+        allPatterns.filter(p=>p.dir==='bear').forEach(p=>s.push(`🕯 ${p.name} (${p.tf})`));
+        shortCandidates.push({conf:c, sigs:s});
+      }
     }
 
-    // S2. Начало тренда вниз: цена < EMA50 + пробой EMA20 на 15m
-    if (!trendBanned) {
-      if (price < e50n && confirmBear && ema20_slope < -0.02 && volRatio > 1.1 && cvdFalling) {
-        const c = Math.min(90, 56 + (trend4h==='bear'?12:0) + volRatio*3 + (hTurning?8:0) + patBonus);
-        const s = ['📉 Начало тренда ↓ (цена<EMA50, пробой EMA20)', `EMA20 наклон: ${ema20_slope.toFixed(3)}%, Vol×${volRatio.toFixed(1)}`];
-        if (trend4h==='bear') s.push('4h тренд медвежий ✓');
+    // S2. Начало тренда вниз — структурный пробой (v2)
+    {
+      // 5 из 7 предыдущих 15m-свечей были ВЫШЕ EMA20 (реальная поддержка)
+      const _prevAbove7 = cds15m.slice(-8,-1).filter(c=>c.close>e20_15n).length;
+      const _lastC15 = cds15m[cds15m.length-1];
+      const _atr15 = atrCalc(cds15m.length>14?cds15m:cds1h);
+      // Пробой с импульсом: close < EMA20, close < EMA20 - ATR*0.3
+      const _impulsiveBreak = _lastC15.close < e20_15n && _lastC15.low < e20_15n - _atr15*0.3;
+      if (!trendBanned && _prevAbove7 >= 5 && price < e50n && _impulsiveBreak && volRatio > 1.5 && ema20_slope < -0.05) {
+        const c = Math.min(90, 56 + (trend4h==='bear'?10:0) + volRatio*3 + (hTurning?8:0) + (cvdFalling?6:0) + patBonus);
+        const s = ['📉 Структурный пробой EMA20 ↓ (15m)', `Поддержка ${_prevAbove7}/7 свечей, Vol×${volRatio.toFixed(1)}`];
+        if (trend4h==='bear') s.push('4h медвежий ✓');
         if (hTurning) s.push('MACD ↓');
         if (cvdFalling) s.push('CVD ↓');
         allPatterns.filter(p=>p.dir==='bear').forEach(p=>s.push(`🕯 ${p.name}`));
@@ -1357,62 +1397,83 @@ async function scoreForIdea(sym){
       }
     }
 
-    // S3. Пробой EMA20 ↓ на 1h
+    // S3. Пробой EMA20 ↓ на 1h — с реальной поддержкой (v2)
     {
-      const prevAbove = cds1h.slice(-5,-1).filter(c=>c.close>(e20_1h[n1h-2]||0)).length >= 3;
-      if (prevAbove && price < e20n && volRatio > 1.3 && rsiNow < 60) {
+      // ≥15 часов выше EMA20 до пробоя
+      const _aboveCount1h = cds1h.slice(-17,-1).filter(c=>c.close>(e20_1h[n1h-1]||0)).length;
+      const _bearBody = price<lastC.open && (lastC.open-lastC.close)/lastC.open>0.005;
+      if (_aboveCount1h >= 10 && price < e20n && _bearBody && volRatio > 1.4 && rsiNow < 60) {
         const c = Math.min(89, 60 + (trend4h==='bear'?10:0) + volRatio*2 + (cvdFalling?8:0) + patBonus);
-        const s = ['📉 Пробой EMA20 ↓ на 1h', `Vol×${volRatio.toFixed(1)}, RSI ${rsiNow.toFixed(0)}`];
+        const s = [`📉 Пробой EMA20 ↓ 1h (${_aboveCount1h}ч поддержка)`, `Vol×${volRatio.toFixed(1)}, RSI ${rsiNow.toFixed(0)}`];
         if (cvdFalling) s.push('CVD ↓');
         shortCandidates.push({conf:c, sigs:s});
       }
     }
 
-    // S4. RSI перекупленность + MACD
-    if (rsiNow > 72 && hTurning && cvdFalling) {
-      const c = Math.min(80, 47 + (rsiNow-72)*2 + (cvdDiv?10:0) + (trend4h==='bear'?8:0) + patBonus);
-      const s = [`RSI ${rsiNow.toFixed(0)} перекупленность + MACD ↓`];
-      if (cvdDiv) s.push('CVD дивергенция');
+    // S4. RSI перекупленность + CVDdiv ОБЯЗАТЕЛЬНА (v2, RSI>75)
+    if (rsiNow > 75 && cvdDiv) {
+      // Слом EMA20 на 15m как доп. подтверждение
+      const _ema20broken15 = price < e20_15n;
+      const c = Math.min(78, 49 + (rsiNow-75)*2 + (_ema20broken15?8:0) + (hTurning?5:0) + (trend4h==='bear'?6:0) + patBonus);
+      const s = [`RSI ${rsiNow.toFixed(0)} + CVD дивергенция ⚠`];
+      if (_ema20broken15) s.push('Слом EMA20 15m ✓');
+      if (hTurning) s.push('MACD ↓');
       if (trend4h==='bear') s.push('4h медвежий');
       shortCandidates.push({conf:c, sigs:s});
     }
 
-    // S5. ATR+ROC разворот вниз
-    if (cds4h.length >= 14) {
-      const atrCtx = atrCalc(cds4h,14) / cds4h[cds4h.length-1].close * 100;
-      const roc6 = n1h>=6 && c1h[n1h-6]>0 ? (price-c1h[n1h-6])/c1h[n1h-6]*100 : 0;
-      if (atrCtx >= 0.35 && roc6 >= 2.2 && cvdFalling) {
-        const last15 = cds15m[cds15m.length-1];
-        const barR15 = last15.high - last15.low || 0.0001;
-        const wickTop15 = (last15.high - Math.max(last15.open,last15.close)) / barR15;
-        const bearish15 = last15.close < last15.open || (wickTop15>=0.4 && (last15.close-last15.low)/barR15<=0.55);
-        if (bearish15) {
-          const c = Math.min(88, 66 + atrCtx*5 + (roc6-2.2)*3 + patBonus);
-          const s = [`↩ Разворот: 4h ATR ${atrCtx.toFixed(2)}%, ROC +${roc6.toFixed(1)}%`, '15m отказ на вершине'];
-          if (cvdFalling) s.push('CVD ↓');
+    // S11. Failed Pump / Trap — ложный пробой хая с возвратом (вместо S5)
+    if (pumpPct >= 8 && cds15m.length >= 18) {
+      const _last5 = cds15m.slice(-5);
+      const _prevHighs = cds15m.slice(-16,-5).map(c=>c.high);
+      const _prevHigh = Math.max(..._prevHighs);
+      // Был рывок выше prevHigh (среди последних 5 свечей)
+      const _breakIdx = _last5.findIndex(c=>c.high>_prevHigh*1.002);
+      if (_breakIdx >= 0 && _breakIdx <= 2) {
+        const _lastC = cds15m[cds15m.length-1];
+        const _barR = _lastC.high - _lastC.low || 0.0001;
+        const _uw = (_lastC.high - Math.max(_lastC.open, _lastC.close)) / _barR;
+        const _bearRet = (_lastC.close < _lastC.open && (_lastC.open-_lastC.close)/_lastC.open > 0.005) || (_uw > 0.5);
+        const _avgVol = cds15m.slice(-20,-1).reduce((s,c)=>s+c.volume,0)/19;
+        const _volOK = _lastC.volume > _avgVol * 1.3;
+        const _backBelow = price < _prevHigh;
+        if (_backBelow && _bearRet && _volOK) {
+          const _fc11 = FUNDING_CACHE[sym];
+          const _fundB = (_fc11 && _fc11.fr > 0) ? 5 : 0;
+          const c = Math.min(91, 68 + (cvdDiv?8:0) + (volRatio>2?5:0) + _fundB + patBonus);
+          const s = [`🪤 Failed Pump: ложный пробой $${fmt(_prevHigh)}`, 'Возврат + медвежья свеча',
+            ...(cvdDiv?['CVD не подтвердил хай ⚠']:[]),
+            ...(_fundB?['Funding позитивный ✓']:[])];
           shortCandidates.push({conf:c, sigs:s});
         }
       }
     }
 
-    // S6. Пробой поддержки с объёмом
-    if (volRatio > 2.0 && bodyRatio > 0.6 && lastC.close < lastC.open && rsiNow < 55 && rsiNow > 35) {
-      if (price < e20n && price < e50n && cvdFalling) {
+    // S6. Volume Breakout с базы консолидации (v2 — нужен диапазон < 4% за 14ч)
+    if (cds1h.length >= 15 && volRatio > 2.0 && bodyRatio > 0.6 && lastC.close < lastC.open && rsiNow < 60) {
+      const _base1h = cds1h.slice(-15,-1);
+      const _baseH = Math.max(..._base1h.map(c=>c.high));
+      const _baseL = Math.min(..._base1h.map(c=>c.low));
+      const _baseRange = (_baseH - _baseL) / (_baseL||1);
+      // Пробой ИЗ диапазона: close < beforeLow
+      const _brokeBase = price < _baseL;
+      if (_baseRange < 0.04 && _brokeBase && cvdFalling) {
         const c = Math.min(87, 56 + volRatio*4 + (trend4h==='bear'?8:0) + patBonus);
-        const s = [`📉 Пробой поддержки ×${volRatio.toFixed(1)}`, `Body ${(bodyRatio*100).toFixed(0)}%, RSI ${rsiNow.toFixed(0)}`];
-        allPatterns.filter(p=>p.dir==='bear').forEach(p=>s.push(`🕯 ${p.name}`));
+        const s = [`📉 Пробой базы ↓ ×${volRatio.toFixed(1)} (диапазон ${(_baseRange*100).toFixed(1)}%)`,
+          `Ниже ${fmt(_baseL)}, RSI ${rsiNow.toFixed(0)}`];
         shortCandidates.push({conf:c, sigs:s});
       }
     }
 
-    // S7. Funding Scalp SHORT — экстремальный положительный фандинг (лонги перегружены)
+    // S7. Funding Scalp SHORT — FR > 0.075%, цена в топ-70% диапазона
     {
       const fc=FUNDING_CACHE[sym];
-      if(fc&&fc.fr>0.075){
+      const _isExtremeFund = fc && fc.fr > 0.25; // экстрим — warning, не автовход
+      if(fc&&fc.fr>0.075&&!_isExtremeFund){
         const h24=Math.max(...cds1h.slice(-24).map(c=>c.high));
         const l24=Math.min(...cds1h.slice(-24).map(c=>c.low));
         const rng=h24>l24?(price-l24)/(h24-l24):0.5;
-        if(rng>0.65){
+        if(rng>0.70){
           const excess=fc.fr-0.075;
           const c=Math.min(88,60+excess*200+(rng>0.85?8:0)+(rsiNow>65?5:0)+(cvdFalling?5:0)+patBonus);
           const s=[`💰 Funding Scalp SHORT: FR +${fc.fr.toFixed(4)}% (лонги перегружены)`,
@@ -1424,23 +1485,25 @@ async function scoreForIdea(sym){
       }
     }
 
-    // S8. Liquidity Sweep SHORT — снятие ликвидности выше Equal Highs на 15m
+    // S8. Liquidity Sweep SHORT — Equal Highs ОБЯЗАТЕЛЬНЫ (v2)
     {
       const sw=detectLiqSweep(cds15m,25);
-      if(sw&&sw.bearSweep&&sw.bearExt>0.05){
-        const c=Math.min(91,64+sw.bearExt*25+(sw.hasEqH?10:0)+(cvdDiv?8:0)+(cvdFalling?5:0)+patBonus);
+      if(sw&&sw.bearSweep&&sw.hasEqH){
+        const c=Math.min(91,70+sw.bearExt*15+((sw.volRatio||1)-1.5)*5+(cvdDiv?8:0)+(cvdFalling?5:0)+patBonus);
         const s=[`🎯 Liq Sweep SHORT: +${sw.bearExt.toFixed(2)}% выше ${fmt(sw.keyHigh)}`,
-          sw.hasEqH?'Equal Highs подтверждены ✓':'Локальный хай пробит',
-          ...(cvdDiv?['CVD дивергенция — крупные не покупали']:[]),
+          `Equal Highs ✓ + объём ×${(sw.volRatio||1).toFixed(1)}`,
+          ...(cvdDiv?['CVD дивергенция']:[]),
           ...(cvdFalling?['CVD ↓ после sweep']:[])];
         shortCandidates.push({conf:c,sigs:s});
       }
     }
 
-    // S9. VWAP Reversion SHORT — цена выше верхней полосы (+2σ)
+    // S9. VWAP Reversion SHORT — только во флэте или при экстремальном RSI (v2, count≥16)
     {
       const vw=calcVWAP(cds15m);
-      if(vw&&vw.count>=4&&price>vw.upper2){
+      const _flatMkt = atrRatio < 1.3 && Math.abs(ema20_slope) < 0.05;
+      const _extremeOB = rsiNow > 75 && cvdDiv;
+      if(vw&&vw.count>=16&&price>vw.upper2&&(_flatMkt||_extremeOB)){
         const sigmas=(price-vw.vwap)/vw.stdev;
         const c=Math.min(87,57+(sigmas-2)*8+(rsiNow>65?7:0)+(cvdDiv?8:0)+patBonus);
         const s=[`📊 VWAP Reversion SHORT: +${sigmas.toFixed(1)}σ (${fmt(vw.vwap)})`,
@@ -1451,15 +1514,17 @@ async function scoreForIdea(sym){
       }
     }
 
-    // S10. Asian Range SHORT — цена у верхней границы азиатской сессии
+    // S10. Asian Range SHORT — окно 08-13 UTC (11-16 МСК), 0.3% допуск (v2)
     {
       const utcH=new Date().getUTCHours();
-      if(utcH>=8&&utcH<21){
+      if(utcH>=8&&utcH<13){
         const ar=getAsianRange(sym,cds1h);
         if(ar&&ar.high>0){
           const rngSz=(ar.high-ar.low)/ar.low*100;
-          const nearTop=(ar.high-price)/ar.high<0.004;
-          if(nearTop&&rngSz>0.3){
+          // Диапазон ещё "живой" (цена внутри + 0.3%)
+          const _inRange=price>ar.low*0.997&&price<ar.high*1.003;
+          const nearTop=(ar.high-price)/ar.high<0.003;
+          if(nearTop&&rngSz>0.5&&_inRange){
             const c=Math.min(83,57+(rngSz>1?8:0)+(rsiNow>60?5:0)+(cvdFalling?5:0)+patBonus);
             const s=[`🌍 Asian Range SHORT: у верхней границы $${fmt(ar.high)}`,
               `Диапазон Азии ${rngSz.toFixed(2)}%: ${fmt(ar.low)} – ${fmt(ar.high)}`,
@@ -1470,6 +1535,64 @@ async function scoreForIdea(sym){
       }
     }
 
+    // S11. Failed Pump / Trap — ложный пробой хая с немедленным возвратом
+    if (pumpPct >= 8 && cds15m.length >= 18) {
+      const _prev15HighsS11 = cds15m.slice(-16, -5).map(c => c.high);
+      const _prevHighS11 = Math.max(..._prev15HighsS11);
+      const _last5S11 = cds15m.slice(-5);
+      const _breakoutIdxS11 = _last5S11.findIndex(c => c.high > _prevHighS11 * 1.002);
+      if (_breakoutIdxS11 >= 0 && _breakoutIdxS11 <= 2) {
+        const _currentBackS11 = price < _prevHighS11;
+        const _lastS11 = cds15m[cds15m.length - 1];
+        const _barRS11 = _lastS11.high - _lastS11.low || 0.0001;
+        const _upperWickS11 = (_lastS11.high - Math.max(_lastS11.open, _lastS11.close)) / _barRS11;
+        const _bearReturnS11 =
+          (_lastS11.close < _lastS11.open && (_lastS11.open - _lastS11.close) / _lastS11.open > 0.005) ||
+          (_upperWickS11 > 0.5);
+        const _avgVolS11 = cds15m.slice(-20, -1).reduce((s, c) => s + c.volume, 0) / 19;
+        const _volOKS11 = _lastS11.volume > _avgVolS11 * 1.3;
+        if (_currentBackS11 && _bearReturnS11 && _volOKS11) {
+          const _fcS11 = FUNDING_CACHE[sym];
+          const _fundBonusS11 = (_fcS11 && _fcS11.fr > 0) ? 5 : 0;
+          const c = Math.min(91, 68 + (cvdDiv ? 8 : 0) + (volRatio > 2 ? 5 : 0) + _fundBonusS11 + patBonus);
+          const s = [
+            `🪤 Failed Pump: ложный пробой ${fmt(_prevHighS11)}`,
+            'Возврат под уровень + медвежья свеча',
+            ...(cvdDiv ? ['CVD не подтвердил новый хай ✓'] : []),
+            ...(_fundBonusS11 ? ['Funding позитивный ✓'] : [])
+          ];
+          shortCandidates.push({conf: c, sigs: s});
+        }
+      }
+    }
+
+    // S12. Range Expansion Continuation SHORT — пробой консолидации вниз
+    if (cds15m.length >= 25) {
+      const _baseCdlsS12 = cds15m.slice(-25, -1);
+      const _baseHighS12 = Math.max(..._baseCdlsS12.map(c => c.high));
+      const _baseLowS12 = Math.min(..._baseCdlsS12.map(c => c.low));
+      const _baseRngS12 = (_baseHighS12 - _baseLowS12) / _baseLowS12;
+      const _avgBodyS12 = _baseCdlsS12.reduce((s,c)=>s+Math.abs(c.close-c.open),0)/_baseCdlsS12.length;
+      const _avgVolS12 = _baseCdlsS12.reduce((s,c)=>s+c.volume,0)/_baseCdlsS12.length;
+      const _lastS12 = cds15m[cds15m.length - 1];
+      const _lastBodyS12 = Math.abs(_lastS12.close - _lastS12.open);
+      const _isConsolS12 = _baseRngS12 < 0.025;
+      const _isExpDownS12 =
+        _lastS12.close < _lastS12.open &&
+        _lastBodyS12 > _avgBodyS12 * 2 &&
+        _lastS12.volume > _avgVolS12 * 3 &&
+        _lastS12.close < _baseLowS12;
+      if (_isConsolS12 && _isExpDownS12 && rsiNow < 60) {
+        const c = Math.min(89, 70 + (volRatio > 4 ? 5 : 0) + (trend4h === 'bear' ? 8 : 0) + patBonus);
+        const s = [
+          `💥 Range Expansion ↓: пробой консолидации ${(_baseRngS12*100).toFixed(2)}%`,
+          `Объём ×${(_lastS12.volume/_avgVolS12).toFixed(1)}, тело ×${(_lastBodyS12/_avgBodyS12).toFixed(1)}`,
+          `База: ${fmt(_baseLowS12)} – ${fmt(_baseHighS12)}`
+        ];
+        shortCandidates.push({conf: c, sigs: s});
+      }
+    }
+
     const bestShort = shortCandidates.reduce((b,c)=>c.conf>b.conf?c:b, {conf:0,sigs:[]});
     let shortConf = bestShort.conf, shortSigs = bestShort.sigs;
 
@@ -1477,17 +1600,19 @@ async function scoreForIdea(sym){
     const longCandidates = [];
     let longConf = 0, longDir = null, longSigs = [];
 
-    // L1. Начало тренда вверх: цена > EMA50 + пробой EMA20 на 15m
-    if (!trendBanned) {
-      if (price > e50n && confirmBull && ema20_slope > 0.02 && volRatio > 1.1 && !cvdFalling && trend4h !== 'bear') {
-        const c = Math.min(90, 56 + (trend4h==='bull'?12:trend4h==='bear'?-8:0) + volRatio*3 + (hTurningUp?8:0) + longPatBonus);
-        if (c >= MIN_CONF) {
-          const s = ['📈 Начало тренда ↑ (цена>EMA50, пробой EMA20)', `EMA20 наклон: +${ema20_slope.toFixed(3)}%, Vol×${volRatio.toFixed(1)}`];
-          if (trend4h==='bull') s.push('4h тренд бычий ✓');
-          if (hTurningUp) s.push('MACD ↑');
-          if (!cvdFalling) s.push('CVD ↑');
-          longCandidates.push({conf:c, sigs:s});
-        }
+    // L1. Начало тренда вверх — структурный пробой (v2, симметрично S2)
+    {
+      const _prevBelow7 = cds15m.slice(-8,-1).filter(c=>c.close<e20_15n).length;
+      const _lastC15L = cds15m[cds15m.length-1];
+      const _atr15L = atrCalc(cds15m.length>14?cds15m:cds1h);
+      const _impulsiveBreakL = _lastC15L.close > e20_15n && _lastC15L.high > e20_15n + _atr15L*0.3;
+      if (!trendBanned && _prevBelow7 >= 5 && price > e50n && _impulsiveBreakL && volRatio > 1.5 && ema20_slope > 0.05) {
+        const c = Math.min(90, 56 + (trend4h==='bull'?10:trend4h==='bear'?-6:0) + volRatio*3 + (hTurningUp?8:0) + (!cvdFalling?5:0) + longPatBonus);
+        const s = ['📈 Структурный пробой EMA20 ↑ (15m)', `База ${_prevBelow7}/7 свечей, Vol×${volRatio.toFixed(1)}`];
+        if (trend4h==='bull') s.push('4h бычий ✓');
+        if (hTurningUp) s.push('MACD ↑');
+        if (!cvdFalling) s.push('CVD ↑');
+        longCandidates.push({conf:c, sigs:s});
       }
     }
 
@@ -1495,51 +1620,93 @@ async function scoreForIdea(sym){
     {
       const nowBull = price > e20n && e20n > e50n;
       const prevBull = c1h[n1h-1] > e20_1h[n1h-1] && e20_1h[n1h-1] > e50_1h[n1h-1];
-      if (nowBull && volRatio > 1.1 && rsiNow > 45 && rsiNow < 75 && trend4h !== 'bear') {
+      if (nowBull && volRatio > 1.1 && rsiNow > 42 && rsiNow < 78) {
         const fresh = !prevBull ? 15 : 0;
-        const c = Math.min(90, 52 + fresh + (trend4h==='bull'?12:trend4h==='bear'?-8:0) + volRatio*3 + (hTurningUp?8:0) + longPatBonus);
-        if (c >= MIN_CONF) {
-          const s = ['📈 EMA стек ↑ на 1h', fresh?'Только что выровнялся':trend4h==='bull'?'4h бычий':'', !cvdFalling?'CVD ↑':''].filter(Boolean);
-          longCandidates.push({conf:c, sigs:s});
-        }
-      }
-    }
-
-    // L3. Разворот ATR+ROC вверх
-    if (cds1h.length > 20) {
-      const atrPctVal = atrNow / price * 100;
-      const roc12 = n1h>=12 && c1h[n1h-12]>0 ? (price-c1h[n1h-12])/c1h[n1h-12]*100 : 0;
-      if (atrPctVal >= 0.22 && roc12 <= -1.8 && rsiNow < 45 && hTurningUp) {
-        const lastBar = cds1h[n1h];
-        const wickBot = (Math.min(lastBar.open,lastBar.close) - lastBar.low) / (lastBar.high - lastBar.low || 0.001);
-        if (wickBot >= 0.3 || lastBar.close > lastBar.open) {
-          const c = Math.min(84, 56 + Math.abs(roc12)*1.5 + (hTurningUp?10:0) + (rsiNow<35?8:0));
-          if (c >= MIN_CONF) {
-            longCandidates.push({conf:c, sigs:[`↩ Разворот: ATR ${atrPctVal.toFixed(2)}%, ROC ${roc12.toFixed(1)}%`, `RSI ${rsiNow.toFixed(0)} перепродан`, 'MACD ↑']});
-          }
-        }
-      }
-    }
-
-    // L4. Volume Breakout вверх
-    if (volRatio > 2.5 && bodyRatio > 0.65 && lastC.close > lastC.open && rsiNow > 50 && rsiNow < 75 && trend4h !== 'bear') {
-      const c = Math.min(84, 52 + volRatio*4 + (trend4h==='bull'?10:0));
-      if (c >= MIN_CONF) {
-        const s = [`🚀 Volume Breakout ×${volRatio.toFixed(1)}`, `Body ${(bodyRatio*100).toFixed(0)}%`, trend4h==='bull'?'4h бычий':''].filter(Boolean);
+        const c = Math.min(90, 52 + fresh + (trend4h==='bull'?10:trend4h==='bear'?-6:0) + volRatio*3 + (hTurningUp?8:0) + (!cvdFalling?5:0) + longPatBonus);
+        const s = ['📈 EMA стек ↑ на 1h', fresh?'Только что выровнялся':trend4h==='bull'?'4h бычий':'', !cvdFalling?'CVD ↑':''].filter(Boolean);
         longCandidates.push({conf:c, sigs:s});
       }
     }
 
-    // L5. RSI перепроданность
-    if (rsiNow < 32 && rsiNow15 < 38) {
-      const c = Math.min(87, 62 + (hTurningUp?10:0) + (rsiNow<25?8:0) + (!cvdFalling?5:0) + (trend4h==='bull'?4:0));
-      const s = [`📉 RSI перепроданность: 1h ${rsiNow.toFixed(0)}, 15m ${rsiNow15.toFixed(0)}`, hTurningUp?'MACD ↑':'', trend4h==='bull'?'4h бычий':''].filter(Boolean);
-      longCandidates.push({conf:c, sigs:s});
+    // L11. Failed Breakdown Reversal — ложный пробой минимума с возвратом (вместо L3)
+    if (cds15m.length >= 18) {
+      const _prev15Lows = cds15m.slice(-16, -5).map(c => c.low);
+      const _prevLowFB = Math.min(..._prev15Lows);
+      const _last5FB = cds15m.slice(-5);
+      const _breakdownIdx = _last5FB.findIndex(c => c.low < _prevLowFB * 0.998);
+      if (_breakdownIdx >= 0 && _breakdownIdx <= 2) {
+        const _currentBackL = price > _prevLowFB;
+        const _lastFB = cds15m[cds15m.length - 1];
+        const _barRL = _lastFB.high - _lastFB.low || 0.0001;
+        const _lowerWickFB = (Math.min(_lastFB.open, _lastFB.close) - _lastFB.low) / _barRL;
+        const _bullReturn =
+          (_lastFB.close > _lastFB.open && (_lastFB.close - _lastFB.open) / _lastFB.open > 0.005) ||
+          (_lowerWickFB > 0.5);
+        const _avgVolFB = cds15m.slice(-20, -1).reduce((s, c) => s + c.volume, 0) / 19;
+        const _volOKFB = _lastFB.volume > _avgVolFB * 1.3;
+        const _cvdNoConfirmL = !cvdFalling;
+        if (_currentBackL && _bullReturn && _volOKFB) {
+          const _utcHFB = new Date().getUTCHours();
+          const _sessionBonus = (_utcHFB >= 0 && _utcHFB < 7) ? 8 : 0;
+          const c = Math.min(91, 68 + (_cvdNoConfirmL ? 8 : 0) + (volRatio > 2 ? 5 : 0) + _sessionBonus + longPatBonus);
+          const s = [
+            `🔄 Failed Breakdown: ложный пробой ${fmt(_prevLowFB)}`,
+            'Возврат над уровень + бычья свеча',
+            ...(_cvdNoConfirmL ? ['CVD не подтвердил минимум ✓'] : []),
+            ...(_sessionBonus ? ['Утренний sweep (азия → европа) ✓'] : [])
+          ];
+          longCandidates.push({conf: c, sigs: s});
+        }
+      }
     }
 
-    const bestLong = longCandidates.reduce((b,c)=>c.conf>b.conf?c:b, {conf:0,sigs:[]});
-    longConf = bestLong.conf; longSigs = bestLong.sigs;
-    if (longConf >= MIN_CONF) longDir = 'LONG';
+    // L4. Volume Breakout вверх — с базой консолидации (v2: 14h < 4%, close > beforeHigh)
+    if (cds1h.length >= 15 && volRatio > 2.0 && bodyRatio > 0.6 && lastC.close > lastC.open && rsiNow > 40 && rsiNow < 78) {
+      const _baseL4 = cds1h.slice(-15, -1);
+      const _baseHighL4 = Math.max(..._baseL4.map(c => c.high));
+      const _baseLowL4 = Math.min(..._baseL4.map(c => c.low));
+      const _baseRngL4 = (_baseHighL4 - _baseLowL4) / _baseLowL4;
+      const _breakoutL4 = price > _baseHighL4 * 1.001;
+      if (_baseRngL4 < 0.04 && _breakoutL4) {
+        const c = Math.min(87, 52 + volRatio * 4 + (trend4h === 'bull' ? 10 : trend4h === 'bear' ? -6 : 0) + longPatBonus);
+        const s = [
+          `🚀 Volume Breakout ↑ ×${volRatio.toFixed(1)}: пробой базы ${(_baseRngL4*100).toFixed(1)}%`,
+          `Body ${(bodyRatio*100).toFixed(0)}%, база 14h: ${fmt(_baseLowL4)}–${fmt(_baseHighL4)}`,
+          trend4h === 'bull' ? '4h бычий ✓' : ''
+        ].filter(Boolean);
+        longCandidates.push({conf: c, sigs: s});
+      }
+    }
+
+    // L5. RSI Reversal — RSI был < 30, теперь отскакивает 30-42 (не ловля ножа)
+    {
+      const _rsiArr1h = rsi(c1h);
+      const _rsiN = _rsiArr1h.length;
+      // RSI был ниже 30 в последние 3 свечи и сейчас 30–42 (отскок)
+      const _rsiWasLow = _rsiN >= 3 && (_rsiArr1h[_rsiN-2] < 30 || _rsiArr1h[_rsiN-3] < 30 || _rsiArr1h[_rsiN-4] < 30);
+      const _rsiBouncing = rsiNow >= 30 && rsiNow <= 42;
+      const _rsiMovingUp = _rsiN >= 3 && _rsiArr1h[_rsiN-3] < rsiNow - 3;
+      if (_rsiWasLow && _rsiBouncing && _rsiMovingUp) {
+        // Бычья 15m свеча подтверждения
+        const _last15L5 = cds15m[cds15m.length-1];
+        const _barRL5 = _last15L5.high - _last15L5.low || 0.0001;
+        const _lowerWickL5 = (Math.min(_last15L5.open, _last15L5.close) - _last15L5.low) / _barRL5;
+        const _avgVolL5 = cds15m.slice(-20,-1).reduce((s,c)=>s+c.volume,0)/19;
+        const _bullConfirm15 =
+          (_lowerWickL5 > 0.5) ||
+          (_last15L5.close > _last15L5.open && (_last15L5.close-_last15L5.open)/_last15L5.open > 0.003 && _last15L5.volume > _avgVolL5 * 1.2);
+        if (_bullConfirm15) {
+          const c = Math.min(87, 60 + (hTurningUp ? 10 : 0) + (!cvdFalling ? 5 : 0) + (trend4h === 'bull' ? 4 : 0) + longPatBonus);
+          const s = [
+            `📉 RSI Reversal: 1h RSI ${rsiNow.toFixed(0)} отскок от перепроданности`,
+            `Был < 30, сейчас ${rsiNow.toFixed(0)} ↑`,
+            ...(hTurningUp ? ['MACD ↑'] : []),
+            ...(!cvdFalling ? ['CVD ↑'] : [])
+          ];
+          longCandidates.push({conf: c, sigs: s});
+        }
+      }
+    }
 
     // ── Ранний памп 5m (early_pump_scanner.py) ─────────────
     let earlyPumpConf=0,earlyPumpSigs=[];
@@ -1595,10 +1762,10 @@ async function scoreForIdea(sym){
     // L7. Liquidity Sweep LONG — снятие ликвидности ниже Equal Lows на 15m
     {
       const sw=detectLiqSweep(cds15m,25);
-      if(sw&&sw.bullSweep&&sw.bullExt>0.05){
-        const c=Math.min(91,64+sw.bullExt*25+(sw.hasEqL?10:0)+(!cvdFalling?8:0)+longPatBonus);
+      if(sw&&sw.bullSweep&&sw.hasEqL&&sw.bullExt>0.05){
+        const c=Math.min(91,70+sw.bullExt*15+(sw.volRatio-1.5)*5+(!cvdFalling?8:0)+longPatBonus);
         const s=[`🎯 Liq Sweep LONG: -${sw.bullExt.toFixed(2)}% ниже ${fmt(sw.keyLow)}`,
-          sw.hasEqL?'Equal Lows подтверждены ✓':'Локальный лоу пробит',
+          `Equal Lows ✓ + объём ×${sw.volRatio.toFixed(1)}`,
           ...(!cvdFalling?['CVD ↑ после sweep']:[])];
         longCandidates.push({conf:c,sigs:s});
       }
@@ -1607,40 +1774,48 @@ async function scoreForIdea(sym){
     // L8. VWAP Mean Reversion LONG — цена ниже нижней полосы (-2σ)
     {
       const vw=calcVWAP(cds15m);
-      if(vw&&vw.count>=4&&price<vw.lower2){
+      const _flatMktL8 = atrRatio < 1.3 && Math.abs(ema20_slope) < 0.05;
+      const _extremeOSL8 = rsiNow < 30 && !cvdFalling;
+      if(vw&&vw.count>=16&&price<vw.lower2&&(_flatMktL8||_extremeOSL8)){
         const sigmas=(vw.vwap-price)/vw.stdev;
         const c=Math.min(87,57+(sigmas-2)*8+(rsiNow<40?7:0)+(!cvdFalling?5:0)+longPatBonus);
         const s=[`📊 VWAP Reversion LONG: -${sigmas.toFixed(1)}σ от VWAP ($${fmt(vw.vwap)})`,
           `Нижняя полоса: $${fmt(vw.lower2)}`,
-          ...(rsiNow<40?[`RSI ${rsiNow.toFixed(0)} — перепроданность`]:[])];
+          ...(rsiNow<40?[`RSI ${rsiNow.toFixed(0)} — перепроданность`]:[]),
+          ...(_flatMktL8?['Рынок флэт ✓']:[])];
         longCandidates.push({conf:c,sigs:s});
       }
     }
 
-    // L9. VWAP Trend Continuation LONG — откат к VWAP в бычьем 4h тренде
+    // L9. VWAP Trend Continuation LONG — откат к VWAP при бычьей структуре 1h
     {
       const vw=calcVWAP(cds15m);
-      if(vw&&vw.count>=6&&trend4h==='bull'){
+      // Используем 1h структуру вместо 4h (price>EMA50 = бычья среднесрочная)
+      const bull1h = price > e50n && e20n > e50n;
+      if(vw&&vw.count>=16&&bull1h){
         const atVwap=price>=vw.lower1&&price<=vw.upper1;
         const abovePct=cds15m.slice(-vw.count).filter(c=>c.close>vw.vwap).length/vw.count;
-        if(atVwap&&abovePct>0.6&&!cvdFalling&&volRatio<1.5){
-          const c=Math.min(86,58+(abovePct-0.6)*50+(rsiNow>45&&rsiNow<65?7:0)+longPatBonus);
-          const s=[`📊 VWAP Trend LONG: откат к VWAP в бычьем тренде`,
-            `VWAP $${fmt(vw.vwap)} · ${(abovePct*100).toFixed(0)}% дня выше · 4h бычий ✓`];
-          longCandidates.push({conf:c,sigs:s});
+        if(atVwap&&abovePct>0.55&&volRatio<1.8){
+          const c=Math.min(87,58+(abovePct-0.55)*50+(rsiNow>42&&rsiNow<65?8:0)+(!cvdFalling?6:0)+longPatBonus);
+          const s=[`📊 VWAP Trend LONG: откат к VWAP (1h бычий)`,
+            `VWAP $${fmt(vw.vwap)} · ${(abovePct*100).toFixed(0)}% дня выше`,
+            trend4h==='bull'?'4h бычий ✓':''];
+          longCandidates.push({conf:c,sigs:s.filter(Boolean)});
         }
       }
     }
 
-    // L10. Asian Range LONG — цена у нижней границы азиатской сессии
+    // L10. Asian Range LONG — цена у нижней границы, окно 08-13 UTC (11-16 МСК, v2)
     {
       const utcH=new Date().getUTCHours();
-      if(utcH>=8&&utcH<21){
+      if(utcH>=8&&utcH<13){
         const ar=getAsianRange(sym,cds1h);
         if(ar&&ar.low>0){
           const rngSz=(ar.high-ar.low)/ar.low*100;
-          const nearBot=(price-ar.low)/ar.low<0.004;
-          if(nearBot&&rngSz>0.3){
+          // Диапазон ещё "живой" (цена внутри + 0.3%)
+          const _inRangeL10=price>ar.low*0.997&&price<ar.high*1.003;
+          const nearBot=(price-ar.low)/ar.low<0.003;
+          if(nearBot&&rngSz>0.5&&_inRangeL10){
             const c=Math.min(83,57+(rngSz>1?8:0)+(rsiNow<45?5:0)+(!cvdFalling?5:0)+longPatBonus);
             const s=[`🌏 Asian Range LONG: у нижней границы $${fmt(ar.low)}`,
               `Диапазон Азии ${rngSz.toFixed(2)}%: ${fmt(ar.low)} – ${fmt(ar.high)}`,
@@ -1650,6 +1825,38 @@ async function scoreForIdea(sym){
         }
       }
     }
+
+    // L12. Range Expansion Continuation LONG — пробой консолидации вверх
+    if (cds15m.length >= 25) {
+      const _baseCdlsL12 = cds15m.slice(-25, -1);
+      const _baseHighL12 = Math.max(..._baseCdlsL12.map(c => c.high));
+      const _baseLowL12 = Math.min(..._baseCdlsL12.map(c => c.low));
+      const _baseRngL12 = (_baseHighL12 - _baseLowL12) / _baseLowL12;
+      const _avgBodyL12 = _baseCdlsL12.reduce((s,c)=>s+Math.abs(c.close-c.open),0)/_baseCdlsL12.length;
+      const _avgVolL12 = _baseCdlsL12.reduce((s,c)=>s+c.volume,0)/_baseCdlsL12.length;
+      const _lastL12 = cds15m[cds15m.length-1];
+      const _lastBodyL12 = Math.abs(_lastL12.close - _lastL12.open);
+      const _isConsolL12 = _baseRngL12 < 0.025;
+      const _isExpUpL12 =
+        _lastL12.close > _lastL12.open &&
+        _lastBodyL12 > _avgBodyL12 * 2 &&
+        _lastL12.volume > _avgVolL12 * 3 &&
+        _lastL12.close > _baseHighL12;
+      if (_isConsolL12 && _isExpUpL12 && rsiNow > 40) {
+        const c = Math.min(89, 70 + (volRatio > 4 ? 5 : 0) + (trend4h === 'bull' ? 8 : 0) + longPatBonus);
+        const s = [
+          `💥 Range Expansion ↑: пробой консолидации ${(_baseRngL12*100).toFixed(2)}%`,
+          `Объём ×${(_lastL12.volume/_avgVolL12).toFixed(1)}, тело ×${(_lastBodyL12/_avgBodyL12).toFixed(1)}`,
+          `База: ${fmt(_baseLowL12)} – ${fmt(_baseHighL12)}`
+        ];
+        longCandidates.push({conf: c, sigs: s});
+      }
+    }
+
+    // Выбираем лучший LONG из всех кандидатов (L1-L12)
+    const bestLong = longCandidates.reduce((b,c)=>c.conf>b.conf?c:b, {conf:0,sigs:[]});
+    longConf = bestLong.conf; longSigs = bestLong.sigs;
+    if (longConf >= MIN_CONF) longDir = 'LONG';
 
     // BTC коррекция (краткосрочная — по 1h изменению)
     if(typeof BTC_STATE!=='undefined'&&BTC_STATE.change1m){
@@ -1663,13 +1870,13 @@ async function scoreForIdea(sym){
     if(typeof BTC_STATE!=='undefined'&&BTC_STATE.regime){
       const reg=BTC_STATE.regime;
       if((reg==='trend-up'||reg==='mild-up')&&shortConf>0){
-        const pen=reg==='trend-up'?10:5;
+        const pen=reg==='trend-up'?5:2; // мягче — SHORT в бычьем BTC работает на истощении
         shortConf=Math.max(0,shortConf-pen);
         if(shortSigs.length)shortSigs=[...shortSigs,`⚠ BTC ${reg==='trend-up'?'тренд':'мягкий'} ↑ (-${pen})`];
         console.log('[REGIME] BTC',reg,'→ shortConf-',pen,'для',sym);
       }
       if((reg==='trend-down'||reg==='mild-down')&&longConf>0){
-        const pen=reg==='trend-down'?8:4;
+        const pen=reg==='trend-down'?5:2;
         longConf=Math.max(0,longConf-pen);
         if(longSigs.length)longSigs=[...longSigs,`⚠ BTC ${reg==='trend-down'?'тренд':'мягкий'} ↓ (-${pen})`];
       }
