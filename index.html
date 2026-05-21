@@ -935,7 +935,13 @@ function calcPendingEntry(cds15m, cds1h, dir, e20n, e50n, currentPrice) {
     }
     if (e20n > 0 && e20n < currentPrice)
       return { price: e20n * (1 - BUF), type: 'SELL_STOP', label: 'SELL STOP · EMA20', triggerLevel: e20n };
-    return { price: currentPrice, type: 'MARKET', label: 'Рыночный', triggerLevel: currentPrice };
+    // Фолбек: лоу 1H или -0.3% — никогда не рынок
+    if (cds1h && cds1h.length >= 3) {
+      const sl1h = Math.min(...cds1h.slice(-3, -1).map(c => c.low));
+      if (sl1h > 0 && sl1h < currentPrice)
+        return { price: sl1h * (1 - BUF), type: 'SELL_STOP', label: 'SELL STOP · лоу 1H', triggerLevel: sl1h };
+    }
+    return { price: currentPrice * (1 - 0.003), type: 'SELL_STOP', label: 'SELL STOP · -0.3%', triggerLevel: currentPrice * (1 - 0.003) };
   }
   // LONG
   if (n >= 5) {
@@ -946,7 +952,13 @@ function calcPendingEntry(cds15m, cds1h, dir, e20n, e50n, currentPrice) {
     }
   }
   if (e20n > 0) return { price: e20n * (1 + BUF), type: 'BUY_STOP', label: 'BUY STOP · EMA20', triggerLevel: e20n };
-  return { price: currentPrice, type: 'MARKET', label: 'Рыночный', triggerLevel: currentPrice };
+  // Фолбек: хай 1H или +0.3% — никогда не рынок
+  if (cds1h && cds1h.length >= 3) {
+    const sh1h = Math.max(...cds1h.slice(-3, -1).map(c => c.high));
+    if (sh1h > 0 && sh1h > currentPrice)
+      return { price: sh1h * (1 + BUF), type: 'BUY_STOP', label: 'BUY STOP · хай 1H', triggerLevel: sh1h };
+  }
+  return { price: currentPrice * (1 + 0.003), type: 'BUY_STOP', label: 'BUY STOP · +0.3%', triggerLevel: currentPrice * (1 + 0.003) };
 }
 
 // Бонус к скорингу за качество отложенного ордера
@@ -1105,7 +1117,10 @@ function analyzeFull(cds1h,cds15m){
   if(isPumped&&isExhausted)phase=2;
   if(isPumped&&isExhausted&&hasBreakdown)phase=3;
   const readyToShort=phase===3&&totalScore>=10;
-  const atrv=atrCalc(cds15m),entry=p15;
+  const atrv=atrCalc(cds15m);
+  // Отложенный ордер вместо рыночного входа
+  const _pendAF=calcPendingEntry(cds15m,cds1h,'SHORT',e20n,e50n,p15);
+  const entry=_pendAF.price;
   const sl  = findStructuralSL(cds1h, cds15m, entry, 'SHORT');
   const tp1 = findStructuralTP(cds1h, cds15m, entry, 'SHORT', e20n, e50n);
   const tp2 = tp1 - Math.abs(tp1 - entry) * 0.5; // вторая цель — дальше на 50%
@@ -2073,7 +2088,7 @@ async function runIdeas(manual=false){
         const quoteVol24h = candItem ? candItem.vol : 0;
         const ideaObj = {sym:r.sym,dir:r.bestDir,conf:r.bestConf,quoteVol24h:quoteVol24h||0,
           sigs:r.bestSigs||[],why:r.why||'',
-          entry:r.entry,entryType:r.entryType||'MARKET',entryLabel:r.entryLabel||'Рыночный',
+          entry:r.entry,entryType:r.entryType||'SELL_STOP',entryLabel:r.entryLabel||'SELL STOP',
           sl:r.sl,tp1:r.tp1,tp2:r.tp2,rr:r.rr,atrv:r.atrv,
           pumpPct:r.pumpPct,pumpSpeed:r.pumpSpeed,dist:r.dist,
           volRatio:r.volRatio,rsiNow:r.rsiNow,atrRatio:r.atrRatio,
@@ -2465,7 +2480,7 @@ function showCoinCard(idea,analysis){
     </div>
   </div>
   ${(()=>{
-    const _et=idea.entryType||'MARKET';
+    const _et=idea.entryType||'SELL_STOP';
     const _el=idea.entryLabel||'Рыночный';
     const _ico=_et==='SELL_STOP'?'▼ SELL STOP':_et==='SELL_LIMIT'?'▼ SELL LIMIT':_et==='BUY_STOP'?'▲ BUY STOP':_et==='BUY_LIMIT'?'▲ BUY LIMIT':'MKT';
     const _ec=(_et==='SELL_STOP'||_et==='SELL_LIMIT')?'var(--red)':(_et==='BUY_STOP'||_et==='BUY_LIMIT')?'var(--green)':'var(--muted)';
@@ -2547,7 +2562,7 @@ function showCoinCard(idea,analysis){
   </div>
   <div class="cc-text-section">
     <div class="cc-tb cc-tb-agent"><div class="cc-tb-hd"><span>⚡</span><span class="cc-tb-title">Сигналы агента</span></div><div class="cc-tb-text">${(idea.sigs||[]).join('<br>')||idea.why||'—'}</div></div>
-    <div class="cc-tb cc-tb-ai"><div class="cc-tb-hd"><span>✦</span><span class="cc-tb-title">AI · Claude</span>${idea.verdict?`<span class="cc-vp" style="background:${verdictBg};color:${verdictTxt};">${idea.verdict}${idea.verdictConf?' '+idea.verdictConf+'%':''}</span>`:''}</div><div class="cc-tb-text">${idea.verdictReason||'<span style="color:var(--dim);">Нажмите ✦ AI анализ</span>'}</div></div>
+    <div class="cc-tb cc-tb-ai"><div class="cc-tb-hd"><span>✦</span><span class="cc-tb-title">AI · Claude</span>${idea.verdict?`<span class="cc-vp" style="background:${verdictBg};color:${verdictTxt};">${idea.verdict}${idea.verdictConf?' '+idea.verdictConf+'%':''}</span>`:''}</div>${idea.aiWarning?`<div style="background:rgba(239,68,68,0.13);border:1px solid rgba(239,68,68,0.35);border-radius:6px;padding:9px 11px;margin:6px 0 5px;font-size:10.5px;line-height:1.55;color:#fca5a5;"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--red);margin-bottom:5px;">🚨 AI ПРЕДУПРЕЖДЕНИЕ</div>${idea.aiWarning}</div>`:''}<div class="cc-tb-text">${idea.verdictReason||(!idea.aiWarning?'<span style="color:var(--dim);">Нажмите ✦ AI анализ</span>':'')}</div></div>
   </div>
   <div class="cc-phases">
     <div class="cc-ph-hd">
@@ -4945,6 +4960,8 @@ CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
                     playAlert();
                   }
                   if(ideasTab==='active') renderIdeas();
+                  // Обновляем карточку монеты если открыта для этой монеты
+                  if(S.sym===rec.sym) openActiveCard(rec.sym);
                 });
               }
             }
@@ -5234,9 +5251,11 @@ async function openActiveCard(sym){
             tp1:rec?.tp1||0, tp2:rec?.tp1||0, rr:rec?.rr||0, conf:rec?.conf||70,
             pumpPct:rec?.pumpPct||0, rsiNow:rec?.rsiNow||50,
             sigs:[], why:'', ts:rec?.addedAt||Date.now(),
-            cds1h:c1h, cds15m:c15m};
+            cds1h:c1h, cds15m:c15m,
+            aiWarning:rec?.aiWarning||'', alerts:rec?.alerts||[]};
   } else {
-    idea = {...idea, cds1h:c1h, cds15m:c15m};
+    idea = {...idea, cds1h:c1h, cds15m:c15m,
+            aiWarning:rec?.aiWarning||'', alerts:rec?.alerts||[]};
   }
   S.sym=sym; S.cds1h=c1h; S.cds15m=c15m;
   S.cvdData=cvdFromCandles(c15m.slice(-80));
