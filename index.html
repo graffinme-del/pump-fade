@@ -2407,6 +2407,9 @@ async function loadSym(sym,idea=null){
 function showCoinCard(idea,analysis){
   const dz=document.getElementById('dynamic-zone');if(!dz)return;
   S.phase=0;           // карточка монеты — WR/phase-обновления не трогают dynamic-zone
+  // Всегда подтягиваем aiWarning из activeTrack — независимо от источника вызова
+  const _activeRec = S.activeTrack ? S.activeTrack.find(t=>t.sym===idea.sym) : null;
+  if(_activeRec?.aiWarning && !idea.aiWarning) idea = {...idea, aiWarning:_activeRec.aiWarning};
   S.activeCardIdea = idea; // track for positioning/execution layer updates
   const a=analysis||S.analysis;
   const dc=idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
@@ -4960,8 +4963,11 @@ CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
                     playAlert();
                   }
                   if(ideasTab==='active') renderIdeas();
-                  // Обновляем карточку монеты если открыта для этой монеты
-                  if(S.sym===rec.sym) openActiveCard(rec.sym);
+                  // Немедленно обновляем карточку если открыта для этой монеты
+                  if(S.sym===rec.sym && S.activeCardIdea){
+                    S.activeCardIdea = {...S.activeCardIdea, aiWarning:reply};
+                    showCoinCard(S.activeCardIdea, S.analysis||{});
+                  }
                 });
               }
             }
