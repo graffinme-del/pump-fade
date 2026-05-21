@@ -518,6 +518,78 @@ button:hover{opacity:.85;}
 // ═══════════════════════════════════════════════════════
 const FAPI   = 'https://fapi.binance.com/fapi/v1';
 const BINANCE = FAPI; // same — futures API has no CORS issues
+
+// ═══════════════════════════════════════════════════════
+//  BINANCE RATE LIMITER — защита от 418/429 IP-бана
+//  Очередь: не более 4 одновременных запросов к FAPI
+// ═══════════════════════════════════════════════════════
+const BRL = (() => {
+  const queue = [];
+  let active = 0;
+  const MAX = 4;        // макс. одновременных запросов к Binance
+  let banUntil = 0;
+  let banTimer = null;
+
+  function tick() {
+    if (active >= MAX || !queue.length) return;
+    const now = Date.now();
+    if (banUntil > now) {
+      if (!banTimer) banTimer = setTimeout(() => { banTimer = null; tick(); }, banUntil - now + 200);
+      return;
+    }
+    const item = queue.shift();
+    active++;
+    _execute(item);
+    if (queue.length) setTimeout(tick, 70); // ~14 req/s max
+  }
+
+  async function _execute(item) {
+    try {
+      const r = await fetch(item.url, item.opts);
+      if (r.status === 418 || r.status === 429) {
+        const wait = r.status === 418 ? 35000 : 12000;
+        banUntil = Date.now() + wait;
+        console.warn(`[BRL] Binance ${r.status} — пауза ${wait/1000}с (очередь: ${queue.length})`);
+        // показываем статус в топбаре
+        const lt = document.getElementById('live-text');
+        if (lt) { lt.textContent = `ПАУЗА ${wait/1000}с`; lt.style.color='#f87171'; }
+        if (item.tries < 2) {
+          item.tries++;
+          queue.unshift(item);
+          if (!banTimer) banTimer = setTimeout(() => {
+            banTimer = null;
+            const lt2 = document.getElementById('live-text');
+            if (lt2 && lt2.textContent.startsWith('ПАУЗА')) { lt2.textContent = 'LIVE'; lt2.style.color=''; }
+            tick();
+          }, wait + 200);
+        } else {
+          item.reject(new Error(`BRL_${r.status}`));
+        }
+        return;
+      }
+      item.resolve(r);
+    } catch(e) {
+      item.reject(e);
+    } finally {
+      active--;
+      setTimeout(tick, 70);
+    }
+  }
+
+  return {
+    fetch(url, opts) {
+      return new Promise((resolve, reject) => {
+        queue.push({url, opts, resolve, reject, tries: 0});
+        tick();
+      });
+    },
+    get pending() { return queue.length; }
+  };
+})();
+
+// Обёртка: все запросы к FAPI идут через rate limiter
+function bFetch(url, opts) { return BRL.fetch(url, opts); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 // Claude model: claude-haiku-4-5 (set in callClaude)
 
 // ── CLAUDE API ──────────────────────────────────────────
@@ -593,7 +665,7 @@ Signals:${(idea.sigs||[]).join(', ')}`;
   return callClaude(prompt, 150);
 }
 const REFRESH_INTERVAL = 30000;
-const IDEAS_INTERVAL   = 3 * 60000;
+const IDEAS_INTERVAL   = 7 * 60000; // сканирование каждые 7 мин (было 3 — слишком часто)
 const VOL_INTERVAL     = 60000;
 const WR_KEY = 'pf_wr_v2';
 const WR_HISTORY_KEY = 'pf_wr_history_v1';
@@ -1079,10 +1151,10 @@ function getAsianRange(sym,cds1h){
 async function scoreForIdea(sym){
   try{
     const[r1h,r15m,r4h,r5m]=await Promise.all([
-      fetch(`${FAPI}/klines?symbol=${sym}&interval=1h&limit=120`),
-      fetch(`${FAPI}/klines?symbol=${sym}&interval=15m&limit=80`),
-      fetch(`${FAPI}/klines?symbol=${sym}&interval=4h&limit=60`),
-      fetch(`${FAPI}/klines?symbol=${sym}&interval=5m&limit=60`),
+      bFetch(`${FAPI}/klines?symbol=${sym}&interval=1h&limit=120`),
+      bFetch(`${FAPI}/klines?symbol=${sym}&interval=15m&limit=80`),
+      bFetch(`${FAPI}/klines?symbol=${sym}&interval=4h&limit=60`),
+      bFetch(`${FAPI}/klines?symbol=${sym}&interval=5m&limit=60`),
     ]);
     const[j1h,j15m,j4h,j5m]=await Promise.all([r1h.json(),r15m.json(),r4h.json(),r5m.json()]);
     if(!Array.isArray(j1h)||j1h.length<30)return null;
@@ -1673,7 +1745,7 @@ async function runIdeas(manual=false){
   const lbl=document.getElementById('scanner-label');
   if(lbl){lbl.textContent='⏳ Сканирую...';lbl.style.animation='pulse .6s infinite';}
   try{
-    const r=await fetch(`${FAPI}/ticker/24hr`);
+    const r=await bFetch(`${FAPI}/ticker/24hr`);
     const tickers=await r.json();
     if(!Array.isArray(tickers))throw new Error('bad');
     const candidates=tickers
@@ -1685,10 +1757,11 @@ async function runIdeas(manual=false){
       .sort((a,b)=>b.score-a.score).slice(0,200);
     renderVolatility(candidates.slice(0,10));
     const now=Date.now(),newIdeas=[];
-    for(let i=0;i<candidates.length;i+=12){
+    for(let i=0;i<candidates.length;i+=4){
       if(lbl)lbl.textContent=`⏳ ${i}/${candidates.length}`;
-      const batch=candidates.slice(i,i+12);
+      const batch=candidates.slice(i,i+4);
       const results=await Promise.allSettled(batch.map(c=>scoreForIdea(c.sym)));
+      await sleep(250); // пауза между батчами — защита от rate limit
       results.forEach((res,ri)=>{
         if(res.status!=='fulfilled'||!res.value||!res.value.bestDir)return;
         const r=res.value;
@@ -1913,7 +1986,7 @@ function renderIdeas(){
     return (b.conf||0)-(a.conf||0);
   });
   if(!filtered.length){
-    list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет сигналов.<br><span style="font-size:9px;color:var(--dim);">Сканирую 200 монет каждые 3м.</span></div>';
+    list.innerHTML='<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted);">Нет сигналов.<br><span style="font-size:9px;color:var(--dim);">Сканирую 200 монет каждые 7м.</span></div>';
     return;
   }
   const watchHtml = '';
@@ -2271,7 +2344,7 @@ function showPhaseContent(phase){
     <div class="phase-list-hd">${phaseNames[phase]||'Фаза '+phase} · ${sigNames[phase]||''}</div>
     ${!coins.length?`<div style="font-size:11px;color:var(--muted);padding:8px 0;">
       Нет монет на фазе ${phase}.<br>
-      <span style="font-size:9px;color:var(--dim);">Агент сканирует 200 монет каждые 3м.</span>
+      <span style="font-size:9px;color:var(--dim);">Агент сканирует 200 монет каждые 7м.</span>
     </div>`:''}
     ${coins.map(idea=>{
       const a=analyzeFull(idea.cds1h,idea.cds15m);
@@ -2353,7 +2426,7 @@ async function checkQualityLog() {
   const prices = {};
   await Promise.allSettled(syms.map(async sym => {
     try {
-      const r = await fetch(`${FAPI}/ticker/price?symbol=${sym}`);
+      const r = await bFetch(`${FAPI}/ticker/price?symbol=${sym}`);
       const j = await r.json();
       if (j.price) prices[sym] = parseFloat(j.price);
     } catch {}
@@ -2603,7 +2676,7 @@ function fmtSignalTime(ts){
   return d.getDate()+' '+mon+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
 }
 
-async function fetchPrice(sym){try{const r=await fetch(`${FAPI}/ticker/price?symbol=${sym}`);const j=await r.json();return+j.price;}catch{return null;}}
+async function fetchPrice(sym){try{const r=await bFetch(`${FAPI}/ticker/price?symbol=${sym}`);const j=await r.json();return+j.price;}catch{return null;}}
 
 
 function wrOpenSym(sym){openSym(sym);}
@@ -3156,7 +3229,7 @@ function appendThinking(id){
 //  DATA FETCHING
 // ═══════════════════════════════════════════════════════
 async function fetchCds(sym,iv,limit=120){
-  try{const r=await fetch(`${FAPI}/klines?symbol=${sym}&interval=${iv}&limit=${limit}`);const raw=await r.json();if(Array.isArray(raw)&&raw.length>0)return raw.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));}catch{}
+  try{const r=await bFetch(`${FAPI}/klines?symbol=${sym}&interval=${iv}&limit=${limit}`);const raw=await r.json();if(Array.isArray(raw)&&raw.length>0)return raw.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));}catch{}
   return[];
 }
 
@@ -3169,7 +3242,7 @@ function getCapLabel(v){
 // Fetch current price via REST (for coins not in WS stream, populates S.prices[sym])
 async function fetchSymPrice(sym){
   try{
-    const r=await fetch(`${FAPI}/ticker/price?symbol=${sym}`);
+    const r=await bFetch(`${FAPI}/ticker/price?symbol=${sym}`);
     const j=await r.json();
     if(j&&j.price){
       const prev=S.prices[sym];
@@ -3179,8 +3252,8 @@ async function fetchSymPrice(sym){
 }
 
 async function fetchFutures(sym){
-  try{const r=await fetch(`${FAPI}/openInterest?symbol=${sym}`);const j=await r.json();if(j.openInterest)S.oi=+j.openInterest;}catch{S.oi=null;}
-  try{const r=await fetch(`${FAPI}/fundingRate?symbol=${sym}&limit=1`);const j=await r.json();if(Array.isArray(j)&&j[0])S.fr=+j[0].fundingRate*100;}catch{S.fr=null;}
+  try{const r=await bFetch(`${FAPI}/openInterest?symbol=${sym}`);const j=await r.json();if(j.openInterest)S.oi=+j.openInterest;}catch{S.oi=null;}
+  try{const r=await bFetch(`${FAPI}/fundingRate?symbol=${sym}&limit=1`);const j=await r.json();if(Array.isArray(j)&&j[0])S.fr=+j[0].fundingRate*100;}catch{S.fr=null;}
   // OI history: 9 × 30m intervals = 4h change
   try{
     const r=await fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${sym}&period=30m&limit=9`);
@@ -3774,7 +3847,7 @@ function obComputeFlowScore(idea, micro, short, mid) {
 // ── OB imbalance & stacking ──────────────────────────
 async function obFetchSnapshot(sym) {
   try {
-    const r = await fetch(`${FAPI}/depth?symbol=${sym}&limit=100`);
+    const r = await bFetch(`${FAPI}/depth?symbol=${sym}&limit=100`);
     const j = await r.json();
     if (!j.bids || !j.asks) return;
     OB_STATE.bids = j.bids.map(([p,q]) => [parseFloat(p), parseFloat(q)]);
@@ -5223,7 +5296,7 @@ S.activeTrack.forEach(rec => startActiveFlowTracking(rec.sym));
 // Initial check on load — НЕ фильтруем записи, просто проверяем цены
 setTimeout(()=>checkPendingWinrates(), 8000);
 setInterval(()=>{
-  fetch(`${FAPI}/ticker/24hr`).then(r=>r.json()).then(t=>{
+  bFetch(`${FAPI}/ticker/24hr`).then(r=>r.json()).then(t=>{
     if(!Array.isArray(t))return;
     const top=t.filter(x=>x.symbol.endsWith('USDT')&&!x.symbol.includes('_'))
       .map(x=>({sym:x.symbol,chgPct:Math.abs(+x.priceChangePercent),vol:+x.quoteVolume,score:Math.abs(+x.priceChangePercent)*2.5+(+x.quoteVolume>100e6?4:+x.quoteVolume>30e6?2:1)}))
