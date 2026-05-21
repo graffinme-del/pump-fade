@@ -399,7 +399,7 @@ button:hover{opacity:.85;}
     </div>
     <div id="vol-section">
       <div class="vol-hd">
-        <span>⚡ Волатильность</span>
+        <span>🔥 ТОП ВОЛАТИЛЬНЫХ</span>
         <span id="vol-ts" style="font-size:8px;color:var(--dim);font-weight:400;">—</span>
       </div>
       <div id="vol-list"></div>
@@ -612,7 +612,7 @@ async function callClaude(prompt, maxTokens=300){
       body:JSON.stringify({
         model:CLAUDE_MODEL,
         max_tokens:maxTokens,
-        system:'Ты дисциплинированный интрадей трейдер криптовалют. КРИТИЧНО: НЕ давай GO для LONG если 4h тренд медвежий. НЕ давай GO для SHORT если 4h тренд бычий. GO только если 4h совпадает + объём подтверждает + RSI ок. SKIP если 4h против. Цель: <30% GO. Поле reason — ОБЯЗАТЕЛЬНО на русском языке. Отвечай ТОЛЬКО валидным JSON без пояснений: {"verdict":"GO"|"WAIT"|"SKIP","confidence":0-100,"reason":"одно предложение на русском"}',
+        system:'Ты дисциплинированный интрадей трейдер (горизонт 15мин–4ч). Оценивай сигнал по: conf≥75, R/R≥1.2, объём/CVD подтверждают направление. 4H тренд — КОНТЕКСТ, не жёсткий фильтр. НЕЙТРАЛЬНЫЙ 4h — это НОРМАЛЬНО для интрадея, не блокируй сигнал. GO: conf≥75 + R/R≥1.2 + объём ок. WAIT: conf 70–74 или слабый объём. SKIP: conf<70 или R/R<1.0 или 4h АКТИВНО против сигнала (bull при SHORT, bear при LONG). Цель: 45–55% GO. reason — одно предложение на русском. Отвечай ТОЛЬКО JSON: {"verdict":"GO"|"WAIT"|"SKIP","confidence":0-100,"reason":"одно предложение"}',
         messages:[{role:'user',content:prompt}]
       })
     });
@@ -2387,7 +2387,19 @@ function showCoinCard(idea,analysis){
   </div>
   <div id="cc-pump-readiness" style="display:none;padding:8px 12px 9px;border-bottom:1px solid var(--border);"></div>
   <div class="cc-narrative" id="cc-narrative">
-    <div id="cc-narrative-text"><span style="color:var(--dim);font-size:10px;">Анализ накапливается...</span></div>
+    <div style="display:flex;gap:10px;align-items:flex-start;">
+      <div id="cc-narrative-text" style="flex:1;min-width:0;"><span style="color:var(--dim);font-size:10px;">Анализ накапливается...</span></div>
+      ${(()=>{
+        const si = getStrategyInfo(idea.sigs||[], idea.dir||'');
+        const dc2 = idea.isPump?'var(--amber)':idea.dir==='LONG'?'var(--green)':'var(--red)';
+        const dbg2 = idea.isPump?'rgba(245,158,11,.10)':idea.dir==='LONG'?'rgba(34,197,94,.10)':'rgba(239,68,68,.10)';
+        return `<div id="cc-strategy-box" style="flex-shrink:0;width:168px;padding:8px 10px;background:${dbg2};border-radius:6px;border:1px solid ${dc2}33;">
+          <div style="font-size:8px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Стратегия</div>
+          <div style="font-size:11px;font-weight:800;color:${dc2};line-height:1.3;margin-bottom:5px;">${si.name}</div>
+          <div style="font-size:9.5px;color:var(--dim);line-height:1.45;">${si.desc}</div>
+        </div>`;
+      })()}
+    </div>
   </div>
   <div class="cc-levels">
     <div class="cc-lv"><div class="cc-lv-l">Триггер</div><div class="cc-lv-v">${idea.entry>0?'$'+fmt(idea.entry):'—'}</div></div>
@@ -3820,6 +3832,38 @@ function updateConfDisplay(idea){
 }
 
 // ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+//  STRATEGY INFO — название и суть сетапа для карточки
+// ═══════════════════════════════════════════════════════
+function getStrategyInfo(sigs, dir) {
+  const s0 = (sigs||[])[0]||'';
+  if (s0.includes('Pump Exhaustion'))                  return {name:'S1 · Pump Exhaustion',     desc:'Памп выдохся: RSI перекупленность + CVD-дивергенция. Цена развернётся.'};
+  if (s0.includes('Структурный пробой')&&s0.includes('↓')) return {name:'S2 · Слом EMA20 ↓ 15m', desc:'База выше EMA, сейчас импульсный пробой вниз с объёмом. Начало снижения.'};
+  if (s0.includes('Пробой поддержки')||s0.includes('пробой EMA20 на 1h')) return {name:'S3 · Пробой EMA20 1h', desc:'15+ часов выше уровня — импульсная медвежья свеча пробивает поддержку.'};
+  if ((s0.includes('RSI')||s0.includes('CVD'))&&dir==='SHORT'&&!s0.includes('Sweep')&&!s0.includes('VWAP')) return {name:'S4 · RSI Перекупленность', desc:'RSI > 75 с CVD-дивергенцией. Импульс слабеет на перегретых уровнях.'};
+  if (s0.includes('Volume Breakout')&&dir==='SHORT')   return {name:'S6 · Volume Breakout ↓',   desc:'Пробой 14ч консолидации вниз. Тело ×2+, объём ×2+, закрытие ниже базы.'};
+  if (s0.includes('Funding Scalp')&&dir==='SHORT')     return {name:'S7 · Funding Scalp SHORT', desc:'Funding > 0.075% — лонги перегружены. Ждём принудительного разворота.'};
+  if (s0.includes('Liq Sweep')&&dir==='SHORT')         return {name:'S8 · Liquidity Sweep ↓',  desc:'Equal Highs пробиты, цена вернулась — ловушка для лонгистов. Лучший R/R.'};
+  if (s0.includes('VWAP Reversion')&&dir==='SHORT')    return {name:'S9 · VWAP Reversion ↓',   desc:'Цена выше +2σ VWAP во флэте. Математический возврат к среднему значению.'};
+  if (s0.includes('Asian Range')&&dir==='SHORT')       return {name:'S10 · Asian Range SHORT',  desc:'У верхней границы азиатского диапазона. Европейское открытие разворачивает.'};
+  if (s0.includes('Failed Pump'))                      return {name:'S11 · Failed Pump/Trap',   desc:'Ложный пробой хая с немедленным возвратом. CVD не подтвердил новый хай.'};
+  if (s0.includes('Range Expansion')&&s0.includes('↓')) return {name:'S12 · Range Expansion ↓', desc:'Пробой 6ч консолидации вниз. Объём ×3+, тело ×2+ — сильный импульс.'};
+  if (s0.includes('Структурный пробой')&&s0.includes('↑')) return {name:'L1 · Слом EMA20 ↑ 15m', desc:'База ниже EMA, сейчас импульсный пробой вверх с объёмом. Начало роста.'};
+  if (s0.includes('EMA стек'))                         return {name:'L2 · EMA Stack Bull',      desc:'EMA20 > EMA50 на 1h — бычье выравнивание структуры. Тренд набирает силу.'};
+  if (s0.includes('Volume Breakout')&&dir==='LONG')    return {name:'L4 · Volume Breakout ↑',   desc:'Пробой 14ч консолидации вверх. Тело ×2+, объём ×2+, закрытие выше базы.'};
+  if (s0.includes('RSI Reversal'))                     return {name:'L5 · RSI Reversal',        desc:'RSI был < 30, теперь отскакивает 30–42. Разворот, не ловля падающего ножа.'};
+  if (s0.includes('Funding Scalp')&&dir==='LONG')      return {name:'L6 · Funding Scalp LONG',  desc:'Funding < −0.075% — шорты перегружены. Ожидаем шорт-сквиз вверх.'};
+  if (s0.includes('Liq Sweep')&&dir==='LONG')          return {name:'L7 · Liquidity Sweep ↑',  desc:'Equal Lows пробиты, цена вернулась — ловушка для шортистов. Отличный R/R.'};
+  if (s0.includes('VWAP Reversion')&&dir==='LONG')     return {name:'L8 · VWAP Reversion ↑',   desc:'Цена ниже −2σ VWAP во флэте. Математический возврат к среднему значению.'};
+  if (s0.includes('VWAP Trend'))                       return {name:'L9 · VWAP Trend LONG',     desc:'Откат к VWAP при бычьей 1h структуре. Продолжение восходящего тренда.'};
+  if (s0.includes('Asian Range')&&dir==='LONG')        return {name:'L10 · Asian Range LONG',   desc:'У нижней границы азиатского диапазона. Европейское открытие поддерживает.'};
+  if (s0.includes('Failed Breakdown'))                 return {name:'L11 · Failed Breakdown',   desc:'Ложный пробой лоу с немедленным возвратом. CVD не подтвердил дно.'};
+  if (s0.includes('Range Expansion')&&s0.includes('↑')) return {name:'L12 · Range Expansion ↑', desc:'Пробой 6ч консолидации вверх. Объём ×3+, тело ×2+ — мощный импульс.'};
+  if (s0.includes('Старт пампа')||s0.includes('пампа 5m')) return {name:'EARLY · Старт пампа', desc:'5m: аномальный объём ×2+ с бычьей свечой. Ранний вход до основного движения.'};
+  if (s0.includes('истощён')||s0.includes('Pump Fade')) return {name:'PUMP FADE · Вход',       desc:'Памп полностью истощён. Все 3 фазы подтверждены — сейчас лучшая точка входа.'};
+  return {name: dir==='SHORT'?'SHORT сетап':dir==='LONG'?'LONG сетап':'Наблюдение', desc:(sigs||[]).slice(0,2).join(' · ')||''};
+}
+
 //  NARRATIVE ENGINE — rules-based, zero latency
 // ═══════════════════════════════════════════════════════
 
@@ -4581,6 +4625,18 @@ function toggleActive(sym){
     scheduleWinrateCheck(idea||rec);
     // Запускаем flow stream для мониторинга позиции
     startActiveFlowTracking(sym);
+    // Если это памп-сигнал — автоматически запускаем фазовое отслеживание
+    if (idea && (idea.isPump || idea.dir === 'ПАМП') && !WATCH_LIST[sym]) {
+      addPumpToWatch({
+        sym, bestConf: idea.conf||75, bestSigs: idea.sigs||[],
+        entry: idea.entry||rec.entry, sl: idea.sl||rec.sl, tp1: idea.tp1||rec.tp1,
+        tp2: idea.tp2||0, rr: idea.rr||rec.rr, atrv: idea.atrv||0,
+        pumpPct: idea.pumpPct||0, pumpSpeed: idea.pumpSpeed||0,
+        volRatio: idea.volRatio||1, rsiNow: idea.rsiNow||50,
+        cds1h: idea.cds1h||[], cds15m: idea.cds15m||[],
+      });
+      showToast(`🔴 ${sym.replace('USDT','')} — запущено фазовое отслеживание`);
+    }
   }
   updateTabCounts();
   if(ideasTab==='active') renderIdeas();
@@ -4814,7 +4870,7 @@ CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
 // ═══════════════════════════════════════════════════════
 //  ACTIVE ALERTS IN COIN CARD
 // ═══════════════════════════════════════════════════════
-// Обновить блок "Готовность к входу" в карточке для памп-наблюдений
+// Обновить блок "Фазы Pump Fade" в карточке (крупная полоса сверху)
 function updatePumpReadinessInCard(sym) {
   const el = document.getElementById('cc-pump-readiness');
   if (!el) return;
@@ -4822,38 +4878,56 @@ function updatePumpReadinessInCard(sym) {
   if (!w || w.type !== 'pump') { el.style.display = 'none'; return; }
 
   const d = w.lastPumpData;
-  const pl = pumpPhaseLabel(w.pumpPhase, w.pumpCancelled);
-  const phaseBar = [1,2,3].map(p =>
-    `<span style="display:inline-block;width:28px;height:6px;border-radius:3px;margin-right:3px;background:${
-      w.pumpPhase>=p ? (p===3?'var(--green)':p===2?'var(--amber)':'var(--red)') : 'var(--s3)'
-    };"></span>`
-  ).join('');
+  const ph = w.pumpCancelled ? 0 : w.pumpPhase;
+  // 4 фазы: 1=ПАМП, 2=ИСТОЩЕНИЕ, 3=СЛОМ, 4=ВХОД (readyToShort)
+  const pfPhase = ph >= 3 && d?.readyToShort ? 4 : ph;
 
-  // Фазовые сигналы
-  const exHtml = d && d.exSigs.length
-    ? d.exSigs.map(s=>`<span style="display:inline-block;font-size:8px;padding:1px 5px;margin:1px 2px 1px 0;border-radius:3px;background:rgba(245,158,11,.12);color:var(--amber);">✓ ${s.t}</span>`).join('')
-    : '';
-  const bkHtml = d && d.bkSigs.length
-    ? d.bkSigs.map(s=>`<span style="display:inline-block;font-size:8px;padding:1px 5px;margin:1px 2px 1px 0;border-radius:3px;background:rgba(239,68,68,.12);color:var(--red);">✓ ${s.t}</span>`).join('')
-    : '';
+  const phases = [
+    {n:1, label:'ПАМП',       icon:'🔥', activeColor:'#ef4444', activeBg:'rgba(239,68,68,.18)'},
+    {n:2, label:'ИСТОЩЕНИЕ',  icon:'⚡', activeColor:'#f59e0b', activeBg:'rgba(245,158,11,.18)'},
+    {n:3, label:'СЛОМ',       icon:'📉', activeColor:'#f97316', activeBg:'rgba(249,115,22,.18)'},
+    {n:4, label:'ВХОД',       icon:'🟢', activeColor:'#22c55e', activeBg:'rgba(34,197,94,.18)'},
+  ];
 
-  const readyNote = w.pumpCancelled
-    ? '<span style="font-size:9px;color:var(--muted);">Памп возобновился — сетап отменён</span>'
-    : w.pumpPhase >= 3
-      ? '<span style="font-size:9px;font-weight:700;color:var(--green);">⚡ Триггер-свеча подтверждена — входить сейчас</span>'
-      : `<span style="font-size:9px;color:var(--muted);">Ожидаемое истощение: ${w.timeEst}</span>`;
+  const phaseHtml = phases.map(p => {
+    const isActive = pfPhase === p.n;
+    const isDone   = pfPhase > p.n;
+    const bg = isActive ? p.activeBg : isDone ? 'rgba(100,116,139,.12)' : 'var(--s2)';
+    const col = isActive ? p.activeColor : isDone ? 'var(--muted)' : 'var(--dim)';
+    const border = isActive ? `2px solid ${p.activeColor}` : isDone ? '2px solid var(--border)' : '2px solid var(--border)';
+    const weight = isActive ? '800' : '600';
+    const opacity = isDone ? '.6' : '1';
+    return `<div style="flex:1;text-align:center;padding:8px 4px 7px;border-radius:6px;background:${bg};border:${border};opacity:${opacity};transition:all .3s;">
+      <div style="font-size:${isActive?'16':'13'}px;margin-bottom:3px;">${p.icon}</div>
+      <div style="font-size:${isActive?'9':'8'}px;font-weight:${weight};letter-spacing:.5px;color:${col};text-transform:uppercase;">${p.label}</div>
+      ${isActive?`<div style="width:8px;height:8px;border-radius:50%;background:${p.activeColor};margin:4px auto 0;animation:pulse 1.5s infinite;"></div>`:''}
+    </div>`;
+  }).join('<div style="width:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:10px;">→</div>');
+
+  // Сигналы истощения
+  const exHtml = d && d.exSigs && d.exSigs.length
+    ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:3px;">${d.exSigs.map(s=>`<span style="font-size:8px;padding:2px 6px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--amber);border:1px solid rgba(245,158,11,.3);">✓ ${s.t}</span>`).join('')}</div>` : '';
+  const bkHtml = d && d.bkSigs && d.bkSigs.length
+    ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;">${d.bkSigs.map(s=>`<span style="font-size:8px;padding:2px 6px;border-radius:3px;background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3);">✓ ${s.t}</span>`).join('')}</div>` : '';
+
+  const statusNote = w.pumpCancelled
+    ? `<div style="margin-top:7px;font-size:10px;color:var(--muted);text-align:center;">⚫ Памп возобновился — сетап отменён</div>`
+    : pfPhase >= 4
+      ? `<div style="margin-top:7px;padding:5px 10px;background:rgba(34,197,94,.15);border-radius:5px;text-align:center;font-size:10px;font-weight:700;color:var(--green);">⚡ ВХОД СЕЙЧАС — все фазы подтверждены</div>`
+      : pfPhase === 3
+        ? `<div style="margin-top:7px;font-size:10px;color:var(--orange);text-align:center;">📉 Слом структуры — ждём триггер-свечу</div>`
+        : pfPhase === 2
+          ? `<div style="margin-top:7px;font-size:10px;color:var(--amber);text-align:center;">⚡ Первые признаки истощения — ждём слом</div>`
+          : `<div style="margin-top:7px;font-size:10px;color:var(--muted);text-align:center;">🔥 Памп активен — ожидаемое истощение: ${w.timeEst||'?'}</div>`;
 
   el.style.display = 'block';
-  el.style.borderLeft = `3px solid ${pl.color}`;
+  el.style.borderLeft = 'none';
+  el.style.padding = '10px 12px 11px';
+  el.style.borderBottom = '1px solid var(--border)';
   el.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-      <span style="font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);">Готовность к входу</span>
-      <span style="font-size:11px;font-weight:800;color:${pl.color};">${pl.icon} ${pl.text}</span>
-    </div>
-    <div style="margin-bottom:6px;">${phaseBar}</div>
-    ${exHtml ? `<div style="margin-bottom:3px;">${exHtml}</div>` : ''}
-    ${bkHtml ? `<div style="margin-bottom:4px;">${bkHtml}</div>` : ''}
-    <div>${readyNote}</div>
+    <div style="font-size:8px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">⚙ PUMP FADE · Этапы сетапа</div>
+    <div style="display:flex;gap:5px;align-items:stretch;">${phaseHtml}</div>
+    ${exHtml}${bkHtml}${statusNote}
   `;
 }
 
@@ -5236,10 +5310,24 @@ async function updatePumpWatch(sym) {
       return;
     }
 
-    // Обновляем фазу
+    // Обновляем фазу + алерты на переход
+    const prevPhase = w.pumpPhase;
     w.pumpPhase = a.phase;
     w.idea.rsiNow = a.rsiNow;
     w.idea.pumpPct = a.pumpPct;
+
+    // 🔔 Алерт: фаза 1 → 2 (Памп → Истощение) — самое ценное уведомление
+    if (prevPhase === 1 && w.pumpPhase >= 2) {
+      notify(`⚡ ИСТОЩЕНИЕ · ${sym.replace('USDT','')}`, `Памп +${(a.pumpPct||0).toFixed(1)}% начинает выдыхаться — ждите слом`);
+      playAlert();
+      showToast(`⚡ ${sym.replace('USDT','')} — фаза 2: Истощение`);
+    }
+    // 🔔 Алерт: фаза 2 → 3 (Истощение → Слом)
+    if (prevPhase === 2 && w.pumpPhase >= 3) {
+      notify(`📉 СЛОМ · ${sym.replace('USDT','')}`, `Структура сломана — готовиться к входу SHORT`);
+      playAlert();
+      showToast(`📉 ${sym.replace('USDT','')} — фаза 3: Слом`);
+    }
 
     // Фаза 3 + readyToShort → выталкиваем в сигналы как SHORT
     if (a.readyToShort && a.phase >= 3) {
