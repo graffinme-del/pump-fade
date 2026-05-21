@@ -497,11 +497,11 @@ button:hover{opacity:.85;}
       </div>
     </div>
     <div class="qbtns">
-      <button class="qbtn" onclick="askQuick('Анализ текущей монеты')">анализ</button>
-      <button class="qbtn" onclick="askQuick('Стоит ли входить прямо сейчас?')">входить?</button>
-      <button class="qbtn" onclick="askQuick('Не развернулся ли тренд?')">тренд?</button>
-      <button class="qbtn" onclick="askQuick('CVD и OI — что говорят?')">CVD+OI?</button>
-      <button class="qbtn" onclick="askQuick('Где поставить стоп?')">стоп?</button>
+      <button class="qbtn" onclick="(function(){var s=S.activeCardIdea?.sym||S.sym;if(s)askAIAboutIdea(s);else appendMsg('ai','Откройте карточку монеты, затем нажмите «анализ»');})()">анализ</button>
+      <button class="qbtn" onclick="sendChat((S.activeCardIdea?.sym||S.sym||'монета').replace('USDT','')+' — стоит ли входить прямо сейчас?')">входить?</button>
+      <button class="qbtn" onclick="sendChat((S.activeCardIdea?.sym||S.sym||'монета').replace('USDT','')+' — не развернулся ли тренд?')">тренд?</button>
+      <button class="qbtn" onclick="sendChat((S.activeCardIdea?.sym||S.sym||'монета').replace('USDT','')+' — CVD и OI что говорят?')">CVD+OI?</button>
+      <button class="qbtn" onclick="sendChat((S.activeCardIdea?.sym||S.sym||'монета').replace('USDT','')+' — где поставить стоп?')">стоп?</button>
     </div>
     <div class="chat-input-row">
       <textarea id="chat-input" placeholder="Спросите или введите монету: BTCUSDT"
@@ -2475,7 +2475,7 @@ function showCoinCard(idea,analysis){
     <button class="cc-act cc-act-tv" onclick="window.open('https://www.tradingview.com/chart/?symbol=BINANCE:${idea.sym}','_blank')">▼ TradingView ↗</button>
     <button class="cc-act cc-act-ai" onclick="askAIAboutIdea('${idea.sym}')">✦ AI анализ</button>
     <button class="cc-act cc-act-work" onclick="toggleActive('${idea.sym}')">${S.activeTrack.find(t=>t.sym===idea.sym)?'📌 В работе ✓':'📌 В работу'}</button>
-    <button class="cc-act cc-act-copy" onclick="copyForChatGPT()">📋 Копировать</button>
+    <button class="cc-act cc-act-copy" onclick="copyForChatGPT('${idea.sym}')">📋 Копировать</button>
   </div>
 </div>`;
   // Populate candle analysis from pre-computed patterns
@@ -4993,7 +4993,12 @@ function updateActiveAlertsInCard(sym) {
 //  COPY FOR CHATGPT
 // ═══════════════════════════════════════════════════════
 async function copyForChatGPT(sym){
-  const idea = S.ideas.find(i=>i.sym===sym) || S.activeTrack.find(t=>t.sym===sym);
+  // Fallback: use currently open card if sym not passed or not found
+  if (!sym) sym = S.activeCardIdea?.sym || S.sym;
+  const idea = S.ideas.find(i=>i.sym===sym)
+    || S.activeTrack.find(t=>t.sym===sym)
+    || (S.activeCardIdea?.sym===sym ? S.activeCardIdea : null);
+  if (!idea && !sym) { showToast('Откройте карточку монеты'); return; }
   const a = S.analysis;
   const lp = S.prices[sym]?.price || idea?.entry || 0;
   const phase = a ? "ФАЗЫ ИСТОЩЕНИЯ: " + a.phase + "/3\n  Истощение: " + ((a.exSigs||[]).map(s=>s.t).join(", ")||"нет") + "\n  Слом: " + ((a.bkSigs||[]).map(s=>s.t).join(", ")||"нет") : "";
