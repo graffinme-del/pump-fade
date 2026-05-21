@@ -547,7 +547,7 @@ const BRL = (() => {
     try {
       const r = await fetch(item.url, item.opts);
       if (r.status === 418 || r.status === 429) {
-        const wait = r.status === 418 ? 35000 : 12000;
+        const wait = r.status === 418 ? 60000 : 15000;
         banUntil = Date.now() + wait;
         console.warn(`[BRL] Binance ${r.status} — пауза ${wait/1000}с (очередь: ${queue.length})`);
         // показываем статус в топбаре
@@ -1150,19 +1150,26 @@ function getAsianRange(sym,cds1h){
 // ═══════════════════════════════════════════════════════
 async function scoreForIdea(sym){
   try{
-    const[r1h,r15m,r4h,r5m]=await Promise.all([
+    // Только 2 таймфрейма при скане — вдвое меньше запросов к Binance
+    const[r1h,r15m]=await Promise.all([
       bFetch(`${FAPI}/klines?symbol=${sym}&interval=1h&limit=120`),
       bFetch(`${FAPI}/klines?symbol=${sym}&interval=15m&limit=80`),
-      bFetch(`${FAPI}/klines?symbol=${sym}&interval=4h&limit=60`),
-      bFetch(`${FAPI}/klines?symbol=${sym}&interval=5m&limit=60`),
     ]);
-    const[j1h,j15m,j4h,j5m]=await Promise.all([r1h.json(),r15m.json(),r4h.json(),r5m.json()]);
+    const[j1h,j15m]=await Promise.all([r1h.json(),r15m.json()]);
     if(!Array.isArray(j1h)||j1h.length<30)return null;
     const parse=arr=>arr.map(k=>({time:+k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
     const cds1h=parse(j1h);
     const cds15m=Array.isArray(j15m)&&j15m.length>10?parse(j15m):[];
-    const cds4h=Array.isArray(j4h)&&j4h.length>10?parse(j4h):[];
-    const cds5m=Array.isArray(j5m)&&j5m.length>10?parse(j5m):[];
+    // 4h — синтетический из 1h (группируем по 4 свечи)
+    const cds4h=[];
+    for(let _i=0;_i+3<cds1h.length;_i+=4){
+      const g=cds1h.slice(_i,_i+4);
+      cds4h.push({time:g[0].time,open:g[0].open,
+        high:Math.max(...g.map(c=>c.high)),low:Math.min(...g.map(c=>c.low)),
+        close:g[3].close,volume:g.reduce((s,c)=>s+c.volume,0)});
+    }
+    // 5m данные для earlyPump — используем 15m (достаточно для скана)
+    const cds5m=cds15m;
 
     const c1h=cds1h.map(c=>c.close);
     const v1h=cds1h.map(c=>c.volume);
@@ -2629,37 +2636,38 @@ function checkMidnightReset(){
 }
 
 async function checkPendingWinrates(){
-  // ФИX: checkMidnightReset вызывается ОТДЕЛЬНО в своём интервале — не здесь
   var now=Date.now();
-  // Pending мониторятся БЕСКОНЕЧНО — только реальный TP/SL закрывает запись
   var active=S.winrates.filter(function(w){return w.result==='pending';});
   if(!active.length){saveWR();return;}
-  console.log('WR check: '+active.length+' pending');
-  await Promise.allSettled(active.map(async function(rec){
+
+  // Обновляем batch снапшот цен (один запрос на все монеты)
+  if(now-PRICE_SNAP_TS>30000) await refreshPriceSnap();
+
+  var changed=false;
+  for(var _wi=0;_wi<active.length;_wi++){
+    var rec=active[_wi];
     try{
-      var lp=await Promise.race([
-        fetchPrice(rec.sym),
-        new Promise(function(_,rej){setTimeout(function(){rej(new Error('t'));},5000);})
-      ]);
-      if(!lp||lp<=0){ console.warn('[WR] Нет цены для', rec.sym); return; }
+      var lp=snapPrice(rec.sym);
+      if(!lp||lp<=0){
+        // Запрашиваем только если нет в снапшоте
+        lp=await fetchPrice(rec.sym);
+      }
+      if(!lp||lp<=0) continue;
       rec.elapsed=Math.floor((now-(rec.signalTime||rec.ts||0))/60000);
       var curPnl=rec.dir==='SHORT'?(rec.entry-lp)/rec.entry*100:(lp-rec.entry)/rec.entry*100;
       if(rec.maxPnl===null||rec.maxPnl===undefined||curPnl>rec.maxPnl)rec.maxPnl=curPnl;
       var hit=null;
       if(rec.dir==='SHORT'){if(lp<=rec.tp)hit='win';else if(lp>=rec.sl)hit='loss';}
       else{if(lp>=rec.tp)hit='win';else if(lp<=rec.sl)hit='loss';}
-      console.log('[WR]', rec.sym, rec.dir, 'lp='+lp.toFixed(4),
-        'entry='+rec.entry.toFixed(4), 'TP='+rec.tp.toFixed(4), 'SL='+rec.sl.toFixed(4),
-        'pnl='+(curPnl>=0?'+':'')+curPnl.toFixed(2)+'%', hit?'→ '+hit.toUpperCase():'pending');
       if(hit){
-        rec.result=hit;rec.closePrice=lp;rec.pnl=curPnl;rec.closedAt=now;
-        saveWR(); // Сохраняем сразу как только hit зафиксирован
+        rec.result=hit;rec.closePrice=lp;rec.pnl=curPnl;rec.closedAt=now;changed=true;
+        saveWR();
         notify(hit==='win'?'✅ TP · '+rec.sym.replace('USDT',''):'❌ SL · '+rec.sym.replace('USDT',''),
           (curPnl>=0?'+':'')+curPnl.toFixed(2)+'% за '+fmtElapsed(rec.elapsed));
       }
-    }catch(e){ console.warn('[WR] Ошибка проверки', rec.sym, e.message); }
-  }));
-  saveWR();
+    }catch(e){ console.warn('[WR]',rec.sym,e.message); }
+  }
+  if(changed||active.length)saveWR();
   if(S.phase===5)showWinrates();
 }
 
@@ -2678,6 +2686,27 @@ function fmtSignalTime(ts){
 
 async function fetchPrice(sym){try{const r=await bFetch(`${FAPI}/ticker/price?symbol=${sym}`);const j=await r.json();return+j.price;}catch{return null;}}
 
+// ── Глобальный снапшот цен (один batch-запрос вместо N отдельных) ──
+let PRICE_SNAP={}, PRICE_SNAP_TS=0;
+async function refreshPriceSnap(){
+  try{
+    const r=await bFetch(`${FAPI}/ticker/price`);
+    const arr=await r.json();
+    if(Array.isArray(arr)){
+      PRICE_SNAP={};
+      arr.forEach(t=>{PRICE_SNAP[t.symbol]=+t.price;});
+      PRICE_SNAP_TS=Date.now();
+    }
+  }catch(e){console.warn('[PriceSnap]',e.message);}
+}
+function snapPrice(sym){
+  // WebSocket — самый свежий источник
+  if(S.prices[sym]?.price) return S.prices[sym].price;
+  // Batch snapshot (свежее 60с)
+  if(PRICE_SNAP[sym]&&Date.now()-PRICE_SNAP_TS<60000) return PRICE_SNAP[sym];
+  return null;
+}
+
 
 function wrOpenSym(sym){openSym(sym);}
 
@@ -2695,7 +2724,7 @@ async function checkRecordWithKlines(rec){
   var cursor = startTs;
   for(var attempt=0; attempt<5; attempt++){
     var url = FAPI+'/klines?symbol='+rec.sym+'&interval='+INTERVAL+'&startTime='+cursor+'&endTime='+endTs+'&limit='+LIMIT;
-    var r = await fetch(url);
+    var r = await bFetch(url);
     if(!r.ok) break;
     var batch = await r.json();
     if(!Array.isArray(batch)||batch.length===0) break;
