@@ -2404,6 +2404,20 @@ async function loadSym(sym,idea=null){
 // ═══════════════════════════════════════════════════════
 //  COIN CARD (dynamic zone)
 // ═══════════════════════════════════════════════════════
+// Копирует aiWarning из activeTrack прямо в DOM-элемент карточки
+function fillAIWarn(sym){
+  const el=document.getElementById('cc-ai-warn');
+  if(!el)return;
+  const rec=S.activeTrack?S.activeTrack.find(t=>t.sym===sym):null;
+  if(rec&&rec.aiWarning){
+    el.innerHTML='<div style="background:rgba(239,68,68,0.13);border:1px solid rgba(239,68,68,0.35);border-radius:6px;padding:10px 12px;margin:6px 0 4px;font-size:10.5px;line-height:1.6;color:#fca5a5;"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--red);margin-bottom:6px;">🚨 AI ПРЕДУПРЕЖДЕНИЕ</div>'+rec.aiWarning+'</div>';
+    const vt=document.getElementById('cc-ai-verdict-text');
+    if(vt&&!vt.querySelector('b,span[style]'))vt.innerHTML='';
+  }else{
+    el.innerHTML='';
+  }
+}
+
 function showCoinCard(idea,analysis){
   const dz=document.getElementById('dynamic-zone');if(!dz)return;
   S.phase=0;           // карточка монеты — WR/phase-обновления не трогают dynamic-zone
@@ -2565,7 +2579,7 @@ function showCoinCard(idea,analysis){
   </div>
   <div class="cc-text-section">
     <div class="cc-tb cc-tb-agent"><div class="cc-tb-hd"><span>⚡</span><span class="cc-tb-title">Сигналы агента</span></div><div class="cc-tb-text">${(idea.sigs||[]).join('<br>')||idea.why||'—'}</div></div>
-    <div class="cc-tb cc-tb-ai"><div class="cc-tb-hd"><span>✦</span><span class="cc-tb-title">AI · Claude</span>${idea.verdict?`<span class="cc-vp" style="background:${verdictBg};color:${verdictTxt};">${idea.verdict}${idea.verdictConf?' '+idea.verdictConf+'%':''}</span>`:''}</div>${idea.aiWarning?`<div style="background:rgba(239,68,68,0.13);border:1px solid rgba(239,68,68,0.35);border-radius:6px;padding:9px 11px;margin:6px 0 5px;font-size:10.5px;line-height:1.55;color:#fca5a5;"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--red);margin-bottom:5px;">🚨 AI ПРЕДУПРЕЖДЕНИЕ</div>${idea.aiWarning}</div>`:''}<div class="cc-tb-text">${idea.verdictReason||(!idea.aiWarning?'<span style="color:var(--dim);">Нажмите ✦ AI анализ</span>':'')}</div></div>
+    <div class="cc-tb cc-tb-ai"><div class="cc-tb-hd"><span>✦</span><span class="cc-tb-title">AI · Claude</span>${idea.verdict?`<span class="cc-vp" style="background:${verdictBg};color:${verdictTxt};">${idea.verdict}${idea.verdictConf?' '+idea.verdictConf+'%':''}</span>`:''}</div><div id="cc-ai-warn"></div><div class="cc-tb-text" id="cc-ai-verdict-text">${idea.verdictReason||'<span style="color:var(--dim);">Нажмите ✦ AI анализ</span>'}</div></div>
   </div>
   <div class="cc-phases">
     <div class="cc-ph-hd">
@@ -2593,6 +2607,7 @@ function showCoinCard(idea,analysis){
     <button class="cc-act cc-act-copy" onclick="copyForChatGPT('${idea.sym}')">📋 Копировать</button>
   </div>
 </div>`;
+  fillAIWarn(idea.sym);
   // Populate candle analysis from pre-computed patterns
   const ccCandles=document.getElementById('cc-candles');
   if(ccCandles){
@@ -4963,11 +4978,8 @@ CVD тренд: ${cvdNow>cvdPrev?'растёт':'падает'}
                     playAlert();
                   }
                   if(ideasTab==='active') renderIdeas();
-                  // Немедленно обновляем карточку если открыта для этой монеты
-                  if(S.sym===rec.sym && S.activeCardIdea){
-                    S.activeCardIdea = {...S.activeCardIdea, aiWarning:reply};
-                    showCoinCard(S.activeCardIdea, S.analysis||{});
-                  }
+                  // Копируем текст напрямую в DOM элемент карточки — никакой перерисовки
+                  if(S.sym===rec.sym) fillAIWarn(rec.sym);
                 });
               }
             }
